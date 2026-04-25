@@ -6,6 +6,7 @@ import { getDictionary } from "@/i18n/dictionaries";
 import { Container } from "@/components/Container";
 import { ContactBar } from "@/components/ContactBar";
 import { LocationMap } from "@/components/LocationMap";
+import { ProcessCarousel } from "@/components/ProcessCarousel";
 import { company } from "@/lib/company";
 
 export default async function LandingPage({
@@ -91,8 +92,16 @@ export default async function LandingPage({
         </Container>
       </section>
 
+      {/* PROCESS CAROUSEL */}
+      <ProcessCarousel
+        eyebrow={dict.process.eyebrow}
+        title={dict.process.title}
+        subtitle={dict.process.subtitle}
+        steps={dict.process.steps}
+      />
+
       {/* VIDEO */}
-      <section className="py-20 sm:py-24">
+      <section className="pb-20 sm:pb-24">
         <Container>
           <div className="mx-auto max-w-3xl text-center">
             <span className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700">

@@ -41,6 +41,30 @@ export const en = {
     stat4: "24/7",
     stat4Label: "Vehicle delivery",
   },
+  process: {
+    eyebrow: "How It Works",
+    title: "From Your Garage to Monthly Income — In 4 Steps",
+    subtitle:
+      "We built a fully integrated operation so you don't have to think about a single thing after handing over the keys.",
+    steps: [
+      {
+        title: "1. Hand Over the Keys",
+        body: "Drop your car at our shop in Richmond — minutes from YVR. Sign once, hand over the keys, you're done.",
+      },
+      {
+        title: "2. Full Inspection & Service",
+        body: "Our in-house mechanics inspect, service, and detail every vehicle before listing — so it goes out at 100%.",
+      },
+      {
+        title: "3. Deliver to Renters, Earn Rent",
+        body: "Listed under BC's #1 Turo host. We handle bookings, handoffs, cleaning, claims — your car earns 24/7.",
+      },
+      {
+        title: "4. Watch Earnings From Home",
+        body: "View trip status and monthly payouts from your phone. Truly passive income — relax while your car works.",
+      },
+    ],
+  },
   video: {
     eyebrow: "Watch",
     title: "Meet SPEEDX AUTO",
