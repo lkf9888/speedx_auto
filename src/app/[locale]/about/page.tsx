@@ -71,10 +71,10 @@ export default async function AboutPage({
                 {a.story.title}
               </h2>
               <div className="mt-8 grid gap-3">
-                <StatPill label="Founded" value={String(company.foundedYear)} />
-                <StatPill label="BC Ranking" value={company.stats.rankInBC} />
-                <StatPill label="Fleet Size" value={company.stats.fleetSize} />
-                <StatPill label="Trips Completed" value={company.stats.tripsCompleted} />
+                <StatPill label={dict.hero.stat1Label} value={dict.hero.stat1} />
+                <StatPill label={dict.hero.stat2Label} value={company.stats.fleetSize} />
+                <StatPill label={dict.hero.stat3Label} value={company.stats.tripsCompleted} />
+                <StatPill label={dict.hero.stat4Label} value={company.stats.delivery} />
               </div>
             </div>
             <div className="space-y-5 text-base leading-relaxed text-ink-600">

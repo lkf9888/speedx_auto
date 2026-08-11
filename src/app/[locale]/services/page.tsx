@@ -102,7 +102,13 @@ export default async function ServicesPage({
                     </Link>
                   ) : (
                     <Link
-                      href={i === 1 ? `/${locale}/hosting` : `/${locale}/contact`}
+                      href={
+                        i === 1
+                          ? `/${locale}/hosting`
+                          : i === 2
+                            ? `/${locale}/auto-repair`
+                            : `/${locale}/contact`
+                      }
                       className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700"
                     >
                       {item.ctaLabel} →

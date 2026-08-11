@@ -13,9 +13,9 @@ export const company = {
   turoHostUrl: "https://turo.com/ca/en/host/31630256",
   hours: "Mon–Fri · 10:00 AM – 6:00 PM",
   stats: {
-    rankInBC: "#1",
+    rankInBC: "Established",
     fleetSize: "100+",
-    tripsCompleted: "4,500+",
+    tripsCompleted: "5,000+",
     delivery: "24/7",
   },
 };

@@ -3,9 +3,9 @@ import { enAutoRepair } from "@/i18n/repair-copy";
 export const en = {
   meta: {
     siteName: "SPEEDX AUTO",
-    tagline: "BC's #1 Turo Fleet Management & Auto Service",
+    tagline: "Turo Fleet Management & Auto Repair in Richmond",
     description:
-      "SPEEDX AUTO is British Columbia's largest Turo host — we manage cars for owners who want hassle-free rental income. Full-service mechanical & body shop on-site, near YVR airport.",
+      "SPEEDX AUTO manages Turo vehicles for owners and provides mechanical repair from its Richmond shop near YVR. Contact the team by WhatsApp, phone, or WeChat.",
   },
   nav: {
     home: "Home",
@@ -72,17 +72,17 @@ export const en = {
   },
   autoRepair: enAutoRepair,
   hero: {
-    eyebrow: "BC's #1 Turo Host · Since 2021",
+    eyebrow: "Richmond Turo Fleet Management · Since 2021",
     title: "Turn Your Idle Car Into Monthly Income",
     subtitle:
-      "SPEEDX AUTO is British Columbia's #1 Turo fleet manager — 100+ vehicles under management, 4,500+ trips completed, and a full-service shop minutes from Vancouver International Airport. List your car with us and we handle everything: rentals, cleaning, maintenance, claims.",
+      "SPEEDX AUTO manages 100+ vehicles and has completed 5,000+ public Turo trips. From our Richmond location near YVR, we coordinate listings, pricing, guest communication, cleaning, delivery, maintenance, and claims for qualifying vehicles.",
     primaryCta: "List My Car With SPEEDX",
     secondaryCta: "See Our Turo Fleet",
-    stat1: "#1",
-    stat1Label: "Turo host in BC",
+    stat1: "2021",
+    stat1Label: "Established in Richmond",
     stat2: "100+",
     stat2Label: "Cars under management",
-    stat3: "4,500+",
+    stat3: "5,000+",
     stat3Label: "Trips completed",
     stat4: "24/7",
     stat4Label: "Vehicle delivery",
@@ -99,11 +99,11 @@ export const en = {
       },
       {
         title: "2. Full Inspection & Service",
-        body: "Our in-house mechanics inspect, service, and detail every vehicle before listing — so it goes out at 100%.",
+        body: "Our team inspects each vehicle, confirms needed service, and completes the listing preparation before it enters the program.",
       },
       {
         title: "3. Deliver to Renters, Earn Rent",
-        body: "Listed under BC's #1 Turo host. We handle bookings, handoffs, cleaning, claims — your car earns 24/7.",
+        body: "We coordinate the listing, bookings, handoffs, cleaning, and claim documentation while the vehicle is in the program.",
       },
       {
         title: "4. Watch Earnings From Home",
@@ -114,7 +114,7 @@ export const en = {
   video: {
     eyebrow: "Watch",
     title: "Meet SPEEDX AUTO",
-    subtitle: "A 60-second look at how we manage BC's largest Turo fleet.",
+    subtitle: "A 60-second look at our Richmond fleet-management operation.",
   },
   advantages: {
     title: "Why Car Owners Trust SPEEDX",
@@ -122,24 +122,24 @@ export const en = {
       "A purpose-built Turo management operation — not a side hustle. Every advantage is built to maximize your car's earnings and protect your investment.",
     items: [
       {
-        title: "#1 Fleet Size in BC",
-        body: "We manage more cars on Turo than any other host in British Columbia — the scale that guarantees your car gets booked.",
+        title: "100+ Vehicles Managed",
+        body: "Our established fleet operation supports listing preparation, pricing, guest communication, cleaning, delivery, maintenance coordination, and claims.",
       },
       {
-        title: "Most Trips in BC",
-        body: "Highest trip volume in the province means your car rarely sits idle. More trips, more revenue, faster payback.",
+        title: "5,000+ Public Turo Trips",
+        body: "Our public Turo profile shows more than 5,000 completed trips, giving owners a visible record of operating experience.",
       },
       {
         title: "Shop Out Back, Storefront Out Front",
         body: "Our unique front-store / back-garage model means maintenance, inspections, and body repairs happen on-site — no downtime waiting for a third-party mechanic.",
       },
       {
-        title: "Lowest Management Fees",
-        body: "More of the rental income stays in your pocket. We've built the leanest operation in BC so owners earn more.",
+        title: "Vehicle-Specific Management Plans",
+        body: "Management scope and fees depend on the vehicle and service level. We explain the proposed arrangement before an owner commits.",
       },
       {
         title: "Minutes From YVR Airport",
-        body: "Richmond location next to Vancouver International means the fastest handoffs in the city. Renters get their car quickly — your car earns from every booking.",
+        body: "Our Richmond location is near Vancouver International Airport, supporting scheduled pickup and delivery for eligible bookings.",
       },
       {
         title: "24/7 Delivery",
@@ -148,9 +148,15 @@ export const en = {
     ],
   },
   hosting: {
-    heroTitle: "Put Your Car to Work With BC's Top Turo Host",
+    heroTitle: "Turo Fleet Management for Vehicle Owners",
     heroSubtitle:
-      "Idle cars lose money. Listed cars earn it. We take the operational headache off your hands and turn your vehicle into a revenue-generating asset — with zero effort on your part.",
+      "SPEEDX AUTO coordinates the day-to-day work of Turo hosting for qualifying vehicles, while owners retain ownership and receive the agreed reporting and payouts.",
+    answerSummary:
+      "SPEEDX AUTO provides Turo fleet management for qualifying vehicle owners in Metro Vancouver and selected locations in British Columbia. From our Richmond operation near YVR, we coordinate listing setup, pricing, guest communication, cleaning, scheduled handoffs, maintenance, and claim documentation. Vehicle acceptance, projected earnings, fees, and owner responsibilities are reviewed before any agreement is signed.",
+    serviceAreaTitle: "Hosting service area",
+    serviceAreaBody:
+      "Our fleet operation is based in Richmond near YVR. We primarily serve vehicle owners in Metro Vancouver and may accept qualifying vehicles from elsewhere in British Columbia after reviewing logistics and vehicle fit.",
+    lastUpdated: "Updated August 11, 2026",
     whoItsFor: {
       title: "Who Is This For?",
       subtitle: "If any of these sound like you, we should talk.",
@@ -161,7 +167,7 @@ export const en = {
         },
         {
           title: "Retiring Turo Hosts",
-          body: "You're already on Turo but tired of the constant coordination — calls, cleaning, handoffs, maintenance. Hand us the keys and we'll run it end-to-end under our top-ranked host account.",
+          body: "You're already on Turo but want help with calls, cleaning, handoffs, and maintenance coordination. Ask us whether your vehicle fits our managed program.",
         },
         {
           title: "Passive Investors",
@@ -180,7 +186,7 @@ export const en = {
         },
         {
           title: "Turo handles insurance & payments",
-          body: "Turo provides a physical-damage protection plan and up to $2M liability coverage for every trip. Payments are handled through the platform — you don't chase renters.",
+          body: "Payments and available protection plans are administered through Turo. Owners should review the current Turo terms, exclusions, deductibles, and eligibility before joining.",
         },
         {
           title: "Guests book through the app",
@@ -208,7 +214,7 @@ export const en = {
         {
           num: "03",
           title: "We list, clean, deliver, earn",
-          body: "Pro listing photos, dynamic pricing, airport delivery, on-site maintenance. Your car earns 24/7 from BC's #1 Turo account.",
+          body: "We prepare the listing, coordinate pricing, scheduled delivery, cleaning, and maintenance according to the management agreement.",
         },
         {
           num: "04",
@@ -230,7 +236,7 @@ export const en = {
         },
         {
           q: "How much can my car earn?",
-          a: "Earnings depend on the vehicle, season, and market. Contact us with your make and model for a realistic monthly estimate. Many of our managed vehicles cover their full monthly costs (loan + insurance + maintenance) and still generate profit for the owner.",
+          a: "Earnings depend on the vehicle, season, demand, pricing, trip costs, and downtime. Contact us with the make, model, mileage, and condition for a vehicle-specific estimate; an estimate is not a guaranteed return.",
         },
         {
           q: "What's your management fee?",
@@ -242,7 +248,7 @@ export const en = {
         },
         {
           q: "What happens if my car is damaged?",
-          a: "Turo's Host Protection covers up to $2M liability and physical damage per trip. Our in-house body shop handles any required repairs quickly — minimizing downtime and lost earnings.",
+          a: "Damage handling depends on the trip, the protection plan selected, current Turo terms, and supporting documentation. We help coordinate reporting and assess whether repair work fits our shop's current scope.",
         },
       ],
     },
@@ -252,14 +258,31 @@ export const en = {
         "Free, no-obligation earnings estimate within 24 hours. Contact us today — add WeChat, WhatsApp, or give us a call.",
     },
   },
+  pillars: {
+    title: "Two ways SPEEDX AUTO can help",
+    subtitle:
+      "Vehicle-owner fleet management is our primary service. Our Richmond mechanical shop also serves local drivers and supports the managed fleet.",
+    hosting: {
+      title: "Turo fleet management",
+      body: "For owners who want a team to coordinate listings, guests, cleaning, handoffs, maintenance, and claims for a qualifying vehicle.",
+      cta: "Explore vehicle hosting",
+      href: "/hosting",
+    },
+    repair: {
+      title: "Auto repair in Richmond",
+      body: "Inspection-first maintenance, brakes, warning-light diagnostics, and suspension or steering service near YVR.",
+      cta: "Explore auto repair",
+      href: "/auto-repair",
+    },
+  },
   services: {
-    heroTitle: "Full-Service Auto Care Under One Roof",
+    heroTitle: "Fleet Management and Auto Repair",
     heroSubtitle:
-      "SPEEDX AUTO is more than a Turo host — we're a licensed auto service center with an on-site mechanical and body shop. Our fleet's performance depends on excellent service, and we bring that same standard to every customer.",
+      "Choose the service that fits your goal: managed Turo hosting for qualifying vehicle owners, mechanical repair for Metro Vancouver drivers, or our public Turo fleet for renters.",
     items: [
       {
         title: "Turo Car Rental",
-        body: "Browse BC's largest Turo fleet. Sedans, SUVs, EVs, premium vehicles — ready for pickup or delivery near YVR.",
+        body: "Browse vehicles listed through our public Turo host profile, with pickup or delivery options shown on each listing.",
         ctaLabel: "View Fleet",
         external: true,
       },
@@ -270,12 +293,12 @@ export const en = {
       },
       {
         title: "Mechanical Repair",
-        body: "Engine, transmission, brakes, suspension, electrical — our licensed technicians handle every mechanical job, from routine oil changes to complex diagnostics.",
+        body: "Inspection-first maintenance, brake service, warning-light diagnostics, and suspension or steering work from our Richmond shop.",
         ctaLabel: "Book Service",
       },
       {
         title: "Body Repair & Paint",
-        body: "Collision repair, dent removal, panel replacement, refinish, and full-body repaints. Insurance claims welcome. Quick turnaround.",
+        body: "Contact us with photos and vehicle details so the team can confirm whether the requested body work fits our current service scope.",
         ctaLabel: "Get Estimate",
       },
     ],
@@ -286,7 +309,7 @@ export const en = {
       "Questions about hosting your car, booking a rental, or getting your vehicle serviced? Reach us the way you prefer — we reply fast.",
     wechat: {
       title: "Chinese Community — WeChat",
-      body: "Add our WeChat for fastest response in Chinese. Search our WeChat ID below and send us a message.",
+      body: "Add our WeChat for a Chinese-language response. Search our WeChat ID below and send us a message.",
       wechatId: "SPEEDX2020",
       scanLabel: "WeChat ID",
     },
@@ -311,12 +334,12 @@ export const en = {
   about: {
     heroTitle: "About SPEEDX AUTO",
     heroSubtitle:
-      "British Columbia's largest Turo fleet manager and a full-service auto center. Founded on one idea: the best way to run a rental fleet is to own the whole stack.",
+      "A Richmond-based Turo fleet-management operation and mechanical service centre near YVR, serving vehicle owners and local repair customers.",
     story: {
       title: "Our Story",
       paragraphs: [
         "SPEEDX AUTO was founded in 2021 in Richmond, BC, with a simple observation: Turo hosts were losing money to third-party mechanics, slow turnarounds, and operational overhead. We built the opposite — a fully integrated Turo operation with a mechanical and body shop out back.",
-        "In just a few years we've become British Columbia's #1 Turo host — 100+ vehicles under management and over 4,500 trips completed. Our location minutes from Vancouver International Airport lets us deliver vehicles 24/7, and our in-house shop keeps cars on the road instead of waiting weeks for outside repairs.",
+        "Since 2021, the operation has grown to 100+ vehicles under management and more than 5,000 trips shown on our public Turo profile. Our location near Vancouver International Airport supports scheduled fleet handoffs, while the Richmond shop handles appropriate inspection and repair work.",
         "Most of the cars in our fleet belong to other owners who trust us to manage them. That trust is everything. We built this business to make car ownership profitable again — for snowbirds, investors, retiring hosts, and anyone with an idle vehicle.",
       ],
     },
@@ -340,7 +363,7 @@ export const en = {
   },
   footer: {
     rights: "All rights reserved.",
-    tagline: "BC's #1 Turo host & auto service center.",
+    tagline: "Turo fleet management & auto repair in Richmond.",
     quickLinks: "Quick Links",
     contactInfo: "Contact",
     address: "Address",

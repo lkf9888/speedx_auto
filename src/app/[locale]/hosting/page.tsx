@@ -73,6 +73,10 @@ export default async function HostingPage({
               {h.heroTitle}
             </h1>
             <p className="mt-5 text-lg leading-relaxed text-ink-500">{h.heroSubtitle}</p>
+            <div className="mt-6 rounded-2xl border border-brand-100 bg-white/90 p-5 shadow-sm">
+              <p className="text-base leading-7 text-ink-700">{h.answerSummary}</p>
+              <p className="mt-3 text-xs font-medium text-ink-400">{h.lastUpdated}</p>
+            </div>
             <div className="mt-8">
               <ContactBar
                 dict={dict}
@@ -82,6 +86,17 @@ export default async function HostingPage({
                 pagePath={pagePath}
               />
             </div>
+          </div>
+        </Container>
+      </section>
+
+      <section className="border-y border-ink-100 bg-white py-12">
+        <Container>
+          <div className="max-w-3xl">
+            <h2 className="text-2xl font-bold tracking-tight text-ink-900">
+              {h.serviceAreaTitle}
+            </h2>
+            <p className="mt-3 leading-7 text-ink-500">{h.serviceAreaBody}</p>
           </div>
         </Container>
       </section>

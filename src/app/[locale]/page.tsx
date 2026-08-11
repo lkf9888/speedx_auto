@@ -97,7 +97,7 @@ export default async function LandingPage({
                 <div className="relative">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-200">
                     <Image src="/logo.png" alt="" width={20} height={20} className="rounded opacity-90" />
-                    SPEEDX · BC&apos;s #1 Turo Host
+                    SPEEDX · {dict.hero.eyebrow}
                   </div>
                   <div className="mt-6 grid grid-cols-2 gap-5">
                     <Stat label={dict.hero.stat1Label} value={dict.hero.stat1} big />
@@ -107,10 +107,10 @@ export default async function LandingPage({
                   </div>
                   <div className="mt-8 rounded-2xl bg-white/5 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wider text-brand-200">
-                      Since {company.foundedYear}
+                      {dict.hero.stat1Label}
                     </p>
                     <p className="mt-1 text-sm text-ink-100">
-                      {company.stats.tripsCompleted} trips · {company.stats.fleetSize} cars managed · Richmond, BC
+                      {dict.hero.stat3} {dict.hero.stat3Label} · {dict.hero.stat2} {dict.hero.stat2Label}
                     </p>
                   </div>
                 </div>
@@ -184,15 +184,15 @@ export default async function LandingPage({
 
       <LocationMap dict={dict} />
 
-      {/* SERVICES OVERVIEW */}
+      {/* TWO SERVICE PILLARS */}
       <section className="bg-ink-50 py-20 sm:py-24">
         <Container>
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div className="max-w-2xl">
               <h2 className="text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
-                {dict.services.heroTitle}
+                {dict.pillars.title}
               </h2>
-              <p className="mt-4 text-lg text-ink-500">{dict.services.heroSubtitle}</p>
+              <p className="mt-4 text-lg text-ink-500">{dict.pillars.subtitle}</p>
             </div>
             <Link
               href={`/${locale}/services`}
@@ -202,29 +202,19 @@ export default async function LandingPage({
             </Link>
           </div>
           <div className="mt-10 grid gap-5 sm:grid-cols-2">
-            {dict.services.items.map((item, i) => (
-              <div key={i} className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-ink-100">
-                <h3 className="text-lg font-semibold text-ink-900">{item.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-ink-500">{item.body}</p>
-                <div className="mt-4">
-                  {item.external ? (
-                    <Link
-                      href={company.turoHostUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-semibold text-brand-600 hover:text-brand-700"
-                    >
-                      {item.ctaLabel} ↗
-                    </Link>
-                  ) : (
-                    <Link
-                      href={i === 1 ? `/${locale}/hosting` : `/${locale}/contact`}
-                      className="text-sm font-semibold text-brand-600 hover:text-brand-700"
-                    >
-                      {item.ctaLabel} →
-                    </Link>
-                  )}
+            {[dict.pillars.hosting, dict.pillars.repair].map((pillar, i) => (
+              <div key={pillar.href} className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-ink-100">
+                <div className="text-xs font-semibold uppercase tracking-wider text-brand-600">
+                  0{i + 1}
                 </div>
+                <h3 className="mt-3 text-xl font-semibold text-ink-900">{pillar.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-ink-500">{pillar.body}</p>
+                <Link
+                  href={`/${locale}${pillar.href}`}
+                  className="mt-5 inline-flex text-sm font-semibold text-brand-600 hover:text-brand-700"
+                >
+                  {pillar.cta} →
+                </Link>
               </div>
             ))}
           </div>
@@ -249,7 +239,7 @@ export default async function LandingPage({
                 <ContactBar
                   dict={dict}
                   locale={locale}
-                  intent="general"
+                  intent="hosting"
                   placement="middle"
                   pagePath={pagePath}
                   theme="dark"
