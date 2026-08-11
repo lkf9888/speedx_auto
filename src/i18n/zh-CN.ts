@@ -29,6 +29,46 @@ export const zhCN: Dictionary = {
     getStarted: "立即开始",
     openInMaps: "用谷歌地图打开",
   },
+  consent: {
+    title: "您的隐私选择",
+    description:
+      "请选择是否允许 SPEEDX AUTO 使用 Google 衡量 Cookie，以了解联系按钮的点击情况。",
+    accept: "接受",
+    decline: "拒绝",
+    privacyLink: "隐私详情",
+  },
+  privacy: {
+    metaTitle: "隐私与数据衡量选择",
+    metaDescription:
+      "了解 SPEEDX AUTO 如何在本网站使用同意选择和联系按钮点击衡量。",
+    eyebrow: "隐私",
+    title: "隐私与数据衡量选择",
+    intro:
+      "本页面说明 SPEEDX AUTO 使用的有限网站衡量功能，以及您可以作出的选择。",
+    lastUpdated: "更新于 2026 年 8 月 11 日",
+    sections: [
+      {
+        title: "您的选择",
+        body: "首次访问时，您可以接受或拒绝 Google 衡量存储。默认状态为拒绝。您的选择仅适用于本网站，不代表您同意我们主动联系您。",
+      },
+      {
+        title: "Google 数据衡量",
+        body: "网站会保留现有 Google Ads 目标；配置有效的媒体资源 ID 后，也可使用 Google Analytics 4。Consent Mode v2 会先将广告和分析存储设为拒绝，之后仅根据您的选择更新。",
+      },
+      {
+        title: "联系按钮点击事件",
+        body: "当您点击 WhatsApp、电话、微信或电子邮件时，网站会记录联系方式、页面意图、语言、按钮位置和页面路径。一次点击并不代表已经发生对话、预约或成交。",
+      },
+      {
+        title: "已保存的偏好",
+        body: "浏览器只会在 speedx-consent-v1 中保存您选择的接受或拒绝状态。SPEEDX AUTO 不会在该偏好中存放付款、身份或车辆资料。",
+      },
+      {
+        title: "更改选择",
+        body: "在网站加入偏好管理功能前，您可以清除浏览器中本网站的存储数据并重新加载页面，再次作出选择。您也可以通过联系页面上的方式联系我们。",
+      },
+    ],
+  },
   hero: {
     eyebrow: "BC 省第一 Turo 托管 · 2021 年创立",
     title: "让您闲置的爱车每月帮您赚钱",

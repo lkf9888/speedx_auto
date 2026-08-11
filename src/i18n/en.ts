@@ -27,6 +27,46 @@ export const en = {
     getStarted: "Get Started",
     openInMaps: "Open in Google Maps",
   },
+  consent: {
+    title: "Your privacy choices",
+    description:
+      "Choose whether SPEEDX AUTO may use Google measurement cookies to understand contact-button activity.",
+    accept: "Accept",
+    decline: "Decline",
+    privacyLink: "Privacy details",
+  },
+  privacy: {
+    metaTitle: "Privacy and Measurement Choices",
+    metaDescription:
+      "How SPEEDX AUTO uses consent choices and contact-click measurement on this website.",
+    eyebrow: "Privacy",
+    title: "Privacy and Measurement Choices",
+    intro:
+      "This page explains the limited website measurement used by SPEEDX AUTO and the choices available to you.",
+    lastUpdated: "Updated August 11, 2026",
+    sections: [
+      {
+        title: "Your choice",
+        body: "On your first visit, you can accept or decline Google measurement storage. The default is denied. Your choice applies to this website and is not treated as permission to contact you.",
+      },
+      {
+        title: "Google measurement",
+        body: "The site keeps its Google Ads destination and can also use Google Analytics 4 when a valid property ID is configured. Consent Mode v2 starts with ad and analytics storage denied and updates only after your choice.",
+      },
+      {
+        title: "Contact-click events",
+        body: "When you select WhatsApp, phone, WeChat, or email, the site records the contact method, page intent, language, button placement, and page path. A click does not prove that a conversation, booking, or sale occurred.",
+      },
+      {
+        title: "Stored preference",
+        body: "The browser stores only your granted or denied preference under speedx-consent-v1. SPEEDX AUTO does not place payment, identity, or vehicle information in that preference.",
+      },
+      {
+        title: "Change your preference",
+        body: "Until an on-page preference manager is added, clear this site's stored data in your browser and reload the page to choose again. You may also contact SPEEDX AUTO using the details on the contact page.",
+      },
+    ],
+  },
   hero: {
     eyebrow: "BC's #1 Turo Host · Since 2021",
     title: "Turn Your Idle Car Into Monthly Income",
