@@ -6,8 +6,10 @@ import { getDictionary } from "@/i18n/dictionaries";
 import { Container } from "@/components/Container";
 import { ContactBar } from "@/components/ContactBar";
 import { LocationMap } from "@/components/LocationMap";
+import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
 import { buildPageMetadata } from "@/lib/seo";
+import { absoluteRouteUrl } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -37,6 +39,28 @@ export default async function HostingPage({
 
   return (
     <>
+      <StructuredData
+        locale={locale}
+        route="hosting"
+        pageName={h.heroTitle}
+        pageDescription={h.heroSubtitle}
+        service={{
+          name: dict.nav.hosting,
+          description: h.heroSubtitle,
+          areaServed: ["Metro Vancouver", "British Columbia"],
+        }}
+        breadcrumbs={[
+          { name: dict.nav.home, url: absoluteRouteUrl(locale, "home") },
+          {
+            name: dict.nav.hosting,
+            url: absoluteRouteUrl(locale, "hosting"),
+          },
+        ]}
+        faqs={h.faq.items.map((item) => ({
+          question: item.q,
+          answer: item.a,
+        }))}
+      />
       {/* HERO */}
       <section className="bg-hero-gradient">
         <Container className="py-16 sm:py-20 lg:py-24">

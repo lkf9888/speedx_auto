@@ -6,7 +6,6 @@ import { isLocale, locales, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
-import { StructuredData } from "@/components/StructuredData";
 import { buildPageMetadata } from "@/lib/seo";
 import "../globals.css";
 
@@ -72,7 +71,6 @@ export default async function LocaleLayout({
             gtag('config', 'AW-625073096');
           `}
         </Script>
-        <StructuredData locale={locale} />
         <Nav locale={locale as Locale} dict={dict} />
         <main className="flex-1">{children}</main>
         <Footer locale={locale as Locale} dict={dict} />

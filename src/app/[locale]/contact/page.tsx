@@ -4,8 +4,10 @@ import type { Metadata } from "next";
 import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
 import { Container } from "@/components/Container";
+import { StructuredData } from "@/components/StructuredData";
 import { company, mailtoLink, telLink, whatsappLink, googleMapsLink } from "@/lib/company";
 import { buildPageMetadata } from "@/lib/seo";
+import { absoluteRouteUrl } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -35,6 +37,19 @@ export default async function ContactPage({
 
   return (
     <>
+      <StructuredData
+        locale={locale}
+        route="contact"
+        pageName={c.heroTitle}
+        pageDescription={c.heroSubtitle}
+        breadcrumbs={[
+          { name: dict.nav.home, url: absoluteRouteUrl(locale, "home") },
+          {
+            name: dict.nav.contact,
+            url: absoluteRouteUrl(locale, "contact"),
+          },
+        ]}
+      />
       <section className="bg-hero-gradient">
         <Container className="py-16 sm:py-20 lg:py-24">
           <div className="max-w-3xl">

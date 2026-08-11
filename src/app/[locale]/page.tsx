@@ -8,6 +8,7 @@ import { Container } from "@/components/Container";
 import { ContactBar } from "@/components/ContactBar";
 import { LocationMap } from "@/components/LocationMap";
 import { ProcessCarousel } from "@/components/ProcessCarousel";
+import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
 import { buildPageMetadata } from "@/lib/seo";
 
@@ -39,6 +40,12 @@ export default async function LandingPage({
 
   return (
     <>
+      <StructuredData
+        locale={locale}
+        route="home"
+        pageName={`${dict.meta.siteName} — ${dict.meta.tagline}`}
+        pageDescription={dict.meta.description}
+      />
       {/* HERO */}
       <section className="bg-hero-gradient relative overflow-hidden">
         <Container className="py-16 sm:py-24 lg:py-32">

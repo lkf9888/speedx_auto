@@ -5,8 +5,10 @@ import { getDictionary } from "@/i18n/dictionaries";
 import { Container } from "@/components/Container";
 import { ContactBar } from "@/components/ContactBar";
 import { LocationMap } from "@/components/LocationMap";
+import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
 import { buildPageMetadata } from "@/lib/seo";
+import { absoluteRouteUrl } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -36,6 +38,16 @@ export default async function AboutPage({
 
   return (
     <>
+      <StructuredData
+        locale={locale}
+        route="about"
+        pageName={a.heroTitle}
+        pageDescription={a.heroSubtitle}
+        breadcrumbs={[
+          { name: dict.nav.home, url: absoluteRouteUrl(locale, "home") },
+          { name: dict.nav.about, url: absoluteRouteUrl(locale, "about") },
+        ]}
+      />
       <section className="bg-hero-gradient">
         <Container className="py-16 sm:py-20 lg:py-24">
           <div className="max-w-3xl">
