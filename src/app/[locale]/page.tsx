@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
@@ -8,6 +9,24 @@ import { ContactBar } from "@/components/ContactBar";
 import { LocationMap } from "@/components/LocationMap";
 import { ProcessCarousel } from "@/components/ProcessCarousel";
 import { company } from "@/lib/company";
+import { buildPageMetadata } from "@/lib/seo";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  if (!isLocale(locale)) return {};
+  const dict = getDictionary(locale);
+
+  return buildPageMetadata({
+    locale,
+    route: "home",
+    title: `${dict.meta.siteName} — ${dict.meta.tagline}`,
+    description: dict.meta.description,
+  });
+}
 
 export default async function LandingPage({
   params,

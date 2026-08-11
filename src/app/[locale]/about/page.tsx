@@ -6,6 +6,7 @@ import { Container } from "@/components/Container";
 import { ContactBar } from "@/components/ContactBar";
 import { LocationMap } from "@/components/LocationMap";
 import { company } from "@/lib/company";
+import { buildPageMetadata } from "@/lib/seo";
 
 export async function generateMetadata({
   params,
@@ -15,10 +16,12 @@ export async function generateMetadata({
   const { locale } = await params;
   if (!isLocale(locale)) return {};
   const dict = getDictionary(locale);
-  return {
+  return buildPageMetadata({
+    locale,
+    route: "about",
     title: dict.nav.about,
     description: dict.about.heroSubtitle,
-  };
+  });
 }
 
 export default async function AboutPage({

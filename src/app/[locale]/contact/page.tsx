@@ -5,6 +5,7 @@ import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
 import { Container } from "@/components/Container";
 import { company, mailtoLink, telLink, whatsappLink, googleMapsLink } from "@/lib/company";
+import { buildPageMetadata } from "@/lib/seo";
 
 export async function generateMetadata({
   params,
@@ -14,10 +15,12 @@ export async function generateMetadata({
   const { locale } = await params;
   if (!isLocale(locale)) return {};
   const dict = getDictionary(locale);
-  return {
+  return buildPageMetadata({
+    locale,
+    route: "contact",
     title: dict.nav.contact,
     description: dict.contact.heroSubtitle,
-  };
+  });
 }
 
 export default async function ContactPage({
