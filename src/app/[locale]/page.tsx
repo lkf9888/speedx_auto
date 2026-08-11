@@ -69,7 +69,7 @@ export default async function LandingPage({
                 <div className="relative">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-200">
                     <Image src="/logo.png" alt="" width={20} height={20} className="rounded opacity-90" />
-                    SPEEDX · BC's #1 Turo Host
+                    SPEEDX · BC&apos;s #1 Turo Host
                   </div>
                   <div className="mt-6 grid grid-cols-2 gap-5">
                     <Stat label={dict.hero.stat1Label} value={dict.hero.stat1} big />
