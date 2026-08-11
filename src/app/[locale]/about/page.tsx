@@ -8,7 +8,7 @@ import { LocationMap } from "@/components/LocationMap";
 import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
 import { buildPageMetadata } from "@/lib/seo";
-import { absoluteRouteUrl } from "@/lib/site-routes";
+import { absoluteRouteUrl, routePath } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -35,6 +35,7 @@ export default async function AboutPage({
   if (!isLocale(locale)) notFound();
   const dict = getDictionary(locale as Locale);
   const a = dict.about;
+  const pagePath = routePath(locale, "about");
 
   return (
     <>
@@ -116,7 +117,14 @@ export default async function AboutPage({
                 {dict.hosting.closingCta.subtitle}
               </p>
               <div className="mt-8">
-                <ContactBar dict={dict} variant="dark" />
+                <ContactBar
+                  dict={dict}
+                  locale={locale}
+                  intent="general"
+                  placement="middle"
+                  pagePath={pagePath}
+                  theme="dark"
+                />
               </div>
             </div>
           </div>

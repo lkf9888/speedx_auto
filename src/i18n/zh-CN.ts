@@ -18,6 +18,8 @@ export const zhCN: Dictionary = {
   },
   cta: {
     contactWeChat: "加微信",
+    wechatCopied: "已复制",
+    wechatCopyFailed: "复制失败，请手动复制微信号",
     callNow: "立即致电",
     whatsapp: "WhatsApp",
     email: "发邮件",

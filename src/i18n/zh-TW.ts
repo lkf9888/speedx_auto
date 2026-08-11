@@ -18,6 +18,8 @@ export const zhTW: Dictionary = {
   },
   cta: {
     contactWeChat: "加微信",
+    wechatCopied: "已複製",
+    wechatCopyFailed: "複製失敗，請手動複製微信號",
     callNow: "立即致電",
     whatsapp: "WhatsApp",
     email: "發郵件",

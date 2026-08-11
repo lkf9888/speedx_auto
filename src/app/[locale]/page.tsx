@@ -11,6 +11,7 @@ import { ProcessCarousel } from "@/components/ProcessCarousel";
 import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
 import { buildPageMetadata } from "@/lib/seo";
+import { routePath } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -37,6 +38,7 @@ export default async function LandingPage({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const dict = getDictionary(locale as Locale);
+  const pagePath = routePath(locale, "home");
 
   return (
     <>
@@ -244,7 +246,14 @@ export default async function LandingPage({
                 {dict.hosting.heroSubtitle}
               </p>
               <div className="mt-8">
-                <ContactBar dict={dict} variant="dark" />
+                <ContactBar
+                  dict={dict}
+                  locale={locale}
+                  intent="general"
+                  placement="middle"
+                  pagePath={pagePath}
+                  theme="dark"
+                />
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Link

@@ -16,6 +16,8 @@ export const en = {
   },
   cta: {
     contactWeChat: "Add WeChat",
+    wechatCopied: "Copied",
+    wechatCopyFailed: "Copy failed. WeChat ID",
     callNow: "Call Now",
     whatsapp: "WhatsApp",
     email: "Email Us",

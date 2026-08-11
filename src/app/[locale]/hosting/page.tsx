@@ -9,7 +9,7 @@ import { LocationMap } from "@/components/LocationMap";
 import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
 import { buildPageMetadata } from "@/lib/seo";
-import { absoluteRouteUrl } from "@/lib/site-routes";
+import { absoluteRouteUrl, routePath } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -36,6 +36,7 @@ export default async function HostingPage({
   if (!isLocale(locale)) notFound();
   const dict = getDictionary(locale as Locale);
   const h = dict.hosting;
+  const pagePath = routePath(locale, "hosting");
 
   return (
     <>
@@ -73,7 +74,13 @@ export default async function HostingPage({
             </h1>
             <p className="mt-5 text-lg leading-relaxed text-ink-500">{h.heroSubtitle}</p>
             <div className="mt-8">
-              <ContactBar dict={dict} />
+              <ContactBar
+                dict={dict}
+                locale={locale}
+                intent="hosting"
+                placement="hero"
+                pagePath={pagePath}
+              />
             </div>
           </div>
         </Container>
@@ -207,7 +214,14 @@ export default async function HostingPage({
               {h.closingCta.subtitle}
             </p>
             <div className="mt-8 flex justify-center">
-              <ContactBar dict={dict} variant="dark" />
+              <ContactBar
+                dict={dict}
+                locale={locale}
+                intent="hosting"
+                placement="middle"
+                pagePath={pagePath}
+                theme="dark"
+              />
             </div>
           </div>
         </Container>

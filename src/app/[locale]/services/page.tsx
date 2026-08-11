@@ -9,7 +9,7 @@ import { LocationMap } from "@/components/LocationMap";
 import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
 import { buildPageMetadata } from "@/lib/seo";
-import { absoluteRouteUrl } from "@/lib/site-routes";
+import { absoluteRouteUrl, routePath } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -35,6 +35,7 @@ export default async function ServicesPage({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const dict = getDictionary(locale as Locale);
+  const pagePath = routePath(locale, "services");
 
   return (
     <>
@@ -64,7 +65,13 @@ export default async function ServicesPage({
               {dict.services.heroSubtitle}
             </p>
             <div className="mt-8">
-              <ContactBar dict={dict} />
+              <ContactBar
+                dict={dict}
+                locale={locale}
+                intent="auto_repair"
+                placement="hero"
+                pagePath={pagePath}
+              />
             </div>
           </div>
         </Container>
