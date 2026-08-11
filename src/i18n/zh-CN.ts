@@ -1,4 +1,5 @@
 import type { Dictionary } from "./en";
+import { zhCNAutoRepair } from "@/i18n/repair-copy";
 
 export const zhCN: Dictionary = {
   meta: {
@@ -69,6 +70,7 @@ export const zhCN: Dictionary = {
       },
     ],
   },
+  autoRepair: zhCNAutoRepair,
   hero: {
     eyebrow: "BC 省第一 Turo 托管 · 2021 年创立",
     title: "让您闲置的爱车每月帮您赚钱",

@@ -1,3 +1,5 @@
+import { enAutoRepair } from "@/i18n/repair-copy";
+
 export const en = {
   meta: {
     siteName: "SPEEDX AUTO",
@@ -67,6 +69,7 @@ export const en = {
       },
     ],
   },
+  autoRepair: enAutoRepair,
   hero: {
     eyebrow: "BC's #1 Turo Host · Since 2021",
     title: "Turn Your Idle Car Into Monthly Income",

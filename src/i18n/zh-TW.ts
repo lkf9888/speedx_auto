@@ -1,4 +1,5 @@
 import type { Dictionary } from "./en";
+import { zhTWAutoRepair } from "@/i18n/repair-copy";
 
 export const zhTW: Dictionary = {
   meta: {
@@ -69,6 +70,7 @@ export const zhTW: Dictionary = {
       },
     ],
   },
+  autoRepair: zhTWAutoRepair,
   hero: {
     eyebrow: "BC 省第一 Turo 託管 · 2021 年創立",
     title: "讓您閒置的愛車每月幫您賺錢",
