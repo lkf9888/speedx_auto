@@ -15,7 +15,7 @@ export function Nav({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const items = [
     { href: `/${locale}`, label: dict.nav.home, match: "" },
     { href: `/${locale}/hosting`, label: dict.nav.hosting, match: "hosting" },
-    { href: `/${locale}/services`, label: dict.nav.services, match: "services" },
+    { href: `/${locale}/auto-repair`, label: dict.nav.autoRepair, match: "auto-repair" },
     { href: `/${locale}/about`, label: dict.nav.about, match: "about" },
     { href: `/${locale}/contact`, label: dict.nav.contact, match: "contact" },
   ];

@@ -11,6 +11,7 @@ export const zhTW: Dictionary = {
   nav: {
     home: "首頁",
     hosting: "車輛託管",
+    autoRepair: "汽車維修",
     services: "服務項目",
     about: "關於我們",
     contact: "聯絡我們",

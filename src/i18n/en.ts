@@ -10,6 +10,7 @@ export const en = {
   nav: {
     home: "Home",
     hosting: "Host With Us",
+    autoRepair: "Auto Repair",
     services: "Services",
     about: "About",
     contact: "Contact",

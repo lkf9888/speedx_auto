@@ -11,6 +11,7 @@ export const zhCN: Dictionary = {
   nav: {
     home: "首页",
     hosting: "车辆托管",
+    autoRepair: "汽车维修",
     services: "服务项目",
     about: "关于我们",
     contact: "联系我们",
