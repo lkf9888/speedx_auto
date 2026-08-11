@@ -1,24 +1,29 @@
 import type { MetadataRoute } from "next";
-import { locales } from "@/i18n/config";
-
-const BASE = "https://speedxrental.com";
-const paths = ["", "/hosting", "/services", "/about", "/contact"];
+import {
+  CONTENT_LAST_MODIFIED,
+  absoluteRouteUrl,
+  localizedAlternates,
+  locales,
+  routePaths,
+  type RouteKey,
+} from "@/lib/site-routes";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const entries: MetadataRoute.Sitemap = [];
-  for (const locale of locales) {
-    for (const path of paths) {
-      entries.push({
-        url: `${BASE}/${locale}${path}`,
+  const routes = Object.keys(routePaths) as RouteKey[];
+
+  return locales.flatMap((locale) =>
+    routes.map((route) => {
+      const isPrimaryPage = ["home", "hosting", "autoRepair"].includes(route);
+
+      return {
+        url: absoluteRouteUrl(locale, route),
+        lastModified: CONTENT_LAST_MODIFIED,
         changeFrequency: "monthly",
-        priority: path === "" ? 1.0 : 0.8,
+        priority: route === "home" ? 1 : isPrimaryPage ? 0.9 : 0.8,
         alternates: {
-          languages: Object.fromEntries(
-            locales.map((l) => [l, `${BASE}/${l}${path}`]),
-          ),
+          languages: localizedAlternates(route),
         },
-      });
-    }
-  }
-  return entries;
+      } satisfies MetadataRoute.Sitemap[number];
+    }),
+  );
 }
