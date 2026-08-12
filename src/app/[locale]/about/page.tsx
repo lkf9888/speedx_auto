@@ -5,7 +5,10 @@ import { getDictionary } from "@/i18n/dictionaries";
 import { Container } from "@/components/Container";
 import { ContactBar } from "@/components/ContactBar";
 import { LocationMap } from "@/components/LocationMap";
+import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
+import { buildPageMetadata } from "@/lib/seo";
+import { absoluteRouteUrl, routePath } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -15,10 +18,12 @@ export async function generateMetadata({
   const { locale } = await params;
   if (!isLocale(locale)) return {};
   const dict = getDictionary(locale);
-  return {
+  return buildPageMetadata({
+    locale,
+    route: "about",
     title: dict.nav.about,
     description: dict.about.heroSubtitle,
-  };
+  });
 }
 
 export default async function AboutPage({
@@ -30,9 +35,20 @@ export default async function AboutPage({
   if (!isLocale(locale)) notFound();
   const dict = getDictionary(locale as Locale);
   const a = dict.about;
+  const pagePath = routePath(locale, "about");
 
   return (
     <>
+      <StructuredData
+        locale={locale}
+        route="about"
+        pageName={a.heroTitle}
+        pageDescription={a.heroSubtitle}
+        breadcrumbs={[
+          { name: dict.nav.home, url: absoluteRouteUrl(locale, "home") },
+          { name: dict.nav.about, url: absoluteRouteUrl(locale, "about") },
+        ]}
+      />
       <section className="bg-hero-gradient">
         <Container className="py-16 sm:py-20 lg:py-24">
           <div className="max-w-3xl">
@@ -55,10 +71,10 @@ export default async function AboutPage({
                 {a.story.title}
               </h2>
               <div className="mt-8 grid gap-3">
-                <StatPill label="Founded" value={String(company.foundedYear)} />
-                <StatPill label="BC Ranking" value={company.stats.rankInBC} />
-                <StatPill label="Fleet Size" value={company.stats.fleetSize} />
-                <StatPill label="Trips Completed" value={company.stats.tripsCompleted} />
+                <StatPill label={dict.hero.stat1Label} value={dict.hero.stat1} />
+                <StatPill label={dict.hero.stat2Label} value={company.stats.fleetSize} />
+                <StatPill label={dict.hero.stat3Label} value={company.stats.tripsCompleted} />
+                <StatPill label={dict.hero.stat4Label} value={company.stats.delivery} />
               </div>
             </div>
             <div className="space-y-5 text-base leading-relaxed text-ink-600">
@@ -101,7 +117,14 @@ export default async function AboutPage({
                 {dict.hosting.closingCta.subtitle}
               </p>
               <div className="mt-8">
-                <ContactBar dict={dict} variant="dark" />
+                <ContactBar
+                  dict={dict}
+                  locale={locale}
+                  intent="general"
+                  placement="middle"
+                  pagePath={pagePath}
+                  theme="dark"
+                />
               </div>
             </div>
           </div>

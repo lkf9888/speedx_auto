@@ -4,7 +4,13 @@ import type { Metadata } from "next";
 import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
 import { Container } from "@/components/Container";
+import { ContactBar } from "@/components/ContactBar";
+import { StructuredData } from "@/components/StructuredData";
+import { TrackedContactLink } from "@/components/TrackedContactLink";
 import { company, mailtoLink, telLink, whatsappLink, googleMapsLink } from "@/lib/company";
+import type { ContactMethod } from "@/lib/analytics";
+import { buildPageMetadata } from "@/lib/seo";
+import { absoluteRouteUrl, routePath } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -14,10 +20,12 @@ export async function generateMetadata({
   const { locale } = await params;
   if (!isLocale(locale)) return {};
   const dict = getDictionary(locale);
-  return {
+  return buildPageMetadata({
+    locale,
+    route: "contact",
     title: dict.nav.contact,
     description: dict.contact.heroSubtitle,
-  };
+  });
 }
 
 export default async function ContactPage({
@@ -29,9 +37,23 @@ export default async function ContactPage({
   if (!isLocale(locale)) notFound();
   const dict = getDictionary(locale as Locale);
   const c = dict.contact;
+  const pagePath = routePath(locale, "contact");
 
   return (
     <>
+      <StructuredData
+        locale={locale}
+        route="contact"
+        pageName={c.heroTitle}
+        pageDescription={c.heroSubtitle}
+        breadcrumbs={[
+          { name: dict.nav.home, url: absoluteRouteUrl(locale, "home") },
+          {
+            name: dict.nav.contact,
+            url: absoluteRouteUrl(locale, "contact"),
+          },
+        ]}
+      />
       <section className="bg-hero-gradient">
         <Container className="py-16 sm:py-20 lg:py-24">
           <div className="max-w-3xl">
@@ -42,6 +64,15 @@ export default async function ContactPage({
               {c.heroTitle}
             </h1>
             <p className="mt-5 text-lg leading-relaxed text-ink-500">{c.heroSubtitle}</p>
+            <div className="mt-8">
+              <ContactBar
+                dict={dict}
+                locale={locale}
+                intent="general"
+                placement="hero"
+                pagePath={pagePath}
+              />
+            </div>
           </div>
         </Container>
       </section>
@@ -78,6 +109,9 @@ export default async function ContactPage({
               cta={dict.cta.whatsapp}
               icon={<WhatsAppIcon />}
               accent="mint"
+              method="whatsapp"
+              locale={locale}
+              pagePath={pagePath}
             />
 
             {/* Phone */}
@@ -89,6 +123,9 @@ export default async function ContactPage({
               cta={dict.cta.callNow}
               icon={<PhoneIcon />}
               accent="coral"
+              method="phone"
+              locale={locale}
+              pagePath={pagePath}
             />
 
             {/* Email */}
@@ -100,6 +137,9 @@ export default async function ContactPage({
               cta={dict.cta.email}
               icon={<MailIcon />}
               accent="brand"
+              method="email"
+              locale={locale}
+              pagePath={pagePath}
             />
           </div>
 
@@ -157,6 +197,9 @@ function ContactCard({
   icon,
   external,
   accent,
+  method,
+  locale,
+  pagePath,
 }: {
   title: string;
   body: string;
@@ -166,6 +209,9 @@ function ContactCard({
   icon: React.ReactNode;
   external?: boolean;
   accent: "brand" | "mint" | "coral";
+  method: ContactMethod;
+  locale: Locale;
+  pagePath: string;
 }) {
   const accentClasses = {
     brand: "bg-brand-50 text-brand-700",
@@ -181,14 +227,19 @@ function ContactCard({
       <h2 className="mt-5 text-xl font-semibold text-ink-900">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-ink-500">{body}</p>
       <div className="mt-5 text-base font-semibold text-ink-900 break-all">{value}</div>
-      <Link
+      <TrackedContactLink
         href={href}
         target={external ? "_blank" : undefined}
         rel={external ? "noopener noreferrer" : undefined}
+        method={method}
+        intent="general"
+        locale={locale}
+        placement="middle"
+        pagePath={pagePath}
         className="mt-4 inline-flex items-center gap-1 rounded-full border border-ink-200 px-4 py-2 text-sm font-semibold text-ink-800 transition-colors hover:border-ink-900 hover:bg-ink-50"
       >
         {cta} {external ? "↗" : "→"}
-      </Link>
+      </TrackedContactLink>
     </div>
   );
 }

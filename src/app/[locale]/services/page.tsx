@@ -6,7 +6,10 @@ import { getDictionary } from "@/i18n/dictionaries";
 import { Container } from "@/components/Container";
 import { ContactBar } from "@/components/ContactBar";
 import { LocationMap } from "@/components/LocationMap";
+import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
+import { buildPageMetadata } from "@/lib/seo";
+import { absoluteRouteUrl, routePath } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -16,10 +19,12 @@ export async function generateMetadata({
   const { locale } = await params;
   if (!isLocale(locale)) return {};
   const dict = getDictionary(locale);
-  return {
+  return buildPageMetadata({
+    locale,
+    route: "services",
     title: dict.nav.services,
     description: dict.services.heroSubtitle,
-  };
+  });
 }
 
 export default async function ServicesPage({
@@ -30,9 +35,23 @@ export default async function ServicesPage({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const dict = getDictionary(locale as Locale);
+  const pagePath = routePath(locale, "services");
 
   return (
     <>
+      <StructuredData
+        locale={locale}
+        route="services"
+        pageName={dict.services.heroTitle}
+        pageDescription={dict.services.heroSubtitle}
+        breadcrumbs={[
+          { name: dict.nav.home, url: absoluteRouteUrl(locale, "home") },
+          {
+            name: dict.nav.services,
+            url: absoluteRouteUrl(locale, "services"),
+          },
+        ]}
+      />
       <section className="bg-hero-gradient">
         <Container className="py-16 sm:py-20 lg:py-24">
           <div className="max-w-3xl">
@@ -46,7 +65,13 @@ export default async function ServicesPage({
               {dict.services.heroSubtitle}
             </p>
             <div className="mt-8">
-              <ContactBar dict={dict} />
+              <ContactBar
+                dict={dict}
+                locale={locale}
+                intent="general"
+                placement="hero"
+                pagePath={pagePath}
+              />
             </div>
           </div>
         </Container>
@@ -77,7 +102,13 @@ export default async function ServicesPage({
                     </Link>
                   ) : (
                     <Link
-                      href={i === 1 ? `/${locale}/hosting` : `/${locale}/contact`}
+                      href={
+                        i === 1
+                          ? `/${locale}/hosting`
+                          : i === 2
+                            ? `/${locale}/auto-repair`
+                            : `/${locale}/contact`
+                      }
                       className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700"
                     >
                       {item.ctaLabel} →

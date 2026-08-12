@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
@@ -7,7 +8,27 @@ import { Container } from "@/components/Container";
 import { ContactBar } from "@/components/ContactBar";
 import { LocationMap } from "@/components/LocationMap";
 import { ProcessCarousel } from "@/components/ProcessCarousel";
+import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
+import { buildPageMetadata } from "@/lib/seo";
+import { routePath } from "@/lib/site-routes";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  if (!isLocale(locale)) return {};
+  const dict = getDictionary(locale);
+
+  return buildPageMetadata({
+    locale,
+    route: "home",
+    title: `${dict.meta.siteName} — ${dict.meta.tagline}`,
+    description: dict.meta.description,
+  });
+}
 
 export default async function LandingPage({
   params,
@@ -17,9 +38,23 @@ export default async function LandingPage({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const dict = getDictionary(locale as Locale);
+  const pagePath = routePath(locale, "home");
 
   return (
     <>
+      <StructuredData
+        locale={locale}
+        route="home"
+        pageName={`${dict.meta.siteName} — ${dict.meta.tagline}`}
+        pageDescription={dict.meta.description}
+        video={{
+          name: dict.video.title,
+          description: dict.video.subtitle,
+          thumbnailUrl: "https://i.ytimg.com/vi/gLrh6DLm5FI/maxresdefault.jpg",
+          uploadDate: "2026-04-19T23:35:44-07:00",
+          embedUrl: "https://www.youtube.com/embed/gLrh6DLm5FI",
+        }}
+      />
       {/* HERO */}
       <section className="bg-hero-gradient relative overflow-hidden">
         <Container className="py-16 sm:py-24 lg:py-32">
@@ -35,13 +70,19 @@ export default async function LandingPage({
               <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-500">
                 {dict.hero.subtitle}
               </p>
-              <div className="mt-8 flex flex-wrap items-center gap-3">
+              <div data-testid="hero-actions" className="mt-8 flex flex-wrap items-center gap-3">
                 <Link
                   href={`/${locale}/hosting`}
                   className="inline-flex items-center gap-2 rounded-full bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-ink-900/10 transition-colors hover:bg-brand-600"
                 >
                   {dict.hero.primaryCta}
                   <span aria-hidden>→</span>
+                </Link>
+                <Link
+                  href={`/${locale}/auto-repair`}
+                  className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-6 py-3 text-sm font-semibold text-brand-800 transition-colors hover:border-brand-400 hover:bg-brand-100"
+                >
+                  {dict.pillars.repair.cta} →
                 </Link>
                 <Link
                   href={company.turoHostUrl}
@@ -69,7 +110,7 @@ export default async function LandingPage({
                 <div className="relative">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-200">
                     <Image src="/logo.png" alt="" width={20} height={20} className="rounded opacity-90" />
-                    SPEEDX · BC's #1 Turo Host
+                    SPEEDX · {dict.hero.eyebrow}
                   </div>
                   <div className="mt-6 grid grid-cols-2 gap-5">
                     <Stat label={dict.hero.stat1Label} value={dict.hero.stat1} big />
@@ -79,10 +120,10 @@ export default async function LandingPage({
                   </div>
                   <div className="mt-8 rounded-2xl bg-white/5 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wider text-brand-200">
-                      Since {company.foundedYear}
+                      {dict.hero.stat1Label}
                     </p>
                     <p className="mt-1 text-sm text-ink-100">
-                      {company.stats.tripsCompleted} trips · {company.stats.fleetSize} cars managed · Richmond, BC
+                      {dict.hero.stat3} {dict.hero.stat3Label} · {dict.hero.stat2} {dict.hero.stat2Label}
                     </p>
                   </div>
                 </div>
@@ -156,15 +197,15 @@ export default async function LandingPage({
 
       <LocationMap dict={dict} />
 
-      {/* SERVICES OVERVIEW */}
+      {/* TWO SERVICE PILLARS */}
       <section className="bg-ink-50 py-20 sm:py-24">
         <Container>
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div className="max-w-2xl">
               <h2 className="text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
-                {dict.services.heroTitle}
+                {dict.pillars.title}
               </h2>
-              <p className="mt-4 text-lg text-ink-500">{dict.services.heroSubtitle}</p>
+              <p className="mt-4 text-lg text-ink-500">{dict.pillars.subtitle}</p>
             </div>
             <Link
               href={`/${locale}/services`}
@@ -174,29 +215,19 @@ export default async function LandingPage({
             </Link>
           </div>
           <div className="mt-10 grid gap-5 sm:grid-cols-2">
-            {dict.services.items.map((item, i) => (
-              <div key={i} className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-ink-100">
-                <h3 className="text-lg font-semibold text-ink-900">{item.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-ink-500">{item.body}</p>
-                <div className="mt-4">
-                  {item.external ? (
-                    <Link
-                      href={company.turoHostUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-semibold text-brand-600 hover:text-brand-700"
-                    >
-                      {item.ctaLabel} ↗
-                    </Link>
-                  ) : (
-                    <Link
-                      href={i === 1 ? `/${locale}/hosting` : `/${locale}/contact`}
-                      className="text-sm font-semibold text-brand-600 hover:text-brand-700"
-                    >
-                      {item.ctaLabel} →
-                    </Link>
-                  )}
+            {[dict.pillars.hosting, dict.pillars.repair].map((pillar, i) => (
+              <div key={pillar.href} className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-ink-100">
+                <div className="text-xs font-semibold uppercase tracking-wider text-brand-600">
+                  0{i + 1}
                 </div>
+                <h3 className="mt-3 text-xl font-semibold text-ink-900">{pillar.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-ink-500">{pillar.body}</p>
+                <Link
+                  href={`/${locale}${pillar.href}`}
+                  className="mt-5 inline-flex text-sm font-semibold text-brand-600 hover:text-brand-700"
+                >
+                  {pillar.cta} →
+                </Link>
               </div>
             ))}
           </div>
@@ -218,7 +249,14 @@ export default async function LandingPage({
                 {dict.hosting.heroSubtitle}
               </p>
               <div className="mt-8">
-                <ContactBar dict={dict} variant="dark" />
+                <ContactBar
+                  dict={dict}
+                  locale={locale}
+                  intent="hosting"
+                  placement="middle"
+                  pagePath={pagePath}
+                  theme="dark"
+                />
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Link

@@ -2,15 +2,18 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Locale } from "@/i18n/config";
 import type { Dictionary } from "@/i18n/dictionaries";
-import { company, mailtoLink, telLink, whatsappLink, googleMapsLink } from "@/lib/company";
+import { FooterContactBar } from "@/components/FooterContactBar";
+import { company, googleMapsLink } from "@/lib/company";
 
 export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const links = [
     { href: `/${locale}`, label: dict.nav.home },
     { href: `/${locale}/hosting`, label: dict.nav.hosting },
+    { href: `/${locale}/auto-repair`, label: dict.nav.autoRepair },
     { href: `/${locale}/services`, label: dict.nav.services },
     { href: `/${locale}/about`, label: dict.nav.about },
     { href: `/${locale}/contact`, label: dict.nav.contact },
+    { href: `/${locale}/privacy`, label: dict.privacy.eyebrow },
   ];
 
   return (
@@ -50,26 +53,9 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
 
           <div>
             <h3 className="text-sm font-semibold text-ink-900">{dict.footer.contactInfo}</h3>
-            <ul className="mt-3 space-y-2 text-sm text-ink-500">
-              <li>
-                <a href={telLink} className="hover:text-ink-900">
-                  {company.phoneDisplay}
-                </a>
-              </li>
-              <li>
-                <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="hover:text-ink-900">
-                  WhatsApp
-                </a>
-              </li>
-              <li>
-                <a href={mailtoLink} className="hover:text-ink-900 break-all">
-                  {company.email}
-                </a>
-              </li>
-              <li>
-                WeChat: <span className="font-semibold text-ink-700">{company.wechatId}</span>
-              </li>
-            </ul>
+            <div className="mt-3">
+              <FooterContactBar dict={dict} locale={locale} />
+            </div>
           </div>
 
           <div>

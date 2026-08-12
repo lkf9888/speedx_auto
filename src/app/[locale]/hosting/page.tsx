@@ -6,7 +6,10 @@ import { getDictionary } from "@/i18n/dictionaries";
 import { Container } from "@/components/Container";
 import { ContactBar } from "@/components/ContactBar";
 import { LocationMap } from "@/components/LocationMap";
+import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
+import { buildPageMetadata } from "@/lib/seo";
+import { absoluteRouteUrl, routePath } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -16,10 +19,12 @@ export async function generateMetadata({
   const { locale } = await params;
   if (!isLocale(locale)) return {};
   const dict = getDictionary(locale);
-  return {
+  return buildPageMetadata({
+    locale,
+    route: "hosting",
     title: dict.nav.hosting,
     description: dict.hosting.heroSubtitle,
-  };
+  });
 }
 
 export default async function HostingPage({
@@ -31,9 +36,32 @@ export default async function HostingPage({
   if (!isLocale(locale)) notFound();
   const dict = getDictionary(locale as Locale);
   const h = dict.hosting;
+  const pagePath = routePath(locale, "hosting");
 
   return (
     <>
+      <StructuredData
+        locale={locale}
+        route="hosting"
+        pageName={h.heroTitle}
+        pageDescription={h.heroSubtitle}
+        service={{
+          name: dict.nav.hosting,
+          description: h.heroSubtitle,
+          areaServed: ["Metro Vancouver", "British Columbia"],
+        }}
+        breadcrumbs={[
+          { name: dict.nav.home, url: absoluteRouteUrl(locale, "home") },
+          {
+            name: dict.nav.hosting,
+            url: absoluteRouteUrl(locale, "hosting"),
+          },
+        ]}
+        faqs={h.faq.items.map((item) => ({
+          question: item.q,
+          answer: item.a,
+        }))}
+      />
       {/* HERO */}
       <section className="bg-hero-gradient">
         <Container className="py-16 sm:py-20 lg:py-24">
@@ -45,9 +73,30 @@ export default async function HostingPage({
               {h.heroTitle}
             </h1>
             <p className="mt-5 text-lg leading-relaxed text-ink-500">{h.heroSubtitle}</p>
-            <div className="mt-8">
-              <ContactBar dict={dict} />
+            <div className="mt-6 rounded-2xl border border-brand-100 bg-white/90 p-5 shadow-sm">
+              <p className="text-base leading-7 text-ink-700">{h.answerSummary}</p>
+              <p className="mt-3 text-xs font-medium text-ink-400">{h.lastUpdated}</p>
             </div>
+            <div className="mt-8">
+              <ContactBar
+                dict={dict}
+                locale={locale}
+                intent="hosting"
+                placement="hero"
+                pagePath={pagePath}
+              />
+            </div>
+          </div>
+        </Container>
+      </section>
+
+      <section className="border-y border-ink-100 bg-white py-12">
+        <Container>
+          <div className="max-w-3xl">
+            <h2 className="text-2xl font-bold tracking-tight text-ink-900">
+              {h.serviceAreaTitle}
+            </h2>
+            <p className="mt-3 leading-7 text-ink-500">{h.serviceAreaBody}</p>
           </div>
         </Container>
       </section>
@@ -180,11 +229,26 @@ export default async function HostingPage({
               {h.closingCta.subtitle}
             </p>
             <div className="mt-8 flex justify-center">
-              <ContactBar dict={dict} variant="dark" />
+              <ContactBar
+                dict={dict}
+                locale={locale}
+                intent="hosting"
+                placement="middle"
+                pagePath={pagePath}
+                theme="dark"
+              />
             </div>
           </div>
         </Container>
       </section>
+      <ContactBar
+        dict={dict}
+        locale={locale}
+        intent="hosting"
+        placement="sticky_mobile"
+        pagePath={pagePath}
+        variant="sticky"
+      />
     </>
   );
 }

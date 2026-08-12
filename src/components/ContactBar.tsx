@@ -1,8 +1,39 @@
+"use client";
+
+import { useState } from "react";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { company, mailtoLink, telLink, whatsappLink } from "@/lib/company";
+import {
+  emitContactClick,
+  type ContactIntent,
+  type ContactMethod,
+  type ContactPlacement,
+} from "@/lib/analytics";
+import type { Locale } from "@/lib/site-routes";
 
-export function ContactBar({ dict, variant = "light" }: { dict: Dictionary; variant?: "light" | "dark" }) {
-  const isDark = variant === "dark";
+interface ContactBarProps {
+  dict: Dictionary;
+  locale: Locale;
+  intent: ContactIntent;
+  placement: ContactPlacement;
+  pagePath?: string;
+  variant?: "inline" | "sticky";
+  theme?: "light" | "dark";
+}
+
+export function ContactBar({
+  dict,
+  locale,
+  intent,
+  placement,
+  pagePath,
+  variant = "inline",
+  theme = "light",
+}: ContactBarProps) {
+  const [copyStatus, setCopyStatus] = useState<"success" | "failure" | null>(
+    null,
+  );
+  const isDark = theme === "dark";
   const base =
     "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors";
   const primary = isDark
@@ -12,20 +43,114 @@ export function ContactBar({ dict, variant = "light" }: { dict: Dictionary; vari
     ? `${base} border border-white/30 text-white hover:bg-white/10`
     : `${base} border border-ink-200 text-ink-700 hover:bg-ink-50`;
 
+  function track(method: ContactMethod) {
+    emitContactClick({
+      method,
+      intent,
+      locale,
+      placement,
+      pagePath: pagePath ?? window.location.pathname,
+    });
+  }
+
+  async function copyWeChat() {
+    track("wechat");
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(company.wechatId);
+      setCopyStatus("success");
+    } catch {
+      setCopyStatus("failure");
+    }
+  }
+
+  const feedback =
+    copyStatus === "success"
+      ? `${dict.cta.wechatCopied}: ${company.wechatId}`
+      : copyStatus === "failure"
+        ? `${dict.cta.wechatCopyFailed}: ${company.wechatId}`
+        : null;
+
+  if (variant === "sticky") {
+    const stickyButton =
+      "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-xs font-semibold";
+
+    return (
+      <>
+        <div data-sticky-contact-spacer aria-hidden className="h-20 md:hidden" />
+        <aside
+          data-sticky-contact-bar
+          aria-label={dict.footer.contactInfo}
+          className="fixed inset-x-3 bottom-3 z-40 rounded-2xl border border-ink-200 bg-white/95 p-2 shadow-2xl backdrop-blur md:hidden"
+        >
+          {feedback ? (
+            <p className="absolute inset-x-0 bottom-full mx-auto mb-2 w-fit max-w-[calc(100vw-2rem)] rounded-full bg-ink-900 px-3 py-1.5 text-center text-xs text-white" aria-live="polite">
+              {feedback}
+            </p>
+          ) : null}
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              className={`${stickyButton} bg-ink-900 text-white`}
+              onClick={copyWeChat}
+              aria-label={`${dict.cta.contactWeChat}: ${company.wechatId}`}
+            >
+              <WeChatIcon /> {dict.cta.contactWeChat}
+            </button>
+            <a
+              href={whatsappLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${stickyButton} bg-[#e9f8ef] text-[#137333]`}
+              onClick={() => track("whatsapp")}
+            >
+              <WhatsAppIcon /> {dict.cta.whatsapp}
+            </a>
+            <a
+              href={telLink}
+              className={`${stickyButton} border border-ink-200 text-ink-800`}
+              onClick={() => track("phone")}
+              aria-label={`${dict.cta.callNow}: ${company.phoneDisplay}`}
+            >
+              <PhoneIcon /> {dict.cta.callNow}
+            </a>
+          </div>
+        </aside>
+      </>
+    );
+  }
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className={`${primary} cursor-default select-text`} title="WeChat ID">
-        <WeChatIcon /> {dict.cta.contactWeChat}:&nbsp;<span className="font-bold">{company.wechatId}</span>
-      </span>
-      <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className={ghost}>
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        className={`${primary} cursor-pointer select-text`}
+        title="WeChat ID"
+        onClick={copyWeChat}
+      >
+        <WeChatIcon /> {dict.cta.contactWeChat}:&nbsp;
+        <span className="font-bold">{company.wechatId}</span>
+      </button>
+      <a
+        href={whatsappLink}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={ghost}
+        onClick={() => track("whatsapp")}
+      >
         <WhatsAppIcon /> {dict.cta.whatsapp}
       </a>
-      <a href={telLink} className={ghost}>
+      <a href={telLink} className={ghost} onClick={() => track("phone")}>
         <PhoneIcon /> {company.phoneDisplay}
       </a>
-      <a href={mailtoLink} className={ghost}>
+      <a href={mailtoLink} className={ghost} onClick={() => track("email")}>
         <MailIcon /> {dict.cta.email}
       </a>
+      </div>
+      <p className="mt-2 min-h-5 text-xs" aria-live="polite">
+        {feedback}
+      </p>
     </div>
   );
 }
