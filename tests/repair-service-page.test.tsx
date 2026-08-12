@@ -35,7 +35,7 @@ describe("RepairServicePage", () => {
     phone.addEventListener("click", (event) => event.preventDefault());
     fireEvent.click(phone);
 
-    expect(window.dataLayer[0]).toMatchObject({
+    expect(window.dataLayer?.[0]).toMatchObject({
       event: "contact_click",
       method: "phone",
       intent: "auto_repair",

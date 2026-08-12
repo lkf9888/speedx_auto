@@ -47,6 +47,13 @@ export default async function LandingPage({
         route="home"
         pageName={`${dict.meta.siteName} — ${dict.meta.tagline}`}
         pageDescription={dict.meta.description}
+        video={{
+          name: dict.video.title,
+          description: dict.video.subtitle,
+          thumbnailUrl: "https://i.ytimg.com/vi/gLrh6DLm5FI/maxresdefault.jpg",
+          uploadDate: "2026-04-19T23:35:44-07:00",
+          embedUrl: "https://www.youtube.com/embed/gLrh6DLm5FI",
+        }}
       />
       {/* HERO */}
       <section className="bg-hero-gradient relative overflow-hidden">
@@ -63,13 +70,19 @@ export default async function LandingPage({
               <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-500">
                 {dict.hero.subtitle}
               </p>
-              <div className="mt-8 flex flex-wrap items-center gap-3">
+              <div data-testid="hero-actions" className="mt-8 flex flex-wrap items-center gap-3">
                 <Link
                   href={`/${locale}/hosting`}
                   className="inline-flex items-center gap-2 rounded-full bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-ink-900/10 transition-colors hover:bg-brand-600"
                 >
                   {dict.hero.primaryCta}
                   <span aria-hidden>→</span>
+                </Link>
+                <Link
+                  href={`/${locale}/auto-repair`}
+                  className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-6 py-3 text-sm font-semibold text-brand-800 transition-colors hover:border-brand-400 hover:bg-brand-100"
+                >
+                  {dict.pillars.repair.cta} →
                 </Link>
                 <Link
                   href={company.turoHostUrl}

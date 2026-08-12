@@ -241,6 +241,14 @@ export default async function HostingPage({
           </div>
         </Container>
       </section>
+      <ContactBar
+        dict={dict}
+        locale={locale}
+        intent="hosting"
+        placement="sticky_mobile"
+        pagePath={pagePath}
+        variant="sticky"
+      />
     </>
   );
 }

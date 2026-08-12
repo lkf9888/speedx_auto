@@ -42,7 +42,7 @@ describe("two-pillar GEO positioning", () => {
     const publicCopy = JSON.stringify(dictionaries.map(([, dict]) => dict));
 
     expect(publicCopy).not.toMatch(
-      /BC's #1|British Columbia's #1|largest Turo fleet|largest Turo host|guarantees? your car gets booked|rarely sits idle|lowest management fees|fastest handoffs|zero effort|100% state|licensed technicians handle every|quick turnaround/i,
+      /BC's #1|British Columbia's #1|largest Turo fleet|largest Turo host|guarantees? your car gets booked|rarely sits idle|lowest management fees|most competitive management fees|fastest handoffs|zero effort|100% state|licensed technicians handle every|quick turnaround|truly passive income|covering the full cost|no downtime|invest with us|buy a vehicle through our program|maximize your car's earnings|stable monthly income|坐收收益|坐享收益|覆盖整车的持有成本|覆蓋整車的持有成本|停工时间降到最低|停工時間降到最低|最具竞争力|最具競爭力/i,
     );
   });
 });

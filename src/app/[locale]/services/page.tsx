@@ -68,7 +68,7 @@ export default async function ServicesPage({
               <ContactBar
                 dict={dict}
                 locale={locale}
-                intent="auto_repair"
+                intent="general"
                 placement="hero"
                 pagePath={pagePath}
               />

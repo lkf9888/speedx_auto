@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { Locale } from "@/lib/site-routes";
 import {
   applyGoogleConsent,
@@ -22,6 +22,7 @@ interface ConsentBannerProps {
 }
 
 export function ConsentBanner({ locale, copy }: ConsentBannerProps) {
+  const appliedChoice = useRef<ConsentChoice | null>(null);
   const choice = useSyncExternalStore(
     subscribeToConsent,
     readConsent,
@@ -29,13 +30,19 @@ export function ConsentBanner({ locale, copy }: ConsentBannerProps) {
   );
 
   useEffect(() => {
-    if (choice === "granted" || choice === "denied") {
+    if (
+      (choice === "granted" || choice === "denied") &&
+      appliedChoice.current !== choice
+    ) {
       applyGoogleConsent(choice);
+      appliedChoice.current = choice;
     }
   }, [choice]);
 
   function choose(choice: ConsentChoice) {
     saveConsent(choice);
+    applyGoogleConsent(choice);
+    appliedChoice.current = choice;
     window.dispatchEvent(new Event("speedx-consent-change"));
   }
 
@@ -45,7 +52,7 @@ export function ConsentBanner({ locale, copy }: ConsentBannerProps) {
     <aside
       role="dialog"
       aria-label={copy.title}
-      className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-3xl rounded-2xl border border-ink-200 bg-white p-5 shadow-2xl shadow-ink-900/20 sm:p-6"
+      className="fixed inset-x-4 bottom-24 z-50 mx-auto max-w-3xl rounded-2xl border border-ink-200 bg-white p-5 shadow-2xl shadow-ink-900/20 sm:bottom-4 sm:p-6"
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

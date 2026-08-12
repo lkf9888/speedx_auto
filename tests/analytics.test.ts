@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { emitContactClick } from "@/lib/analytics";
+import { contactIntentForPath, emitContactClick } from "@/lib/analytics";
 
 describe("emitContactClick", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     window.dataLayer = [];
+    delete window.gtag;
   });
 
   it("pushes the normalized contact_click payload", () => {
@@ -44,6 +45,28 @@ describe("emitContactClick", () => {
     expect(window.dataLayer).toHaveLength(1);
   });
 
+  it("sends the event through gtag when the Google tag is initialized", () => {
+    const gtag = vi.fn();
+    window.gtag = gtag;
+
+    emitContactClick({
+      method: "wechat",
+      intent: "hosting",
+      locale: "en",
+      placement: "sticky_mobile",
+      pagePath: "/en/hosting",
+    });
+
+    expect(gtag).toHaveBeenCalledWith("event", "contact_click", {
+      method: "wechat",
+      intent: "hosting",
+      locale: "en",
+      placement: "sticky_mobile",
+      page_path: "/en/hosting",
+    });
+    expect(window.dataLayer).toEqual([]);
+  });
+
   it("does nothing during server rendering", () => {
     vi.stubGlobal("window", undefined);
 
@@ -56,5 +79,17 @@ describe("emitContactClick", () => {
         pagePath: "/en/contact",
       }),
     ).not.toThrow();
+  });
+});
+
+describe("contactIntentForPath", () => {
+  it.each([
+    ["/en/hosting", "hosting"],
+    ["/zh-CN/auto-repair", "auto_repair"],
+    ["/zh-TW/auto-repair/brakes", "auto_repair"],
+    ["/en/services", "general"],
+    ["/en/about", "general"],
+  ] as const)("maps %s to %s", (path, intent) => {
+    expect(contactIntentForPath(path)).toBe(intent);
   });
 });

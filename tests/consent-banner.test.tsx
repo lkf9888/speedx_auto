@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConsentBanner } from "@/components/ConsentBanner";
 import { CONSENT_STORAGE_KEY } from "@/lib/consent";
 
@@ -34,7 +34,7 @@ describe("ConsentBanner", () => {
     await user.click(screen.getByRole("button", { name: "Accept" }));
 
     expect(window.localStorage.getItem(CONSENT_STORAGE_KEY)).toBe("granted");
-    expect(window.dataLayer.at(-1)).toEqual([
+    expect(window.dataLayer?.at(-1)).toEqual([
       "consent",
       "update",
       {
@@ -54,5 +54,30 @@ describe("ConsentBanner", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
+  });
+
+  it("applies and closes when persistent storage is blocked", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const user = userEvent.setup();
+    render(<ConsentBanner locale="en" copy={copy} />);
+
+    await user.click(await screen.findByRole("button", { name: "Decline" }));
+
+    expect(window.dataLayer?.at(-1)).toEqual([
+      "consent",
+      "update",
+      {
+        ad_storage: "denied",
+        analytics_storage: "denied",
+        ad_user_data: "denied",
+        ad_personalization: "denied",
+      },
+    ]);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

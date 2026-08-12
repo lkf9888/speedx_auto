@@ -91,7 +91,7 @@ export const en = {
     eyebrow: "How It Works",
     title: "From Your Garage to Monthly Income — In 4 Steps",
     subtitle:
-      "We built a fully integrated operation so you don't have to think about a single thing after handing over the keys.",
+      "We coordinate a defined operating workflow so owners do not have to manage routine hosting tasks themselves.",
     steps: [
       {
         title: "1. Hand Over the Keys",
@@ -106,8 +106,8 @@ export const en = {
         body: "We coordinate the listing, bookings, handoffs, cleaning, and claim documentation while the vehicle is in the program.",
       },
       {
-        title: "4. Watch Earnings From Home",
-        body: "View trip status and monthly payouts from your phone. Truly passive income — relax while your car works.",
+        title: "4. Review Statements and Payouts",
+        body: "Review trip activity, monthly statements, and payouts under the terms of your vehicle-management agreement.",
       },
     ],
   },
@@ -119,7 +119,7 @@ export const en = {
   advantages: {
     title: "Why Car Owners Trust SPEEDX",
     subtitle:
-      "A purpose-built Turo management operation — not a side hustle. Every advantage is built to maximize your car's earnings and protect your investment.",
+      "A purpose-built Turo management operation with a visible operating record, defined processes, and vehicle-specific arrangements.",
     items: [
       {
         title: "100+ Vehicles Managed",
@@ -131,7 +131,7 @@ export const en = {
       },
       {
         title: "Shop Out Back, Storefront Out Front",
-        body: "Our unique front-store / back-garage model means maintenance, inspections, and body repairs happen on-site — no downtime waiting for a third-party mechanic.",
+        body: "Our front-store / back-garage model allows appropriate maintenance, inspections, and repair work to be coordinated from the same Richmond location.",
       },
       {
         title: "Vehicle-Specific Management Plans",
@@ -170,8 +170,8 @@ export const en = {
           body: "You're already on Turo but want help with calls, cleaning, handoffs, and maintenance coordination. Ask us whether your vehicle fits our managed program.",
         },
         {
-          title: "Passive Investors",
-          body: "You want exposure to car rental income but don't know the industry. Invest with us — buy a vehicle through our program, we handle every operational detail from day one.",
+          title: "Owners Comparing Hosting Options",
+          body: "You own a vehicle and want to understand whether managed Turo hosting fits its condition, location, expected use, and operating costs.",
         },
       ],
     },
@@ -182,7 +182,7 @@ export const en = {
       points: [
         {
           title: "Owners earn rental income",
-          body: "Your car is a depreciating asset when it sits idle. On Turo, it becomes a revenue stream — often covering the full cost of ownership, and then some.",
+          body: "An eligible vehicle can generate rental revenue on booked trips. Actual net results depend on demand, pricing, costs, maintenance, and downtime.",
         },
         {
           title: "Turo handles insurance & payments",
@@ -219,7 +219,7 @@ export const en = {
         {
           num: "04",
           title: "You get paid monthly",
-          body: "Clear monthly statements, direct deposit. Watch your idle car turn into a monthly paycheck — track everything in your owner portal.",
+          body: "Review monthly statements and payouts according to the reporting and payment terms in your management agreement.",
         },
       ],
     },
@@ -240,7 +240,7 @@ export const en = {
         },
         {
           q: "What's your management fee?",
-          a: "We offer the most competitive management fees in BC. Exact rates depend on the vehicle type and service level — send us a message and we'll share pricing tailored to your car.",
+          a: "We offer competitive management fees. Exact rates depend on the vehicle type and service level — send us a message and we'll share pricing tailored to your car.",
         },
         {
           q: "Can I withdraw my car anytime?",
@@ -288,7 +288,7 @@ export const en = {
       },
       {
         title: "Turo Fleet Management",
-        body: "Full-service hosting for car owners: listing, pricing, cleaning, delivery, maintenance, claims. We run it, you earn.",
+        body: "Managed hosting for qualifying vehicles: listing, pricing, cleaning, delivery, maintenance coordination, and claim documentation.",
         ctaLabel: "Host My Car",
       },
       {

@@ -115,6 +115,32 @@ describe("buildStructuredData", () => {
     expect(nodes.some((node) => node["@type"] === "VideoObject")).toBe(false);
   });
 
+  it("connects a visible homepage video through a video relationship", () => {
+    const nodes = graphNodes({
+      locale: "en",
+      route: "home",
+      pageName: "SPEEDX AUTO",
+      pageDescription: "Fleet management and repair.",
+      video: {
+        name: "Meet SPEEDX AUTO",
+        description: "A look at the Richmond fleet operation.",
+        thumbnailUrl: "https://i.ytimg.com/vi/gLrh6DLm5FI/maxresdefault.jpg",
+        uploadDate: "2026-04-19T23:35:44-07:00",
+        embedUrl: "https://www.youtube.com/embed/gLrh6DLm5FI",
+      },
+    });
+    const page = nodes.find((node) => node["@type"] === "WebPage");
+    const video = nodes.find((node) => node["@type"] === "VideoObject");
+
+    expect(page).toMatchObject({
+      video: { "@id": "https://speedxrental.com/en#video" },
+    });
+    expect(page).not.toHaveProperty("primaryImageOfPage");
+    expect(video).toMatchObject({
+      mainEntityOfPage: { "@id": "https://speedxrental.com/en#webpage" },
+    });
+  });
+
   it("escapes script-closing text in serialized JSON-LD", () => {
     const markup = renderToStaticMarkup(
       createElement(StructuredData, {

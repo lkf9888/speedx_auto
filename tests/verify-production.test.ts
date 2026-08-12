@@ -9,7 +9,7 @@ const validHtml = `<!doctype html>
 <link rel="alternate" hreflang="zh-Hant" href="https://speedxrental.com/zh-TW/hosting" />
 <link rel="alternate" hreflang="x-default" href="https://speedxrental.com/en/hosting" />
 <meta property="og:url" content="https://speedxrental.com/en/hosting" />
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Service"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@id":"https://speedxrental.com/en/hosting#webpage","@type":"WebPage","url":"https://speedxrental.com/en/hosting"},{"@type":"Service"}]}</script>
 </head><body>
 <p>SPEEDX AUTO provides Turo fleet management for qualifying vehicle owners.</p>
 <a href="tel:+17789170710">Call</a><a href="https://wa.me/17789170710">WhatsApp</a>
@@ -47,6 +47,49 @@ describe("production verifier", () => {
     );
   });
 
+  it("rejects duplicate canonicals and wrong alternate or Open Graph destinations", () => {
+    const broken = validHtml
+      .replace(
+        '<link rel="canonical" href="https://speedxrental.com/en/hosting" />',
+        '<link rel="canonical" href="https://speedxrental.com/en/hosting" /><link rel="canonical" href="https://speedxrental.com/en/hosting" />',
+      )
+      .replace("https://speedxrental.com/zh-CN/hosting", "https://speedxrental.com/zh-CN")
+      .replace(
+        '<meta property="og:url" content="https://speedxrental.com/en/hosting" />',
+        '<meta property="og:url" content="https://speedxrental.com/en" />',
+      );
+    const errors = validatePageDocument(broken, {
+      path: "/en/hosting",
+      lang: "en",
+      marker: "provides Turo fleet management",
+      canonicalOrigin: "https://speedxrental.com",
+    });
+
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("exactly one canonical"),
+        expect.stringContaining("zh-Hans"),
+        expect.stringContaining("og:url"),
+      ]),
+    );
+  });
+
+  it("rejects JSON-LD without the canonical WebPage node", () => {
+    const broken = validHtml.replace(
+      '"@type":"WebPage","url":"https://speedxrental.com/en/hosting"',
+      '"@type":"Thing","url":"https://speedxrental.com/en/hosting"',
+    );
+
+    expect(
+      validatePageDocument(broken, {
+        path: "/en/hosting",
+        lang: "en",
+        marker: "provides Turo fleet management",
+        canonicalOrigin: "https://speedxrental.com",
+      }),
+    ).toContain("JSON-LD missing canonical WebPage node");
+  });
+
   it("checks representative routes in the sitemap", () => {
     const sitemap = `<?xml version="1.0"?><urlset>
       <url><loc>https://speedxrental.com/en</loc></url>
@@ -58,6 +101,12 @@ describe("production verifier", () => {
     ).toEqual([]);
     expect(
       validateSitemap(sitemap, ["/en/auto-repair"], "https://speedxrental.com"),
-    ).toEqual(["sitemap missing https://speedxrental.com/en/auto-repair"]);
+    ).toEqual(
+      expect.arrayContaining([
+        "sitemap expected 1 URLs but found 2",
+        "sitemap missing https://speedxrental.com/en/auto-repair",
+        "sitemap has unexpected https://speedxrental.com/en",
+      ]),
+    );
   });
 });

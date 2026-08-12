@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Locale } from "@/i18n/config";
 import type { Dictionary } from "@/i18n/dictionaries";
-import { ContactBar } from "@/components/ContactBar";
+import { FooterContactBar } from "@/components/FooterContactBar";
 import { company, googleMapsLink } from "@/lib/company";
 
 export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
@@ -54,12 +54,7 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           <div>
             <h3 className="text-sm font-semibold text-ink-900">{dict.footer.contactInfo}</h3>
             <div className="mt-3">
-              <ContactBar
-                dict={dict}
-                locale={locale}
-                intent="general"
-                placement="footer"
-              />
+              <FooterContactBar dict={dict} locale={locale} />
             </div>
           </div>
 

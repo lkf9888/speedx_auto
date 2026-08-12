@@ -101,7 +101,7 @@ export function buildStructuredData(
     ...(input.breadcrumbs
       ? { breadcrumb: { "@id": breadcrumbId } }
       : {}),
-    ...(input.video ? { primaryImageOfPage: { "@id": videoId } } : {}),
+    ...(input.video ? { video: { "@id": videoId } } : {}),
   };
 
   const graph: JsonLdNode[] = [business, website, webPage];
@@ -160,6 +160,7 @@ export function buildStructuredData(
         ? { contentUrl: input.video.contentUrl }
         : {}),
       ...(input.video.embedUrl ? { embedUrl: input.video.embedUrl } : {}),
+      mainEntityOfPage: { "@id": webPageId },
     });
   }
 

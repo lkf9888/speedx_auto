@@ -147,6 +147,14 @@ export function RepairServicePage({
           </nav>
         </Container>
       </section>
+      <ContactBar
+        dict={dict}
+        locale={locale}
+        intent="auto_repair"
+        placement="sticky_mobile"
+        pagePath={pagePath}
+        variant="sticky"
+      />
     </>
   );
 }

@@ -43,6 +43,7 @@ describe("consent storage", () => {
 
     expect(readConsent()).toBeNull();
     expect(() => saveConsent("granted")).not.toThrow();
+    expect(readConsent()).toBe("granted");
   });
 });
 

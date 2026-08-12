@@ -61,7 +61,7 @@ describe("ContactBar", () => {
     expect(writeText).toHaveBeenCalledWith("SPEEDX2020");
     expect(await screen.findByText("Copied: SPEEDX2020")).toBeInTheDocument();
     expect(window.dataLayer).toHaveLength(1);
-    expect(window.dataLayer[0]).toMatchObject({
+    expect(window.dataLayer?.[0]).toMatchObject({
       event: "contact_click",
       method: "wechat",
     });
@@ -101,9 +101,26 @@ describe("ContactBar", () => {
     phone.addEventListener("click", (event) => event.preventDefault());
     fireEvent.click(phone);
 
-    expect(window.dataLayer[0]).toMatchObject({
+    expect(window.dataLayer?.[0]).toMatchObject({
       placement: "footer",
       page_path: "/en/about",
     });
+  });
+
+  it("renders compact mobile sticky controls with reserved space", () => {
+    const { container } = render(
+      <ContactBar
+        {...baseProps}
+        placement="sticky_mobile"
+        variant="sticky"
+      />,
+    );
+
+    expect(container.querySelector("[data-sticky-contact-spacer]")).toBeInTheDocument();
+    expect(container.querySelector("[data-sticky-contact-bar]")).toHaveClass("fixed");
+    expect(screen.getByRole("button", { name: /Add WeChat/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /WhatsApp/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /778.*917.*0710/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Email Us/i })).not.toBeInTheDocument();
   });
 });
