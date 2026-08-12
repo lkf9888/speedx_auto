@@ -204,12 +204,12 @@ export const en = {
         {
           num: "01",
           title: "Tell us about your car",
-          body: "Send us your year, make, model, and photos — we'll give you an honest monthly earnings estimate within 24 hours.",
+          body: "Send us the year, make, model, mileage, condition, and photos. We will review the vehicle and discuss a vehicle-specific earnings estimate.",
         },
         {
           num: "02",
           title: "Sign & hand over keys",
-          body: "Simple management agreement, no hidden clauses. You keep full ownership and can withdraw your car anytime.",
+          body: "Review the proposed management scope, fees, responsibilities, reporting, and termination terms before signing. You retain ownership of the vehicle.",
         },
         {
           num: "03",
@@ -232,7 +232,7 @@ export const en = {
         },
         {
           q: "Who pays for maintenance and repairs?",
-          a: "Routine maintenance (oil changes, tire rotations, brake pads, etc.) is typically the owner's responsibility, but because we operate our own repair shop, you pay our low in-house labor rates — no marked-up third-party quotes. Damage caused by renters is handled through Turo's protection plan.",
+          a: "Maintenance and repair responsibilities, approvals, and pricing are set out in the vehicle's management agreement. Turo-related damage handling depends on the trip, the selected protection plan, current Turo terms, eligibility, and supporting documentation.",
         },
         {
           q: "How much can my car earn?",
@@ -240,11 +240,11 @@ export const en = {
         },
         {
           q: "What's your management fee?",
-          a: "We offer competitive management fees. Exact rates depend on the vehicle type and service level — send us a message and we'll share pricing tailored to your car.",
+          a: "Management fees depend on the vehicle type and service level. Send us the vehicle details and we will explain the proposed scope and pricing before you decide.",
         },
         {
-          q: "Can I withdraw my car anytime?",
-          a: "Yes. Our agreements are flexible. You always own your car and can pull it off the platform with reasonable notice.",
+          q: "How do I end vehicle management?",
+          a: "You retain ownership of the vehicle. Notice requirements and the steps for ending management are defined in the signed agreement, so review those terms before joining.",
         },
         {
           q: "What happens if my car is damaged?",
@@ -255,7 +255,7 @@ export const en = {
     closingCta: {
       title: "Ready to Make Your Car Work For You?",
       subtitle:
-        "Free, no-obligation earnings estimate within 24 hours. Contact us today — add WeChat, WhatsApp, or give us a call.",
+        "Request a vehicle-specific earnings estimate. Contact us today — add WeChat, use WhatsApp, or give us a call.",
     },
   },
   pillars: {

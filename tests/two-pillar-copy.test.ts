@@ -42,7 +42,7 @@ describe("two-pillar GEO positioning", () => {
     const publicCopy = JSON.stringify(dictionaries.map(([, dict]) => dict));
 
     expect(publicCopy).not.toMatch(
-      /BC's #1|British Columbia's #1|largest Turo fleet|largest Turo host|guarantees? your car gets booked|rarely sits idle|lowest management fees|most competitive management fees|fastest handoffs|zero effort|100% state|licensed technicians handle every|quick turnaround|truly passive income|covering the full cost|no downtime|invest with us|buy a vehicle through our program|maximize your car's earnings|stable monthly income|坐收收益|坐享收益|覆盖整车的持有成本|覆蓋整車的持有成本|停工时间降到最低|停工時間降到最低|最具竞争力|最具競爭力/i,
+      /BC's #1|British Columbia's #1|largest Turo fleet|largest Turo host|guarantees? your car gets booked|rarely sits idle|lowest management fees|competitive management fees|fastest handoffs|zero effort|100% state|licensed technicians handle every|quick turnaround|truly passive income|covering the full cost|no downtime|invest with us|buy a vehicle through our program|maximize your car's earnings|stable monthly income|earnings estimate within 24 hours|no hidden clauses|withdraw your car anytime|low in-house labor rates|no marked-up third-party quotes|damage caused by renters is handled through Turo's protection plan|坐收收益|坐享收益|覆盖整车的持有成本|覆蓋整車的持有成本|停工时间降到最低|停工時間降到最低|最具竞争力|最具競爭力|有竞争力的托管费率|有競爭力的託管費率|24 小时内我们给出|24 小時內我們給出|可随时结束托管|可隨時結束託管|内部工时价|內部工時價|没有第三方机修厂的加价|沒有第三方機修廠的加價|租客造成的损坏通过 Turo 保障计划处理|租客造成的損壞通過 Turo 保障計劃處理/i,
     );
   });
 });
