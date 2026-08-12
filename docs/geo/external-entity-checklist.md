@@ -42,4 +42,3 @@ Allowed status values are `not checked`, `correction requested`, `updated`, and 
 ## Evidence rule for strong claims
 
 Do not publish `#1`, `largest`, `lowest`, `fastest`, guaranteed earnings, guaranteed bookings, or fixed turnaround claims unless the comparison method, source, scope, and review date can be published beside the claim. Prefer auditable facts such as founding year, public trip threshold, address, current service area, and current service scope.
-
