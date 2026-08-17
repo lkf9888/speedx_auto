@@ -1,6 +1,6 @@
 # SPEEDX AUTO external entity checklist
 
-Last reviewed: 2026-08-11
+Last reviewed: 2026-08-17
 
 Allowed status values are `not checked`, `correction requested`, `updated`, and `verified live`. A submitted change remains `correction requested` until the public profile visibly reflects it.
 
@@ -10,16 +10,16 @@ Allowed status values are `not checked`, `correction requested`, `updated`, and 
 - Address: 2980 Number 3 Rd, Richmond, BC V6X 2B3
 - Phone: +1 (778) 917-0710
 - Website: https://speedxrental.com/en
-- Primary category: Turo fleet management / vehicle hosting management
-- Secondary category: auto repair shop
-- Hours: Monday-Friday, 10:00 AM-6:00 PM
+- Primary category: Auto repair shop
+- Secondary services/categories: Mechanic; Car repair and maintenance service; Car rental agency; Turo fleet management
+- Hours: Monday-Saturday, 10:00 AM-6:30 PM; Sunday closed
 - Service area: Richmond and Metro Vancouver; other British Columbia hosting vehicles only after qualification and logistics review
 
 ## Profile and source register
 
 | Profile / source | Business name shown | Address / service area shown | Phone shown | Website shown | Primary / secondary categories shown | Hours shown | Status | Evidence URL | Verification date | Required follow-up |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SPEEDX AUTO website | SPEEDX AUTO | 2980 Number 3 Rd, Richmond, BC V6X 2B3; Richmond and Metro Vancouver | +1 (778) 917-0710 | https://speedxrental.com/en | Turo fleet management / auto repair | Mon-Fri 10:00-18:00 | verified live | https://speedxrental.com/en | 2026-08-11 | Search still shows the previous claims. Deploy this branch, run the production verifier, then request recrawl. |
+| SPEEDX AUTO website | SPEEDX AUTO | 2980 Number 3 Rd, Richmond, BC V6X 2B3; Richmond and Metro Vancouver | +1 (778) 917-0710 | https://speedxrental.com/en | Auto repair shop / Turo fleet management | Mon-Sat 10:00-18:30; Sun closed | updated | https://speedxrental.com/en | 2026-08-17 | Deploy commit `0f80eda`, run the production verifier, and confirm localized HTML plus JSON-LD before marking verified live. |
 | Turo public profile / listing | SPEEDX | Richmond, BC | Not displayed in reviewed result | Turo listing | Car sharing host | Not applicable | verified live | https://turo.com/ca/en/car-rental/canada/richmond-bc/bmw/3-series/2636711 | 2026-08-11 | Public result showed a 4.8 host rating and 5,006 trips; website uses the conservative `5,000+` threshold. Refresh before raising the threshold. |
 | Google Business Profile | Not checked | Not checked | Not checked | Not checked | Not checked | Not checked | not checked | Not recorded | Not checked | Owner must sign in, locate or create the profile, verify ownership, and compare every field with the canonical facts. |
 | Bing Places | Not checked | Not checked | Not checked | Not checked | Not checked | Not checked | not checked | Not recorded | Not checked | Claim or create the listing and verify every canonical field. |
