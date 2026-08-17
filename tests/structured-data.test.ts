@@ -53,6 +53,10 @@ describe("buildStructuredData", () => {
       "@type": ["LocalBusiness", "AutoRental", "AutoRepair"],
       name: "SPEEDX AUTO",
       telephone: "+1 (778) 917-0710",
+      openingHours: "Mo-Sa 10:00-18:30",
+      address: {
+        postalCode: "V6X 2B3",
+      },
     });
     expect(webPage).toMatchObject({
       url: "https://speedxrental.com/en/hosting",

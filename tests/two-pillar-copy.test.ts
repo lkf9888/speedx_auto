@@ -38,6 +38,21 @@ describe("two-pillar GEO positioning", () => {
     expect(company.stats.tripsCompleted).toBe("5,000+");
   });
 
+  it("publishes the approved hours in every public dictionary", () => {
+    expect(company.hours).toBe("Mon–Sat · 10:00 AM – 6:30 PM");
+    expect(en.contact.phone.body).toContain(
+      "10:00 AM to 6:30 PM, Monday through Saturday",
+    );
+    expect(en.contact.location.hours).toBe("Mon–Sat · 10:00 AM – 6:30 PM");
+    expect(en.footer.hoursValue).toBe("Mon–Sat · 10:00 AM – 6:30 PM");
+    expect(zhCN.contact.phone.body).toContain("周一至周六 10:00 - 18:30");
+    expect(zhCN.contact.location.hours).toBe("周一至周六 · 10:00 - 18:30");
+    expect(zhCN.footer.hoursValue).toBe("周一至周六 · 10:00 - 18:30");
+    expect(zhTW.contact.phone.body).toContain("週一至週六 10:00 - 18:30");
+    expect(zhTW.contact.location.hours).toBe("週一至週六 · 10:00 - 18:30");
+    expect(zhTW.footer.hoursValue).toBe("週一至週六 · 10:00 - 18:30");
+  });
+
   it("does not publish unsupported rankings, guarantees, or superlatives", () => {
     const publicCopy = JSON.stringify(dictionaries.map(([, dict]) => dict));
 

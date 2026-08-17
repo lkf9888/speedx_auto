@@ -75,7 +75,7 @@ export function buildStructuredData(
       addressCountry: "CA",
     },
     areaServed: ["Richmond", "Metro Vancouver", "British Columbia"],
-    openingHours: "Mo-Fr 10:00-18:00",
+    openingHours: "Mo-Sa 10:00-18:30",
     sameAs: [company.turoHostUrl],
   };
 

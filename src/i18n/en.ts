@@ -319,7 +319,7 @@ export const en = {
     },
     phone: {
       title: "Phone",
-      body: "Call us during business hours — 10:00 AM to 6:00 PM, Monday through Friday.",
+      body: "Call us during business hours — 10:00 AM to 6:30 PM, Monday through Saturday.",
     },
     email: {
       title: "Email",
@@ -328,7 +328,7 @@ export const en = {
     location: {
       title: "Visit Our Shop",
       body: "2980 Number 3 Rd, Richmond, BC V6X 2B3 — five minutes from Vancouver International Airport.",
-      hours: "Mon–Fri · 10:00 AM – 6:00 PM",
+      hours: "Mon–Sat · 10:00 AM – 6:30 PM",
     },
   },
   about: {
@@ -368,7 +368,7 @@ export const en = {
     contactInfo: "Contact",
     address: "Address",
     hours: "Hours",
-    hoursValue: "Mon–Fri · 10:00 AM – 6:00 PM",
+    hoursValue: "Mon–Sat · 10:00 AM – 6:30 PM",
   },
 };
 

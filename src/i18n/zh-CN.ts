@@ -317,7 +317,7 @@ export const zhCN: Dictionary = {
     },
     phone: {
       title: "电话",
-      body: "营业时间致电我们 —— 周一至周五 10:00 - 18:00。",
+      body: "营业时间致电我们 —— 周一至周六 10:00 - 18:30。",
     },
     email: {
       title: "邮箱",
@@ -326,7 +326,7 @@ export const zhCN: Dictionary = {
     location: {
       title: "到店地址",
       body: "2980 Number 3 Rd, Richmond, BC V6X 2B3 —— 距温哥华国际机场仅 5 分钟车程。",
-      hours: "周一至周五 · 10:00 - 18:00",
+      hours: "周一至周六 · 10:00 - 18:30",
     },
   },
   about: {
@@ -366,6 +366,6 @@ export const zhCN: Dictionary = {
     contactInfo: "联系方式",
     address: "地址",
     hours: "营业时间",
-    hoursValue: "周一至周五 · 10:00 - 18:00",
+    hoursValue: "周一至周六 · 10:00 - 18:30",
   },
 };
