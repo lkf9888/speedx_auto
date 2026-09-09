@@ -4,7 +4,7 @@ export { locales };
 export type { Locale };
 
 export const BASE_URL = "https://speedxrental.com";
-export const CONTENT_LAST_MODIFIED = "2026-08-11";
+export const CONTENT_LAST_MODIFIED = "2026-09-09";
 
 export const repairServiceSlugs = [
   "maintenance",

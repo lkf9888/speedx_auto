@@ -76,7 +76,11 @@ export function buildStructuredData(
     },
     areaServed: ["Richmond", "Metro Vancouver", "British Columbia"],
     openingHours: "Mo-Sa 10:00-18:30",
-    sameAs: [company.turoHostUrl],
+    sameAs: [
+      company.turoHostUrl,
+      company.bbbProfileUrl,
+      company.yelpProfileUrl,
+    ],
   };
 
   const website: JsonLdNode = {

@@ -57,6 +57,11 @@ describe("buildStructuredData", () => {
       address: {
         postalCode: "V6X 2B3",
       },
+      sameAs: [
+        "https://turo.com/ca/en/host/31630256",
+        "https://www.bbb.org/ca/bc/richmond/profile/car-rental/speedx-auto-0037-2436817",
+        "https://www.yelp.ca/biz/speedx-auto-richmond",
+      ],
     });
     expect(webPage).toMatchObject({
       url: "https://speedxrental.com/en/hosting",

@@ -11,6 +11,9 @@ export const company = {
   addressFull: "2980 Number 3 Rd, Richmond, BC V6X 2B3",
   googleMapsQuery: "SPEEDX+AUTO+2980+Number+3+Rd+Richmond+BC",
   turoHostUrl: "https://turo.com/ca/en/host/31630256",
+  bbbProfileUrl:
+    "https://www.bbb.org/ca/bc/richmond/profile/car-rental/speedx-auto-0037-2436817",
+  yelpProfileUrl: "https://www.yelp.ca/biz/speedx-auto-richmond",
   hours: "Mon–Sat · 10:00 AM – 6:30 PM",
   stats: {
     rankInBC: "Established",

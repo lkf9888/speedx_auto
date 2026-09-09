@@ -21,7 +21,7 @@ describe("sitemap", () => {
     );
 
     expect(brakePage).toMatchObject({
-      lastModified: "2026-08-11",
+      lastModified: "2026-09-09",
       alternates: {
         languages: {
           en: "https://speedxrental.com/en/auto-repair/brakes",
