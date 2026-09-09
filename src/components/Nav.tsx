@@ -7,6 +7,8 @@ import { useState } from "react";
 import type { Locale } from "@/i18n/config";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { StaffLoginMenu } from "./StaffLoginMenu";
+import { staffAppKeys, staffAppUrls } from "@/lib/staff-apps";
 
 export function Nav({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -58,6 +60,7 @@ export function Nav({ locale, dict }: { locale: Locale; dict: Dictionary }) {
 
         <div className="flex items-center gap-2">
           <LanguageSwitcher currentLocale={locale} />
+          <StaffLoginMenu dict={dict} />
           <Link
             href={`/${locale}/hosting`}
             className="hidden rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-600 sm:inline-block"
@@ -104,6 +107,21 @@ export function Nav({ locale, dict }: { locale: Locale; dict: Dictionary }) {
             >
               {dict.nav.cta}
             </Link>
+
+            <p className="mt-3 border-t border-ink-100 px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-ink-400">
+              {dict.nav.staff.menuTitle}
+            </p>
+            {staffAppKeys.map((key) => (
+              <a
+                key={key}
+                href={staffAppUrls[key]}
+                rel="noopener"
+                onClick={() => setMobileOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm font-medium text-ink-600 hover:bg-ink-50"
+              >
+                {dict.nav.staff.apps[key].name}
+              </a>
+            ))}
           </nav>
         </div>
       )}

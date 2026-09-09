@@ -17,6 +17,20 @@ export const zhCN: Dictionary = {
     contact: "联系我们",
     turoListings: "查看 Turo 车队",
     cta: "托管我的车",
+    staff: {
+      label: "员工登录",
+      menuTitle: "内部系统",
+      apps: {
+        carwash: {
+          name: "洗车棚拍照系统",
+          description: "车况存证照片记录",
+        },
+        gps: {
+          name: "车队定位",
+          description: "车辆实时位置与历史轨迹",
+        },
+      },
+    },
   },
   cta: {
     contactWeChat: "加微信",

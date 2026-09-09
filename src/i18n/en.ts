@@ -16,6 +16,20 @@ export const en = {
     contact: "Contact",
     turoListings: "View Our Turo Fleet",
     cta: "List My Car",
+    staff: {
+      label: "Staff Login",
+      menuTitle: "Internal systems",
+      apps: {
+        carwash: {
+          name: "Car Wash Photo System",
+          description: "Vehicle condition photo records",
+        },
+        gps: {
+          name: "Fleet GPS",
+          description: "Live vehicle location and trip history",
+        },
+      },
+    },
   },
   cta: {
     contactWeChat: "Add WeChat",
