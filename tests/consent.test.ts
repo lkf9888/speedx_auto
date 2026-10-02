@@ -58,7 +58,8 @@ describe("applyGoogleConsent", () => {
     (choice) => {
       applyGoogleConsent(choice);
 
-      expect(window.dataLayer).toEqual([
+      expect(Array.isArray(window.dataLayer?.[0])).toBe(false);
+      expect(window.dataLayer?.map((command) => Array.from(command as IArguments))).toEqual([
         [
           "consent",
           "update",

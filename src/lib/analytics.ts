@@ -1,4 +1,13 @@
 import type { Locale } from "@/lib/site-routes";
+import { readConsent } from "@/lib/consent";
+import { queueGoogleCommand } from "@/lib/google-tag";
+
+// Verified in the SpeedX Google Ads account. These public labels are not credentials.
+const contactConversionDestinations = {
+  whatsapp: "AW-625073096/wlyICOy7lo4dEMi3h6oC",
+  phone: "AW-625073096/w6GCCO-7lo4dEMi3h6oC",
+  wechat: "AW-625073096/iUGYCKifn44dEMi3h6oC",
+} as const;
 
 export type ContactMethod = "whatsapp" | "phone" | "wechat" | "email";
 export type ContactIntent = "hosting" | "auto_repair" | "general";
@@ -35,9 +44,23 @@ export function emitContactClick(event: ContactClickEvent): void {
 
   if (window.gtag) {
     window.gtag("event", "contact_click", parameters);
-    return;
+  } else {
+    window.dataLayer ??= [];
+    window.dataLayer.push({ event: "contact_click", ...parameters });
   }
 
-  window.dataLayer ??= [];
-  window.dataLayer.push({ event: "contact_click", ...parameters });
+  // A button click is observation only, never a confirmed lead or sale. Do not
+  // send Ads conversions before consent, or replay earlier clicks afterward.
+  if (readConsent() !== "granted" || event.method === "email") return;
+  const conversion = {
+    send_to: contactConversionDestinations[event.method],
+    value: 0,
+    currency: "CAD",
+    transport_type: "beacon",
+  };
+  if (window.gtag) {
+    window.gtag("event", "conversion", conversion);
+  } else {
+    queueGoogleCommand("event", "conversion", conversion);
+  }
 }

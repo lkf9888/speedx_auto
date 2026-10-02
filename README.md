@@ -16,6 +16,10 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 `NEXT_PUBLIC_GA_MEASUREMENT_ID` is optional. Leave it empty until a real GA4 web data stream is created. Google Ads destination `AW-625073096` remains configured independently.
 
+Website WhatsApp, telephone, and WeChat clicks also send their own Google Ads `conversion` event, using labels verified in the SpeedX Ads account on 2026-10-02. These are **secondary observation actions**, not confirmed inquiries, connected calls, or sales. Keep them outside custom bidding goals. They use no monetary value, count once per ad interaction, and have a 30-day click attribution window; Ads totals are therefore not the raw count of every visitor's button clicks. Existing `contact_click` events remain unchanged.
+
+The Ads conversion event is sent only after the visitor grants the existing consent choice, without replaying earlier clicks. Its payload contains only the public destination label, zero value, CAD currency, and beacon transport; no customer contact data, chat contents, or enhanced-conversion data is added. Email clicks do not send these Ads conversions. Confirm deployment separately from receipt of events in Google Ads; a passing test or an emitted browser request does not prove an attributed lead.
+
 ## Verification
 
 ```bash

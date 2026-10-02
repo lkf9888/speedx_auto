@@ -1,3 +1,5 @@
+import { queueGoogleCommand } from "@/lib/google-tag";
+
 export const CONSENT_STORAGE_KEY = "speedx-consent-v1";
 export type ConsentChoice = "granted" | "denied";
 
@@ -32,9 +34,7 @@ export function applyGoogleConsent(choice: ConsentChoice): void {
   if (typeof window === "undefined") return;
 
   window.dataLayer ??= [];
-  window.gtag ??= (...args: unknown[]) => {
-    window.dataLayer?.push(args);
-  };
+  window.gtag ??= queueGoogleCommand;
   window.gtag("consent", "update", {
     ad_storage: choice,
     analytics_storage: choice,

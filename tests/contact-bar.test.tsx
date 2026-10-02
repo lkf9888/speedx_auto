@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContactBar } from "@/components/ContactBar";
 import { en } from "@/i18n/en";
+import { saveConsent } from "@/lib/consent";
 
 const baseProps = {
   dict: en,
@@ -15,6 +16,32 @@ const baseProps = {
 describe("ContactBar", () => {
   beforeEach(() => {
     window.dataLayer = [];
+    localStorage.clear();
+    delete window.gtag;
+  });
+  afterEach(() => {
+    localStorage.clear();
+    delete window.gtag;
+  });
+
+  it("sends one Ads command per contact button without duplicate triggers", () => {
+    saveConsent("granted");
+    const gtag = vi.fn();
+    window.gtag = gtag;
+    render(<ContactBar {...baseProps} />);
+    const whatsapp = screen.getByRole("link", { name: /WhatsApp/i });
+    const phone = screen.getByRole("link", { name: /778.*917.*0710/i });
+    whatsapp.addEventListener("click", (event) => event.preventDefault());
+    phone.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(whatsapp);
+    fireEvent.click(phone);
+    fireEvent.click(screen.getByRole("button", { name: /Add WeChat/i }));
+    const conversions = gtag.mock.calls.filter((args) => args[1] === "conversion");
+    expect(conversions.map((args) => args[2].send_to)).toEqual([
+      "AW-625073096/wlyICOy7lo4dEMi3h6oC",
+      "AW-625073096/w6GCCO-7lo4dEMi3h6oC",
+      "AW-625073096/iUGYCKifn44dEMi3h6oC",
+    ]);
   });
 
   it("records exactly one WhatsApp and phone event for each click", () => {

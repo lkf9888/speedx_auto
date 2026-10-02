@@ -34,7 +34,7 @@ describe("ConsentBanner", () => {
     await user.click(screen.getByRole("button", { name: "Accept" }));
 
     expect(window.localStorage.getItem(CONSENT_STORAGE_KEY)).toBe("granted");
-    expect(window.dataLayer?.at(-1)).toEqual([
+    expect(Array.from(window.dataLayer?.at(-1) as IArguments)).toEqual([
       "consent",
       "update",
       {
@@ -68,7 +68,7 @@ describe("ConsentBanner", () => {
 
     await user.click(await screen.findByRole("button", { name: "Decline" }));
 
-    expect(window.dataLayer?.at(-1)).toEqual([
+    expect(Array.from(window.dataLayer?.at(-1) as IArguments)).toEqual([
       "consent",
       "update",
       {
