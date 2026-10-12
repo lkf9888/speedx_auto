@@ -162,3 +162,11 @@ describe("toPlainText", () => {
     expect(toPlainText("**请不要再开车了。** 合计 **$205.95**\n## 说明\n`code`")).toBe("请不要再开车了。 合计 $205.95\n说明\ncode");
   });
 });
+
+describe("turnContext", () => {
+  it("links the hosting page in the page's language", async () => {
+    const { turnContext } = await import("@/lib/repair-chat/prompt");
+    expect(turnContext("zh-CN", null, "托管")).toContain("https://speedxrental.com/zh-CN/hosting");
+    expect(turnContext("xx", null, "hi there friend")).toContain("https://speedxrental.com/en/hosting");
+  });
+});
