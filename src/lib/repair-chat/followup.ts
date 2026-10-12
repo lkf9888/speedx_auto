@@ -138,7 +138,7 @@ export function createFollowUpHandler(client: () => MessagesClient | null, maile
       try {
         summary = await summarizeSession(api, session);
       } catch (error) {
-        console.error("repair-followup summary failed", (error as Error).name);
+        console.error("repair-followup summary failed", (error as Error).name, (error as Error).message?.slice(0, 500));
       }
     }
     const email = composeFollowUpEmail(session, reason, summary);

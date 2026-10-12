@@ -213,7 +213,13 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
         send({ type: "message", text: result.text });
       } catch (error) {
         const busy = error instanceof Anthropic.RateLimitError || error instanceof Anthropic.InternalServerError;
-        console.error("repair-chat failed", error instanceof Error ? error.name : "unknown");
+        const status = error instanceof Anthropic.APIError ? error.status : undefined;
+        console.error(
+          "repair-chat failed",
+          error instanceof Error ? error.name : "unknown",
+          status ?? "",
+          error instanceof Error ? error.message.slice(0, 500) : "",
+        );
         send({ type: "error", code: busy ? "busy" : "unavailable" });
       } finally {
         await Promise.allSettled(pendingNotices);
