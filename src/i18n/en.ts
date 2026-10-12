@@ -80,7 +80,7 @@ export const en = {
       },
       {
         title: "Repair estimate assistant",
-        body: "To open the estimate assistant on the auto repair page, you provide your name and phone number; SPEEDX AUTO receives them, together with the vehicle, service, and price range of any estimate shown, so the team can follow up. Your name and phone are not sent to the AI service. Your chat messages are sent to Anthropic's Claude AI service to generate replies, and the vehicle year, make, model, VIN, and requested repair are looked up in our parts supplier's catalog. The conversation itself is not stored on our servers or in your browser; it is cleared when you leave or reload the page.",
+        body: "To open the estimate assistant on the auto repair page, you provide your name and phone number; SPEEDX AUTO receives them, together with the vehicle, service, and price range of any estimate shown, so the team can follow up. Your name and phone are not sent to the AI service. Your chat messages are sent to Anthropic's Claude AI service to generate replies, and the vehicle year, make, model, VIN, and requested repair are looked up in our parts supplier's catalog. When you leave the page or stop replying for 10 minutes, the conversation, an AI-written summary of it, and your name and phone are emailed to the SPEEDX AUTO team so they can follow up; the website does not keep the conversation after that, and your browser does not store it.",
       },
       {
         title: "Change your preference",
@@ -136,6 +136,8 @@ export const en = {
       notIncluded: "Labor guide note",
       mayNeed: "May also need",
       disclaimer: "Ballpark only, not a formal quote. The final price is confirmed after inspection.",
+      screenshotTip: "Take a screenshot of this estimate and show it at the shop when you come in (estimate {id}).",
+      date: "Date",
       book: "Book on WhatsApp",
       call: "Call",
     },

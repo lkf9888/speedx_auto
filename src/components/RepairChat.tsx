@@ -59,6 +59,8 @@ const currency = new Intl.NumberFormat("en-CA", { style: "currency", currency: "
 const money = (value: number) => currency.format(value);
 const range = (low: number, high: number) => (low === high ? money(low) : `${money(low)} – ${money(high)}`);
 const fill = (template: string, name: string) => template.replaceAll("{name}", name);
+const quoteDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Vancouver" });
 
 function phoneDigits(phone: string): number {
   return phone.replace(/\D/g, "").length;
@@ -107,7 +109,13 @@ function EstimateView({
             {e.vehicle}: {card.vehicle}
           </p>
         </div>
-        {!demo && <span className="shrink-0 text-xs text-ink-400">{card.id}</span>}
+        {!demo && (
+          <span className="shrink-0 text-right text-xs text-ink-400">
+            {card.id}
+            <br />
+            {e.date} {quoteDate(card.createdAt)}
+          </span>
+        )}
       </div>
 
       <dl className="mt-4 space-y-3">
@@ -159,6 +167,11 @@ function EstimateView({
         </p>
       )}
       <p className="mt-3 text-xs leading-5 text-ink-500">{e.disclaimer}</p>
+      {!demo && (
+        <p data-testid="screenshot-tip" className="mt-3 rounded-xl bg-brand-50 px-3 py-2 text-xs font-medium leading-5 text-brand-700">
+          {e.screenshotTip.replace("{id}", card.id)}
+        </p>
+      )}
 
       {!demo && (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -281,12 +294,25 @@ export function RepairChat({
 }) {
   const copy = dict.repairChat;
   const [lead, setLead] = useState<Lead | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [vehicle, setVehicle] = useState<KnownVehicle>(null);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<StatusKey | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+
+  // Tell the server the visit is over so the shop gets its follow-up email now
+  // rather than after the idle timeout.
+  useEffect(() => {
+    if (!sessionId) return;
+    const finish = () => {
+      const body = new Blob([JSON.stringify({ sessionId })], { type: "application/json" });
+      navigator.sendBeacon?.("/api/repair-lead/finish", body);
+    };
+    window.addEventListener("pagehide", finish);
+    return () => window.removeEventListener("pagehide", finish);
+  }, [sessionId]);
 
   useEffect(() => {
     if (turns.length > 1) endRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
@@ -300,6 +326,8 @@ export function RepairChat({
         body: JSON.stringify({ locale, lead: next }),
       });
       if (!response.ok) return false;
+      const data = (await response.json()) as { sessionId?: string };
+      setSessionId(typeof data.sessionId === "string" ? data.sessionId : null);
     } catch {
       return false;
     }
@@ -331,7 +359,7 @@ export function RepairChat({
       const response = await fetch("/api/repair-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locale, history, message, vehicleKey: vehicle?.key ?? null, lead }),
+        body: JSON.stringify({ locale, history, message, vehicleKey: vehicle?.key ?? null, lead, sessionId }),
       });
       if (!response.ok || !response.body) {
         failure = response.status === 429 ? "busy" : "unavailable";
@@ -353,12 +381,14 @@ export function RepairChat({
               | { type: "vehicle"; vehicle: { key: string; label: string } }
               | { type: "estimate"; estimate: EstimateCard }
               | { type: "message"; text: string }
+              | { type: "session"; id: string }
               | { type: "error"; code: "busy" | "unavailable" | "invalid" }
               | { type: "done" };
             if (event.type === "status") setStatus(event.status);
             else if (event.type === "vehicle") nextVehicle = event.vehicle;
             else if (event.type === "estimate") estimates.push(event.estimate);
             else if (event.type === "message") reply = event.text;
+            else if (event.type === "session") setSessionId(event.id);
             else if (event.type === "error") failure = event.code === "busy" ? "busy" : "unavailable";
           }
           if (done) break;

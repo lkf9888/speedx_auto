@@ -9,7 +9,9 @@ import {
   type Lead,
   type LeadNotifier,
 } from "@/lib/repair-chat/lead";
+import { createFollowUpHandler, createMailer } from "@/lib/repair-chat/followup";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
+import { SessionStore } from "@/lib/repair-chat/session";
 import type { ChatEvent } from "@/lib/repair-chat/tools";
 import type { CatalogApi } from "@/lib/worldpac/catalog";
 import { getWorldpacClient } from "@/lib/worldpac/client";
@@ -22,6 +24,7 @@ const ALLOWED_ORIGINS = [/^https:\/\/(www\.)?speedxrental\.com$/, /^http:\/\/loc
 export type StreamEvent =
   | ChatEvent
   | { type: "message"; text: string }
+  | { type: "session"; id: string }
   | { type: "error"; code: "unavailable" | "busy" | "invalid" }
   | { type: "done" };
 
@@ -31,6 +34,7 @@ export interface ChatRequestBody {
   message: string;
   vehicleKey: string | null;
   lead: Lead;
+  sessionId: string | null;
 }
 
 export function parseBody(raw: unknown): ChatRequestBody | null {
@@ -53,7 +57,9 @@ export function parseBody(raw: unknown): ChatRequestBody | null {
   if (history.length > 0 && history[0].role !== "user") return null;
   const vehicleKey =
     typeof body.vehicleKey === "string" && body.vehicleKey.length <= 2000 ? body.vehicleKey : null;
-  return { locale: body.locale, history, message, vehicleKey, lead };
+  const sessionId =
+    typeof body.sessionId === "string" && /^[a-f0-9]{32}$/.test(body.sessionId) ? body.sessionId : null;
+  return { locale: body.locale, history, message, vehicleKey, lead, sessionId };
 }
 
 export function isConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -88,6 +94,7 @@ export interface RouteDeps {
   limiter: RateLimiter;
   configured: () => boolean;
   notify: LeadNotifier;
+  sessions: SessionStore;
 }
 
 const defaultDeps: RouteDeps = {
@@ -96,6 +103,9 @@ const defaultDeps: RouteDeps = {
   limiter,
   configured: () => isConfigured(),
   notify: createLeadNotifier(),
+  sessions: new SessionStore(
+    createFollowUpHandler(() => (isConfigured() ? (anthropic ??= new Anthropic()) : null), createMailer()),
+  ),
 };
 
 function foreignOrigin(request: Request): boolean {
@@ -106,7 +116,7 @@ function foreignOrigin(request: Request): boolean {
 /** Called once when a visitor submits name + phone to open the assistant. */
 export async function handleLead(
   request: Request,
-  deps: Pick<RouteDeps, "configured" | "notify"> & { limiter: RateLimiter },
+  deps: Pick<RouteDeps, "configured" | "notify" | "sessions"> & { limiter: RateLimiter },
 ): Promise<Response> {
   if (foreignOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
   if (!deps.configured()) return Response.json({ error: "unavailable" }, { status: 503 });
@@ -121,11 +131,36 @@ export async function handleLead(
   if (!lead || !locale) return Response.json({ error: "invalid" }, { status: 400 });
   if (deps.limiter.check(clientIp(request))) return Response.json({ error: "busy" }, { status: 429 });
   await deps.notify({ type: "lead_started", lead, locale, at: new Date().toISOString() });
-  return Response.json({ ok: true });
+  const session = deps.sessions.create(lead, locale);
+  return Response.json({ ok: true, sessionId: session.id });
+}
+
+/** Sent by the browser (sendBeacon) when the visitor leaves the page. */
+export async function handleFinish(request: Request, deps: Pick<RouteDeps, "sessions">): Promise<Response> {
+  if (foreignOrigin(request)) return new Response(null, { status: 403 });
+  let id: unknown = null;
+  try {
+    id = ((await request.json()) as Record<string, unknown>)?.sessionId;
+  } catch {
+    id = null;
+  }
+  if (typeof id === "string" && /^[a-f0-9]{32}$/.test(id)) {
+    void deps.sessions.finish(id, "left_page");
+  }
+  return new Response(null, { status: 204 });
+}
+
+export function handleDefaultFinish(request: Request): Promise<Response> {
+  return handleFinish(request, defaultDeps);
 }
 
 export function handleDefaultLead(request: Request): Promise<Response> {
-  return handleLead(request, { configured: defaultDeps.configured, notify: defaultDeps.notify, limiter: leadLimiter });
+  return handleLead(request, {
+    configured: defaultDeps.configured,
+    notify: defaultDeps.notify,
+    sessions: defaultDeps.sessions,
+    limiter: leadLimiter,
+  });
 }
 
 export async function handleChat(request: Request, deps: RouteDeps): Promise<Response> {
@@ -146,6 +181,9 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
   if (limited) return Response.json({ error: "busy" }, { status: 429 });
 
   const request_ = body;
+  const session =
+    deps.sessions.get(request_.sessionId) ?? deps.sessions.create(request_.lead, request_.locale);
+  deps.sessions.record(session.id, { role: "user", text: request_.message });
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -153,9 +191,11 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
       const send = (event: StreamEvent) => {
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
         if (event.type === "estimate") {
+          deps.sessions.recordEstimate(session.id, event.estimate);
           pendingNotices.push(deps.notify(estimateLeadEvent(request_.lead, request_.locale, event.estimate)));
         }
       };
+      if (session.id !== request_.sessionId) send({ type: "session", id: session.id });
       try {
         const result = await runChat(
           deps.client(),
@@ -169,6 +209,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
           send,
           () => `E-${randomBytes(4).toString("hex").toUpperCase()}`,
         );
+        deps.sessions.record(session.id, { role: "assistant", text: result.text });
         send({ type: "message", text: result.text });
       } catch (error) {
         const busy = error instanceof Anthropic.RateLimitError || error instanceof Anthropic.InternalServerError;

@@ -37,12 +37,13 @@ function ndjson(events: unknown[], status = 200) {
   });
 }
 
-const lead = { name: "Kevin", phone: "778-917-0710" };
+const lead = { name: "Kevin", phone: "604-555-0182" };
+const SESSION = "c".repeat(32);
 
 /** Answers /api/repair-lead with ok and /api/repair-chat with the queued streams. */
 function api(...chatResponses: Response[]) {
   return vi.fn(async (url: string) => {
-    if (url === "/api/repair-lead") return Response.json({ ok: true });
+    if (url === "/api/repair-lead") return Response.json({ ok: true, sessionId: SESSION });
     const next = chatResponses.shift();
     if (!next) throw new Error("no chat response queued");
     return next;
@@ -93,6 +94,7 @@ describe("RepairChat", () => {
     expect(demo).toHaveTextContent("$291.05 – $317.84");
     expect(demo).not.toHaveTextContent("$264.65");
     expect(screen.queryByRole("link", { name: zhTW.repairChat.estimate.book })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("screenshot-tip")).not.toBeInTheDocument();
   });
 
   it("sends a starter question and renders the estimate card with booking links", async () => {
@@ -116,13 +118,21 @@ describe("RepairChat", () => {
     expect(card).toHaveTextContent("$291.05");
     expect(card).not.toHaveTextContent("$264.65");
     expect(card).toHaveTextContent("Brake Hydraulic System Bleed");
+    expect(screen.getByTestId("screenshot-tip")).toHaveTextContent("Take a screenshot of this estimate");
+    expect(screen.getByTestId("screenshot-tip")).toHaveTextContent("E-ABC123");
+    expect(card).toHaveTextContent("Date 2026-10-1");
     const whatsapp = screen.getByRole("link", { name: en.repairChat.estimate.book });
     const prefilled = decodeURIComponent(whatsapp.getAttribute("href")!);
     expect(prefilled).toContain("E-ABC123");
     expect(prefilled).toContain("this is Kevin");
 
     const body = JSON.parse((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body as string);
-    expect(body).toEqual({ locale: "en", history: [], message: en.repairChat.starters[0], vehicleKey: null, lead });
+    expect(body).toEqual({ locale: "en", history: [], message: en.repairChat.starters[0], vehicleKey: null, lead, sessionId: SESSION });
+
+    const beacon = vi.fn(() => true);
+    Object.defineProperty(navigator, "sendBeacon", { value: beacon, configurable: true });
+    window.dispatchEvent(new Event("pagehide"));
+    expect(beacon).toHaveBeenCalledWith("/api/repair-lead/finish", expect.any(Blob));
   });
 
   it("sends the prior conversation and confirmed vehicle on the next message", async () => {

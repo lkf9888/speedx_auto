@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { handleChat, handleLead, isConfigured, parseBody, type RouteDeps } from "@/lib/repair-chat/http";
+import { handleChat, handleFinish, handleLead, isConfigured, parseBody, type RouteDeps } from "@/lib/repair-chat/http";
+import { SessionStore, type ChatSession, type FinishReason } from "@/lib/repair-chat/session";
 import { createLeadNotifier, parseLead, type LeadEvent } from "@/lib/repair-chat/lead";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 
@@ -12,13 +13,20 @@ function request(body: unknown, headers: Record<string, string> = {}) {
 }
 
 const lead = { name: "Kevin Liu", phone: "604-555-0182" };
-const validBody = { locale: "en", history: [], message: "brake noise", vehicleKey: null, lead };
+const validBody = { locale: "en", history: [], message: "brake noise", vehicleKey: null, lead, sessionId: null };
+
+function recordingSessions() {
+  const finished: Array<[ChatSession, FinishReason]> = [];
+  const sessions = new SessionStore(async (s, r) => void finished.push([s, r]));
+  return { sessions, finished };
+}
 
 function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
   return {
     configured: () => true,
     limiter: new RateLimiter(),
     notify: async () => {},
+    sessions: new SessionStore(async () => {}),
     catalog: () => ({ get: async () => ({}) as never, post: async () => ({}) as never }),
     client: () => ({
       beta: {
@@ -67,7 +75,8 @@ describe("handleChat", () => {
     const response = await handleChat(request(validBody), deps());
     expect(response.headers.get("content-type")).toContain("application/x-ndjson");
     const lines = (await response.text()).trim().split("\n").map((l) => JSON.parse(l));
-    expect(lines).toEqual([{ type: "message", text: "Hello" }, { type: "done" }]);
+    expect(lines.map((l) => l.type)).toEqual(["session", "message", "done"]);
+    expect(lines[1]).toEqual({ type: "message", text: "Hello" });
   });
 
   it("refuses other origins, unconfigured deployments, and bad bodies", async () => {
@@ -91,7 +100,7 @@ describe("handleChat", () => {
       deps({ client: () => ({ beta: { messages: { create: async () => { throw new Error("boom"); } } } }) }),
     );
     const lines = (await response.text()).trim().split("\n").map((l) => JSON.parse(l));
-    expect(lines).toEqual([{ type: "error", code: "unavailable" }, { type: "done" }]);
+    expect(lines.slice(1)).toEqual([{ type: "error", code: "unavailable" }, { type: "done" }]);
   });
 });
 
@@ -113,6 +122,7 @@ describe("lead delivery", () => {
       configured: () => true,
       limiter: new RateLimiter(),
       notify: async (e) => void events.push(e),
+      sessions: new SessionStore(async () => {}),
     });
     expect(response.status).toBe(200);
     expect(events).toMatchObject([{ type: "lead_started", lead, locale: "zh-CN" }]);
@@ -120,6 +130,7 @@ describe("lead delivery", () => {
       configured: () => true,
       limiter: new RateLimiter(),
       notify: async () => {},
+      sessions: new SessionStore(async () => {}),
     });
     expect(bad.status).toBe(400);
   });
@@ -176,5 +187,41 @@ describe("lead delivery", () => {
 
     const failing = createLeadNotifier("https://hooks.example/lead", (async () => new Response("no", { status: 500 })) as typeof fetch);
     await expect(failing({ type: "lead_started", lead, locale: "en", at: "t" })).resolves.toBeUndefined();
+  });
+});
+
+describe("follow-up sessions", () => {
+  it("opens a session for the lead, records the chat, and finishes when the visitor leaves", async () => {
+    const { sessions, finished } = recordingSessions();
+    const opened = await handleLead(request({ locale: "en", lead }), {
+      configured: () => true,
+      limiter: new RateLimiter(),
+      notify: async () => {},
+      sessions,
+    });
+    const { sessionId } = (await opened.json()) as { sessionId: string };
+    expect(sessionId).toMatch(/^[a-f0-9]{32}$/);
+
+    const chat = await handleChat(request({ ...validBody, sessionId }), deps({ sessions }));
+    const lines = (await chat.text()).trim().split("\n").map((l) => JSON.parse(l));
+    expect(lines.some((l) => l.type === "session")).toBe(false);
+
+    const left = await handleFinish(request({ sessionId }), { sessions });
+    expect(left.status).toBe(204);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(finished).toHaveLength(1);
+    expect(finished[0][1]).toBe("left_page");
+    expect(finished[0][0].lead).toEqual(lead);
+    expect(finished[0][0].transcript.map((t) => [t.role, t.text])).toEqual([
+      ["user", "brake noise"],
+      ["assistant", "Hello"],
+    ]);
+  });
+
+  it("ignores finish requests for unknown or malformed sessions", async () => {
+    const { sessions, finished } = recordingSessions();
+    expect((await handleFinish(request({ sessionId: "nope" }), { sessions })).status).toBe(204);
+    expect((await handleFinish(request({ sessionId: "b".repeat(32) }), { sessions })).status).toBe(204);
+    expect(finished).toHaveLength(0);
   });
 });
