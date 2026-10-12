@@ -13,6 +13,16 @@ Primary pages:
 - Auto repair: https://speedxrental.com/en/auto-repair
 - Contact: https://speedxrental.com/en/contact
 
+Auto repair facts (details and price examples on the auto repair page):
+
+- Labor: $120 CAD per hour before tax, billed by industry-standard labor-guide times (ALLDATA)
+- Parts: WorldPac, quoted at list price
+- Electric vehicles: mainly Tesla; high-voltage battery checks, drive motor repair, fault-code diagnosis
+- Body work and paint: quoted case by case; transmission repair is not offered
+- Languages: English, Cantonese, Mandarin
+- Payment: cash, credit card, WeChat Pay
+- Appointments required; an online AI estimate assistant on the auto repair page gives ballpark prices
+
 Public contact details:
 
 - Phone and WhatsApp: +1 (778) 917-0710
