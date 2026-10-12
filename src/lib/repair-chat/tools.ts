@@ -113,11 +113,14 @@ function vehiclePayload(lookup: VehicleLookup) {
         vehicle: describeVehicle(lookup.vehicle),
       };
     case "needs_details":
+      // Usable now: most jobs don't depend on these. get_estimate asks for
+      // a detail only when the labor guide needs it.
       return {
-        status: "needs_details",
+        status: "ok",
         vehicle_key: encodeVehicleKey(lookup.vehicle),
         vehicle: describeVehicle(lookup.vehicle),
-        questions: lookup.questions,
+        optional_details: lookup.questions,
+        note: "Do not ask about these up front. Use them only to record details the customer already gave (set_vehicle_details), or when get_estimate returns need_details.",
       };
     case "ambiguous":
       return { status: "ambiguous", candidates: lookup.candidates };
@@ -127,7 +130,7 @@ function vehiclePayload(lookup: VehicleLookup) {
 }
 
 function vehicleEvents(lookup: VehicleLookup): ChatEvent[] {
-  if (lookup.status !== "ok") return [];
+  if (lookup.status !== "ok" && lookup.status !== "needs_details") return [];
   return [
     {
       type: "vehicle",

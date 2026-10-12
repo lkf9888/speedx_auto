@@ -68,7 +68,13 @@ export async function runChat(
   const messages: Anthropic.Beta.BetaMessageParam[] = [
     ...request.history.map((turn) => ({ role: turn.role, content: turn.text })),
     { role: "user", content: request.message },
-    { role: "system", content: turnContext(request.locale, knownVehicle(request.vehicleKey)) },
+    { role: "system", content: turnContext(
+        request.locale,
+        knownVehicle(request.vehicleKey),
+        request.message,
+        request.history.filter((t) => t.role === "user").map((t) => t.text).reverse(),
+      ),
+    },
   ];
   const events: ChatEvent[] = [];
   const emit = (event: ChatEvent) => {

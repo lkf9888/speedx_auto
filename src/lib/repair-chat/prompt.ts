@@ -18,7 +18,7 @@ Every price, labor time and part price you mention must come from a get_estimate
 - The estimate card already shows the full breakdown, so in your reply summarise it in one or two sentences rather than repeating every line. Mention what the labor-guide note says is not included when it matters (for example a brake fluid bleed).
 
 # How to work
-1. Find out the vehicle. A VIN is the most precise; otherwise year, make and model. Call identify_vehicle. If it returns questions (trim, engine, body style), ask the customer exactly those, offering the listed options, then call set_vehicle_details.
+1. Find out the vehicle. A VIN is the most precise; otherwise year, make and model. Call identify_vehicle. Do not quiz the customer about trim, engine, body style or drive type up front: if they already mentioned any of them, record them with set_vehicle_details using the optional_details names; otherwise go straight on. Ask about one of these only when get_estimate returns need_details, and then ask only what it lists.
 2. Understand the symptom: what happens, when, any warning lights, recent work, mileage if useful. Ask only what changes your answer, a couple of questions at a time.
 3. Explain the most likely causes in order of likelihood and what an inspection would check. Be honest that a diagnosis needs the car in the shop.
 4. For the most likely repair (or the specific service the customer asked for), call find_services with an English query, choose the operation that matches, and call get_estimate. Ask Front or Rear when the tool needs a position. Estimate the one or two most likely jobs, not every possibility.
@@ -42,9 +42,35 @@ const LANGUAGE_NAMES: Record<string, string> = {
   "zh-TW": "Traditional Chinese",
 };
 
-export function turnContext(locale: string, vehicle: { key: string; label: string } | null): string {
+const TRADITIONAL_ONLY = new Set("們這價車輪說時會為個來後確認點錢煞與實際測試應該檢查議換種當過還邊電響發動擋");
+const SIMPLIFIED_ONLY = new Set("们这价车轮说时会为个来后确认点钱刹与实际测试应该检查议换种当过还边电响发动挡");
+
+/** Language of the customer's latest message, decided in code rather than by the model. */
+export function detectCustomerLanguage(text: string, locale: string, earlier: string[] = []): string {
+  const cjk = text.match(/[\u4e00-\u9fff]/g) ?? [];
+  if (cjk.length === 0) {
+    // Short answers like "LE, 2.5" or "front" don't tell us the language.
+    const words = text.match(/[a-z]{2,}/gi) ?? [];
+    if (words.length >= 3) return "English";
+    const [previous, ...rest] = earlier;
+    return previous !== undefined ? detectCustomerLanguage(previous, locale, rest) : LANGUAGE_NAMES[locale] ?? "English";
+  }
+  const traditional = cjk.filter((c) => TRADITIONAL_ONLY.has(c)).length;
+  const simplified = cjk.filter((c) => SIMPLIFIED_ONLY.has(c)).length;
+  if (traditional > simplified) return "Traditional Chinese";
+  if (simplified > traditional) return "Simplified Chinese";
+  return locale === "zh-TW" ? "Traditional Chinese" : "Simplified Chinese";
+}
+
+export function turnContext(
+  locale: string,
+  vehicle: { key: string; label: string } | null,
+  customerMessage = "",
+  earlierCustomerMessages: string[] = [],
+): string {
+  const language = detectCustomerLanguage(customerMessage, locale, earlierCustomerMessages);
   const lines = [
-    `Page language: ${LANGUAGE_NAMES[locale] ?? "English"}.`,
+    `Page language: ${LANGUAGE_NAMES[locale] ?? "English"}. The customer's latest message is in ${language}: write your whole reply in ${language}, even though tool results are in English.`,
     "The customer has already been greeted and asked for their vehicle (year, make and model, or VIN) and the problem; do not greet them again.",
   ];
   if (vehicle) {

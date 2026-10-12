@@ -143,3 +143,15 @@ describe("fallbackOptions", () => {
     });
   });
 });
+
+describe("detectCustomerLanguage", () => {
+  it("decides simplified, traditional, or English from the message itself", async () => {
+    const { detectCustomerLanguage } = await import("@/lib/repair-chat/prompt");
+    expect(detectCustomerLanguage("2015 Nissan Altima 2.5 換起動馬達要多少錢？", "zh-CN")).toBe("Traditional Chinese");
+    expect(detectCustomerLanguage("刹车的时候有吱吱的声音", "zh-TW")).toBe("Simplified Chinese");
+    expect(detectCustomerLanguage("How much for front pads?", "zh-CN")).toBe("English");
+    expect(detectCustomerLanguage("2019 LE", "zh-TW")).toBe("Traditional Chinese");
+    expect(detectCustomerLanguage("EX, 1.5L", "en", ["我的車要換電瓶"])).toBe("Traditional Chinese");
+    expect(detectCustomerLanguage("front", "zh-CN", ["my car is a 2017 crv"])).toBe("English");
+  });
+});
