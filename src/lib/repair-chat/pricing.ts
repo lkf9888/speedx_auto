@@ -35,6 +35,7 @@ export interface EstimateCard {
   referralTotalHigh: number;
   laborNote: string;
   otherPartNames: string[];
+  partsNote: string;
   createdAt: string;
 }
 
@@ -84,6 +85,7 @@ export function buildEstimate(
     referralTotalHigh: money(partsHigh + laborReferral),
     laborNote: quote.laborNote,
     otherPartNames: quote.otherPartNames,
+    partsNote: quote.partsNote ?? "",
     createdAt: now.toISOString(),
   };
 }
@@ -100,7 +102,7 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
           .map((p) => `${p.description}${p.quantity > 1 ? ` ×${p.quantity}` : ""} $${p.total}`)
           .join("; ") +
         "."
-      : "No list-priced part found; the estimate covers labor only.",
+      : card.partsNote || "No list-priced part found; the estimate covers labor only.",
     `Total before tax: $${card.totalLow}–$${card.totalHigh} (referral: $${card.referralTotalLow}–$${card.referralTotalHigh}).`,
   ];
   if (card.laborNote) lines.push(`Labor guide note: ${card.laborNote}`);

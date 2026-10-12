@@ -48,6 +48,16 @@ export interface ChatResult {
 
 const SAFE_LABEL = /[^A-Za-z0-9 .,/()+-]/g;
 
+/** The chat renders plain text: strip markdown the model sometimes adds. */
+export function toPlainText(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
 /** Only server-shaped vehicle data reaches the system message. */
 function knownVehicle(vehicleKey: string | null) {
   if (!vehicleKey) return null;
@@ -104,11 +114,12 @@ export async function runChat(
       (block): block is Anthropic.Beta.BetaToolUseBlock => block.type === "tool_use",
     );
     if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
-      const text = response.content
-        .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("\n")
-        .trim();
+      const text = toPlainText(
+        response.content
+          .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
+          .map((block) => block.text)
+          .join("\n"),
+      );
       return { text, events };
     }
 

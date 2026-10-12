@@ -27,6 +27,7 @@ const estimate = {
   referralTotalHigh: 264.65,
   laborNote: "Does not include: Brake Hydraulic System Bleed.",
   otherPartNames: [],
+  partsNote: "",
   createdAt: "2026-10-11T00:00:00.000Z",
 };
 

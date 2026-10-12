@@ -155,3 +155,10 @@ describe("detectCustomerLanguage", () => {
     expect(detectCustomerLanguage("front", "zh-CN", ["my car is a 2017 crv"])).toBe("English");
   });
 });
+
+describe("toPlainText", () => {
+  it("removes markdown the chat would show literally", async () => {
+    const { toPlainText } = await import("@/lib/repair-chat/agent");
+    expect(toPlainText("**请不要再开车了。** 合计 **$205.95**\n## 说明\n`code`")).toBe("请不要再开车了。 合计 $205.95\n说明\ncode");
+  });
+});

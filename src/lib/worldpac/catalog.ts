@@ -72,6 +72,8 @@ export type ServiceQuote =
       primaryPartName: string;
       partOptions: PartOption[];
       otherPartNames: string[];
+      /** Why parts are not priced, when they aren't (e.g. fluids by volume). */
+      partsNote: string;
     }
   | { status: "need_position"; positions: string[] }
   | { status: "need_details"; questions: VehicleQuestion[] }
@@ -233,9 +235,19 @@ export async function identifyByVin(api: CatalogApi, vin: string): Promise<Vehic
   if (vehicles.length === 0) return { status: "not_found", reason: "The VIN was not recognized." };
   const first = vehicles[0];
   const attrs = readAttributes(first.vehicleAttributes);
-  const year = attrs.get("YearID")?.label ?? "";
-  const make = attrs.get("MakeName")?.label ?? "";
-  const model = attrs.get("ModelName")?.label ?? "";
+  let year = (attrs.get("Year") ?? attrs.get("YearID"))?.label ?? "";
+  let make = (attrs.get("Make") ?? attrs.get("MakeName"))?.label ?? "";
+  let model = (attrs.get("Model") ?? attrs.get("ModelName"))?.label ?? "";
+  if (!year || !make || !model) {
+    const details = await api
+      .get<{ year?: number; makeDescription?: string; modelDescription?: string }>(
+        `vehicle/details?baseVehicleID=${first.baseVehicleID}`,
+      )
+      .catch(() => ({}) as { year?: number; makeDescription?: string; modelDescription?: string });
+    year ||= details.year ? String(details.year) : "";
+    make ||= details.makeDescription ?? "";
+    model ||= details.modelDescription ?? "";
+  }
   const kept = [...attrs.values()].filter((a) =>
     (ASKABLE_ATTRIBUTES as readonly string[]).includes(a.name),
   );
@@ -519,6 +531,23 @@ export function sanitizePartQuotes(
   return options;
 }
 
+const BULK_PACKAGING = /\b(drum|pail|bulk|tote|case of|\d+\s?(gal|gallon|g)\b|55g|\d+\s?l(iter|itre)?\s?(jug|box))/i;
+const SOLD_BY_VOLUME = /\b(fluid|oil|coolant|antifreeze|refrigerant|grease|lubricant|additive)\b/i;
+
+/** Parts sold by the container (fluids) can't be priced per job from list price. */
+export function isSoldByVolume(partName: string): boolean {
+  return SOLD_BY_VOLUME.test(partName);
+}
+
+/** Drop shop-bulk packaging and extreme outliers so the range stays meaningful. */
+export function filterRealisticOptions(options: PartOption[]): PartOption[] {
+  const retail = options.filter((o) => !BULK_PACKAGING.test(o.description));
+  if (retail.length < 3) return retail;
+  const totals = retail.map((o) => o.listPrice * o.quantity).sort((a, b) => a - b);
+  const median = totals[Math.floor(totals.length / 2)];
+  return retail.filter((o) => o.listPrice * o.quantity <= median * 3);
+}
+
 /** Cheapest, a middle option, and the most expensive — enough for a range. */
 export function representativeOptions(options: PartOption[], max = 3): PartOption[] {
   const sorted = [...options].sort((a, b) => a.listPrice * a.quantity - b.listPrice * b.quantity);
@@ -590,7 +619,10 @@ export async function quoteService(
   const primary = pickPrimaryCategory(serviceName, applications);
 
   let partOptions: PartOption[] = [];
-  if (primary?.categoryCode) {
+  let partsNote = "";
+  if (primary?.categoryName && isSoldByVolume(primary.categoryName)) {
+    partsNote = `${primary.categoryName} is billed by the amount used, so it is not included in this estimate; the shop confirms it.`;
+  } else if (primary?.categoryCode) {
     const pna = await api.post<PnaResponse>("pna360_cat", {
       attributes: attrs,
       partTypes: [
@@ -604,7 +636,7 @@ export async function quoteService(
       ],
     });
     partOptions = representativeOptions(
-      sanitizePartQuotes(pna, operation.positionID ?? operation.position?.id ?? null),
+      filterRealisticOptions(sanitizePartQuotes(pna, operation.positionID ?? operation.position?.id ?? null)),
     );
   }
 
@@ -623,6 +655,7 @@ export async function quoteService(
           .filter((name) => name && name !== primary?.categoryName),
       ),
     ].slice(0, 6),
+    partsNote,
   };
   quoteCache.set(cacheKey, quote);
   return quote;

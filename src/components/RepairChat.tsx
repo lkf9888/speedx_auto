@@ -52,6 +52,7 @@ export const DEMO_ESTIMATE: EstimateCard = {
   laborNote:
     "Includes: The removal of component and all necessary components for access, and cleaning component. Does not include: Brake Hydraulic System Bleed.",
   otherPartNames: ["Anti Rattle Spring / Clip", "Brake Pad Shim"],
+  partsNote: "",
   createdAt: "2026-10-11T00:00:00.000Z",
 };
 

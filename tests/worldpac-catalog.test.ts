@@ -238,3 +238,65 @@ describe("quoteService", () => {
     expect(calls.some((c) => c.path.startsWith("vehicle/history"))).toBe(false);
   });
 });
+
+describe("eval round 2 fixes", () => {
+  const option = (description: string, listPrice: number) => ({
+    description,
+    series: "",
+    listPrice,
+    quantity: 1,
+    inStockLocally: true,
+    note: "",
+  });
+
+  it("drops bulk packaging and price outliers", async () => {
+    const { filterRealisticOptions } = await import("@/lib/worldpac/catalog");
+    const kept = filterRealisticOptions([
+      option("CVT Fluid, ECO CVT - 1QT", 34.78),
+      option("A/T Fluid - Drum, ECO CVT 55G", 2500),
+      option("Brake Pad Set, Ceramic", 109.95),
+      option("Brake Pad Set, OE", 132.5),
+      option("Brake Pad Set, Premium", 159.05),
+      option("Mislisted kit", 1999),
+    ]);
+    expect(kept.map((o) => o.listPrice)).toEqual([34.78, 109.95, 132.5, 159.05]);
+  });
+
+  it("prices fluid services as labor only, with a note", async () => {
+    const { api } = fakeApi({
+      "labor-ops-list": () => ({ laborOperations: [{ applicationID: 1, assetName: "a", positionID: -1 }] }),
+      "labor-ops-details": () => ({
+        laborOperation: {
+          estimateTimeHour: 0.5,
+          laborCategoryName: "Trans Fluid Drain & Refill",
+          applications: [{ categoryCode: "N9", categoryName: "Auto Trans Fluid" }],
+        },
+      }),
+    });
+    const quote = await quoteService(api, { ...camry, baseVehicleId: 900003 }, 1, null);
+    expect(quote).toMatchObject({ status: "ok", partOptions: [], primaryPartName: "Auto Trans Fluid" });
+    if (quote.status === "ok") expect(quote.partsNote).toContain("billed by the amount used");
+  });
+
+  it("labels a VIN lookup with year, make and model", async () => {
+    const { identifyByVin } = await import("@/lib/worldpac/catalog");
+    const { api } = fakeApi({
+      "vehicle/searchMultiVehicle": () => ({
+        vehicles: [
+          {
+            baseVehicleID: 5986,
+            vehicleAttributes: [
+              { name: { key: "Year" }, value: { key: 2003, value: "2003" } },
+              { name: { key: "Make" }, value: { key: 59, value: "Honda" } },
+              { name: { key: "Model" }, value: { key: 751, value: "Accord" } },
+              { name: { key: "SubModel" }, value: { key: 191, value: "EX" } },
+            ],
+          },
+        ],
+      }),
+      "vehicle/refine": () => ({ recommendedVehAttrs: [] }),
+    });
+    const result = await identifyByVin(api, "1HGCM82633A004352");
+    expect(result.status === "ok" && result.vehicle.label).toBe("2003 Honda Accord");
+  });
+});

@@ -13,6 +13,7 @@ const quote = {
     { description: "Advics OE", series: "Ultra-Premium", listPrice: 185.84, quantity: 1, inStockLocally: true, note: "" },
   ],
   otherPartNames: ["Brake Pad Shim"],
+  partsNote: "",
 };
 
 describe("repair pricing", () => {
