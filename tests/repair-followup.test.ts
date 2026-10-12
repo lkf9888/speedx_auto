@@ -33,6 +33,8 @@ function session(overrides: Partial<ChatSession> = {}): ChatSession {
       { role: "assistant", text: "前刹车片参考价约 $291–$318。", at: "2026-10-12T18:02:00.000Z" },
     ],
     estimates: [card],
+    opensToday: 1,
+    capped: false,
     ...overrides,
   };
 }

@@ -37,7 +37,8 @@ export type LeadEvent =
         EstimateCard,
         "id" | "vehicle" | "service" | "position" | "laborHours" | "totalLow" | "totalHigh"
       >;
-    };
+    }
+  | { type: "booking_requested"; lead: Lead; locale: string; at: string; date: string; time: string };
 
 export type LeadNotifier = (event: LeadEvent) => Promise<void>;
 

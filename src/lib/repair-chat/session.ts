@@ -2,9 +2,10 @@
  * Server-side record of one estimate-assistant visit, kept so the shop can be
  * emailed a follow-up when the visitor leaves or stops replying.
  *
- * Sessions live in process memory (single Render instance). A deploy or
- * restart drops open sessions without an email; finished sessions are
- * removed right after their follow-up is handed off.
+ * Sessions live in process memory (single Render instance). On shutdown
+ * (deploys, restarts) every open session is finished first, so its email
+ * still goes out; see shutdown.ts. Finished sessions are removed right after
+ * their follow-up is handed off.
  */
 import { randomBytes } from "node:crypto";
 import type { Lead } from "./lead";
@@ -14,7 +15,7 @@ export const IDLE_FOLLOW_UP_MS = 10 * 60 * 1000;
 const MAX_SESSIONS = 1000;
 const MAX_TRANSCRIPT = 80;
 
-export type FinishReason = "left_page" | "idle";
+export type FinishReason = "left_page" | "idle" | "server_restart";
 
 export interface TranscriptLine {
   role: "user" | "assistant";
@@ -30,6 +31,17 @@ export interface ChatSession {
   lastActivityAt: string;
   transcript: TranscriptLine[];
   estimates: EstimateCard[];
+  /** Conversations opened from this visitor's IP today, this one included (0 = not counted). */
+  opensToday: number;
+  /** Over the daily limit: the visitor gets the "please call us" reply, never the AI. */
+  capped: boolean;
+  /** Appointment the visitor requested from the booking card, shop time. */
+  booking?: { date: string; time: string };
+}
+
+export interface SessionOptions {
+  opensToday?: number;
+  capped?: boolean;
 }
 
 export type FollowUpHandler = (session: ChatSession, reason: FinishReason) => Promise<void>;
@@ -48,7 +60,7 @@ export class SessionStore {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  create(lead: Lead, locale: string): ChatSession {
+  create(lead: Lead, locale: string, options: SessionOptions = {}): ChatSession {
     if (this.entries.size >= MAX_SESSIONS) {
       const oldest = this.entries.keys().next().value;
       if (oldest) void this.finish(oldest, "idle");
@@ -62,6 +74,8 @@ export class SessionStore {
       lastActivityAt: at,
       transcript: [],
       estimates: [],
+      opensToday: options.opensToday ?? 0,
+      capped: options.capped ?? false,
     };
     this.entries.set(session.id, { session, timer: null });
     this.touch(session.id);
@@ -78,6 +92,26 @@ export class SessionStore {
     if (entry.session.transcript.length < MAX_TRANSCRIPT) {
       entry.session.transcript.push({ ...line, text: line.text.slice(0, 4000), at: this.now().toISOString() });
     }
+    this.touch(id);
+  }
+
+  /**
+   * Restore the earlier conversation the browser still has, for a session
+   * this process doesn't know (it was opened before a restart).
+   */
+  seed(id: string, lines: Array<Omit<TranscriptLine, "at">>): void {
+    const entry = this.entries.get(id);
+    if (!entry || entry.session.transcript.length > 0) return;
+    const at = this.now().toISOString();
+    for (const line of lines.slice(-MAX_TRANSCRIPT)) {
+      if (line.text.trim()) entry.session.transcript.push({ ...line, text: line.text.slice(0, 4000), at });
+    }
+  }
+
+  recordBooking(id: string, booking: { date: string; time: string }): void {
+    const entry = this.entries.get(id);
+    if (!entry) return;
+    entry.session.booking = booking;
     this.touch(id);
   }
 
@@ -100,6 +134,11 @@ export class SessionStore {
       console.error("repair-followup failed", (error as Error).message);
     }
     return true;
+  }
+
+  /** Finish every open session (server shutting down). */
+  async finishAll(reason: FinishReason): Promise<void> {
+    await Promise.allSettled([...this.entries.keys()].map((id) => this.finish(id, reason)));
   }
 
   get size(): number {

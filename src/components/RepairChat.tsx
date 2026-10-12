@@ -5,6 +5,7 @@ import type { Dictionary } from "@/i18n/dictionaries";
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import { company, telLink, whatsappLink } from "@/lib/company";
 import type { Locale } from "@/lib/site-routes";
+import { RepairBooking } from "./RepairBooking";
 import { TrackedContactLink } from "./TrackedContactLink";
 
 type ChatCopy = Dictionary["repairChat"];
@@ -16,6 +17,8 @@ interface Turn {
   estimates: EstimateCard[];
   /** Shown in the chat but never sent to the model (greeting, error notices). */
   localOnly?: boolean;
+  /** Show the booking card under this reply (once per conversation, after the first estimate). */
+  booking?: boolean;
 }
 
 interface Lead {
@@ -71,7 +74,9 @@ function whatsappHref(copy: ChatCopy, card: EstimateCard, name: string): string 
   const lines = [
     `${fill(copy.whatsappIntro, name)} (${card.id}):`,
     `${card.vehicle} — ${card.service}${card.position ? ` (${card.position})` : ""}`,
-    `${copy.estimate.total}: ${range(card.totalLow, card.totalHigh)} ${copy.estimate.beforeTax}`,
+    card.kind === "team_quote"
+      ? copy.estimate.teamQuoteTitle
+      : `${copy.estimate.total}: ${range(card.totalLow, card.totalHigh)} ${copy.estimate.beforeTax}`,
   ];
   return `${whatsappLink}?text=${encodeURIComponent(lines.join("\n"))}`;
 }
@@ -92,6 +97,7 @@ function EstimateView({
   demo?: boolean;
 }) {
   const e = copy.estimate;
+  const kind = card.kind ?? "labor";
   return (
     <article
       data-testid={demo ? "demo-estimate-card" : "estimate-card"}
@@ -100,7 +106,7 @@ function EstimateView({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-            {demo ? copy.demo.label : e.title}
+            {demo ? copy.demo.label : kind === "team_quote" ? e.teamQuoteTitle : e.title}
           </p>
           <h4 className="mt-1 text-base font-semibold text-ink-900">
             {card.service}
@@ -119,43 +125,56 @@ function EstimateView({
         )}
       </div>
 
-      <dl className="mt-4 space-y-3">
-        <div className="flex justify-between gap-4">
-          <dt>
-            {e.labor} · {card.laborHours} {e.hoursUnit} × {money(card.laborRate)}
-          </dt>
-          <dd className="font-medium text-ink-900">{money(card.laborWalkIn)}</dd>
-        </div>
-        <div>
-          <dt className="text-ink-500">{card.partOptions.length ? e.parts : e.laborOnly}</dt>
-          {card.partOptions.length > 0 && (
-            <dd>
-              <ul className="mt-1 space-y-1">
-                {card.partOptions.map((part) => (
-                  <li key={`${part.description}-${part.total}`} className="flex justify-between gap-4">
-                    <span>
-                      {part.description}
-                      {part.quantity > 1 ? ` ×${part.quantity}` : ""}
-                      {part.inStockLocally && (
-                        <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
-                          {e.inStock}
-                        </span>
-                      )}
-                    </span>
-                    <span className="shrink-0 font-medium text-ink-900">{money(part.total)}</span>
-                  </li>
-                ))}
-              </ul>
-            </dd>
+      {kind === "team_quote" ? (
+        <p data-testid="team-quote" className="mt-4 leading-6">
+          {e.teamQuote}
+        </p>
+      ) : (
+        <dl className="mt-4 space-y-3">
+          {kind === "labor" && (
+            <div className="flex justify-between gap-4">
+              <dt>
+                {e.labor} · {card.laborHours} {e.hoursUnit} × {money(card.laborRate)}
+              </dt>
+              <dd className="font-medium text-ink-900">{money(card.laborWalkIn)}</dd>
+            </div>
           )}
-        </div>
-        <div className="flex justify-between gap-4 border-t border-ink-100 pt-3 text-base">
-          <dt className="font-semibold text-ink-900">
-            {e.total} <span className="text-xs font-normal text-ink-500">({e.beforeTax})</span>
-          </dt>
-          <dd className="font-semibold text-ink-900">{range(card.totalLow, card.totalHigh)}</dd>
-        </div>
-      </dl>
+          <div>
+            <dt className="text-ink-500">
+              {kind === "flat" ? e.flatOptions : card.partOptions.length ? e.parts : e.laborOnly}
+            </dt>
+            {card.partOptions.length > 0 && (
+              <dd>
+                <ul className="mt-1 space-y-1">
+                  {card.partOptions.map((part) => (
+                    <li key={`${part.description}-${part.total}`} className="flex justify-between gap-4">
+                      <span>
+                        {part.description}
+                        {part.quantity > 1 ? ` ×${part.quantity}` : ""}
+                        {part.inStockLocally && (
+                          <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
+                            {e.inStock}
+                          </span>
+                        )}
+                      </span>
+                      <span className="shrink-0 font-medium text-ink-900">{money(part.total)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            )}
+          </div>
+          <div className="flex justify-between gap-4 border-t border-ink-100 pt-3 text-base">
+            <dt className="font-semibold text-ink-900">
+              {e.total} <span className="text-xs font-normal text-ink-500">({e.beforeTax})</span>
+            </dt>
+            <dd className="font-semibold text-ink-900">{range(card.totalLow, card.totalHigh)}</dd>
+          </div>
+        </dl>
+      )}
+      {kind === "flat" && card.partsNote && (
+        <p className="mt-3 text-xs leading-5 text-ink-500">{card.partsNote}</p>
+      )}
 
       {card.laborNote && (
         <p className="mt-3 text-xs leading-5 text-ink-500">
@@ -167,8 +186,8 @@ function EstimateView({
           {e.mayNeed}: {card.otherPartNames.join(", ")}
         </p>
       )}
-      <p className="mt-3 text-xs leading-5 text-ink-500">{e.disclaimer}</p>
-      {!demo && (
+      {kind !== "team_quote" && <p className="mt-3 text-xs leading-5 text-ink-500">{e.disclaimer}</p>}
+      {!demo && kind !== "team_quote" && (
         <p data-testid="screenshot-tip" className="mt-3 rounded-xl bg-brand-50 px-3 py-2 text-xs font-medium leading-5 text-brand-700">
           {e.screenshotTip.replace("{id}", card.id)}
         </p>
@@ -301,6 +320,8 @@ export function RepairChat({
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<StatusKey | null>(null);
+  /** Over today's limit: show "please call us" instead of the chat. */
+  const [capped, setCapped] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   // Tell the server the visit is over so the shop gets its follow-up email now
@@ -327,14 +348,22 @@ export function RepairChat({
         body: JSON.stringify({ locale, lead: next }),
       });
       if (!response.ok) return false;
-      const data = (await response.json()) as { sessionId?: string };
+      const data = (await response.json()) as { sessionId?: string; capped?: boolean };
       setSessionId(typeof data.sessionId === "string" ? data.sessionId : null);
+      setCapped(data.capped === true);
+      setLead(next);
+      setTurns([
+        {
+          role: "assistant",
+          text: data.capped === true ? copy.capped.replaceAll("{phone}", company.phoneDisplay) : fill(copy.greeting, next.name),
+          estimates: [],
+          localOnly: true,
+        },
+      ]);
+      return true;
     } catch {
       return false;
     }
-    setLead(next);
-    setTurns([{ role: "assistant", text: fill(copy.greeting, next.name), estimates: [], localOnly: true }]);
-    return true;
   }
 
   async function send(text: string) {
@@ -401,12 +430,15 @@ export function RepairChat({
 
     if (!failure && !reply && estimates.length === 0) failure = "empty";
     setVehicle(nextVehicle);
-    setTurns((prev) => [
-      ...prev,
-      failure
-        ? { role: "assistant", text: copy.errors[failure], estimates, localOnly: true }
-        : { role: "assistant", text: reply, estimates },
-    ]);
+    setTurns((prev) => {
+      const offerBooking = estimates.length > 0 && !prev.some((t) => t.booking);
+      return [
+        ...prev,
+        failure
+          ? { role: "assistant", text: copy.errors[failure], estimates, localOnly: true, booking: offerBooking }
+          : { role: "assistant", text: reply, estimates, booking: offerBooking },
+      ];
+    });
     setPending(false);
     setStatus(null);
   }
@@ -465,11 +497,42 @@ export function RepairChat({
                             leadName={lead.name}
                           />
                         ))}
+                        {turn.booking && (
+                          <RepairBooking copy={copy.booking} locale={locale} lead={lead} sessionId={sessionId} />
+                        )}
                       </div>
                     )}
                   </div>
                 ))}
-                {noQuestionYet && (
+                {capped && (
+                  <div data-testid="capped-contact" className="flex flex-wrap gap-2">
+                    <TrackedContactLink
+                      href={telLink}
+                      method="phone"
+                      intent="auto_repair"
+                      locale={locale}
+                      placement="chat"
+                      pagePath={pagePath}
+                      className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
+                    >
+                      {copy.estimate.call} {company.phoneDisplay}
+                    </TrackedContactLink>
+                    <TrackedContactLink
+                      href={whatsappLink}
+                      method="whatsapp"
+                      intent="auto_repair"
+                      locale={locale}
+                      placement="chat"
+                      pagePath={pagePath}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                    >
+                      WhatsApp
+                    </TrackedContactLink>
+                  </div>
+                )}
+                {noQuestionYet && !capped && (
                   <div className="flex flex-wrap gap-2">
                     {copy.starters.map((starter) => (
                       <button
@@ -492,33 +555,35 @@ export function RepairChat({
                 <div ref={endRef} />
               </div>
 
-              <form onSubmit={onSubmit} className="mt-4 flex gap-2">
-                <label htmlFor="repair-chat-input" className="sr-only">
-                  {copy.placeholder}
-                </label>
-                <textarea
-                  id="repair-chat-input"
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                      event.preventDefault();
-                      void send(input);
-                    }
-                  }}
-                  rows={2}
-                  maxLength={1500}
-                  placeholder={copy.placeholder}
-                  className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-ink-200 bg-white px-4 py-3 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={pending || !input.trim()}
-                  className="self-end rounded-full bg-ink-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {copy.send}
-                </button>
-              </form>
+              {!capped && (
+                <form onSubmit={onSubmit} className="mt-4 flex gap-2">
+                  <label htmlFor="repair-chat-input" className="sr-only">
+                    {copy.placeholder}
+                  </label>
+                  <textarea
+                    id="repair-chat-input"
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                        event.preventDefault();
+                        void send(input);
+                      }
+                    }}
+                    rows={2}
+                    maxLength={1500}
+                    placeholder={copy.placeholder}
+                    className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-ink-200 bg-white px-4 py-3 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={pending || !input.trim()}
+                    className="self-end rounded-full bg-ink-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {copy.send}
+                  </button>
+                </form>
+              )}
               <div className="mt-3 flex items-center justify-between gap-4 text-xs text-ink-400">
                 <span>{copy.privacyNote}</span>
                 {!noQuestionYet && !pending && (

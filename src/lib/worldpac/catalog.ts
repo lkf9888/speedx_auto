@@ -438,6 +438,16 @@ async function allServices(api: CatalogApi, vehicle: VehicleRef): Promise<Servic
   });
 }
 
+/** Name of a labor-guide operation, for cards that can't be priced. */
+export async function serviceById(
+  api: CatalogApi,
+  vehicle: VehicleRef,
+  serviceId: number,
+): Promise<ServiceMatch | undefined> {
+  const services = await allServices(api, vehicle);
+  return services.find((s) => s.serviceId === serviceId);
+}
+
 export async function findServices(
   api: CatalogApi,
   vehicle: VehicleRef,

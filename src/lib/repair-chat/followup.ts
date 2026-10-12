@@ -10,6 +10,7 @@ import { company } from "@/lib/company";
 import type { MessagesClient } from "./agent";
 import { fallbackOptions, MODEL } from "./agent";
 import type { EstimateCard } from "./pricing";
+import { matchScript } from "./script";
 import type { ChatSession, FinishReason, FollowUpHandler } from "./session";
 
 export interface OutgoingEmail {
@@ -23,6 +24,7 @@ const LANGUAGE_LABEL: Record<string, string> = { en: "英文", "zh-CN": "简体�
 const REASON_LABEL: Record<FinishReason, string> = {
   left_page: "客户离开了页面",
   idle: "客户 10 分钟无回应",
+  server_restart: "网站服务器重启（部署更新）；客户可能还在对话，如果继续提问会另发一封邮件",
 };
 
 const SUMMARY_PROMPT = `You summarise a website chat between a customer and ${company.name}'s online repair assistant for the shop's service advisor, who will phone the customer back. Write in Simplified Chinese using exactly these five labelled lines:
@@ -35,9 +37,23 @@ Use only facts from the conversation and the estimate list; write 未提及 when
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
-function estimateLine(card: EstimateCard): string {
+export function estimateLine(card: EstimateCard): string {
+  const label = `${card.id} · ${card.vehicle} · ${card.service}${card.position ? `（${card.position}）` : ""}`;
+  if (card.kind === "team_quote") return `${label} · 未给价格，客户需联系店里报价（${card.partsNote}）`;
+  if (card.kind === "flat") {
+    const options = card.partOptions.map((p) => `${p.description}${p.quantity > 1 ? ` ×${p.quantity}` : ""} ${money(p.total)}`).join("；");
+    return `${label} · 一口价：${options}（未含税）`;
+  }
   const range = card.totalLow === card.totalHigh ? money(card.totalLow) : `${money(card.totalLow)}–${money(card.totalHigh)}`;
   return `${card.id} · ${card.vehicle} · ${card.service}${card.position ? `（${card.position}）` : ""} · 工时 ${card.laborHours}h · 合计 ${range}（未含税）`;
+}
+
+const WEEKDAY = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+/** "2026-10-14（周三）11:30" */
+export function bookingLabel(booking: { date: string; time: string }): string {
+  const day = new Date(`${booking.date}T12:00:00Z`).getUTCDay();
+  return `${booking.date}（${WEEKDAY[day]}）${booking.time}`;
 }
 
 function localTime(iso: string): string {
@@ -63,11 +79,12 @@ export async function summarizeSession(client: MessagesClient, session: ChatSess
     ...fallbackOptions(MODEL),
   });
   if (response.stop_reason === "refusal") return "";
-  return response.content
+  const text = response.content
     .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
     .map((b) => b.text)
     .join("\n")
     .trim();
+  return matchScript(text, "Simplified Chinese");
 }
 
 export function composeFollowUpEmail(
@@ -87,6 +104,10 @@ export function composeFollowUpEmail(
     `开始时间：${localTime(session.startedAt)}`,
     `最后活动：${localTime(session.lastActivityAt)}`,
     `结束原因：${REASON_LABEL[reason]}`,
+    ...(session.booking ? [`预约请求：${bookingLabel(session.booking)}（已另发预约邮件，需致电确认）`] : []),
+    ...(session.capped
+      ? [`使用次数：该 IP 今天第 ${session.opensToday} 次开启估价助手（超过每天 3 次），已自动请客户直接致电，没有调用 AI`]
+      : []),
     "",
     "—— 已给出的估价 ——",
     ...(session.estimates.length ? session.estimates.map(estimateLine) : ["（没有生成估价）"]),
@@ -99,7 +120,7 @@ export function composeFollowUpEmail(
       ? session.transcript.map((line) => `${line.role === "user" ? "客户" : "助手"}（${localTime(line.at)}）：\n${line.text}\n`)
       : ["（无）"]),
     "",
-    "估价按工时 $120/小时 + 零件标价计算，仅供参考，不是正式报价。",
+    "估价按工时 $120/小时 + 零件标价计算；换机油、换胎、空调加雪种按店里一口价。仅供参考，不是正式报价。",
   ];
   return { subject, text: lines.join("\n") };
 }
@@ -148,5 +169,32 @@ export function createFollowUpHandler(client: () => MessagesClient | null, maile
       // Never lose the lead: keep the full email in the log if sending fails.
       console.error("repair-followup email failed", (error as Error).message, JSON.stringify(email));
     }
+  };
+}
+
+/** Email to the shop when a visitor requests an appointment from the booking card. */
+export function composeBookingEmail(
+  lead: { name: string; phone: string },
+  locale: string,
+  booking: { date: string; time: string },
+  session: ChatSession | undefined,
+): OutgoingEmail {
+  const estimates = session?.estimates ?? [];
+  const vehicle = estimates[0]?.vehicle ?? "";
+  return {
+    subject: `【网站预约请求】${lead.name} ${lead.phone} · ${bookingLabel(booking)}${vehicle ? ` · ${vehicle}` : ""}`,
+    text: [
+      "网站维修估价助手收到一个预约请求，请致电或 WhatsApp 跟客户确认。",
+      "",
+      `客户姓名：${lead.name}`,
+      `客户电话：${lead.phone}`,
+      `使用语言：${LANGUAGE_LABEL[locale] ?? locale}`,
+      `希望到店：${bookingLabel(booking)}`,
+      "",
+      "—— 已给出的估价 ——",
+      ...(estimates.length ? estimates.map(estimateLine) : ["（没有记录到估价）"]),
+      "",
+      "完整对话和 AI 摘要会在客户离开页面后另发一封跟进邮件。",
+    ].join("\n"),
   };
 }

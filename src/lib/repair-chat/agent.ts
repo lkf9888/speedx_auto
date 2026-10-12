@@ -1,7 +1,8 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { decodeVehicleKey, describeVehicle, type CatalogApi } from "@/lib/worldpac/catalog";
 import { WorldpacError } from "@/lib/worldpac/client";
-import { SYSTEM_PROMPT, turnContext } from "./prompt";
+import { detectCustomerLanguage, SYSTEM_PROMPT, turnContext } from "./prompt";
+import { matchScript } from "./script";
 import { runTool, statusForTool, TOOLS, type ChatEvent } from "./tools";
 
 /**
@@ -73,6 +74,8 @@ export async function runChat(
   onEvent: (event: ChatEvent) => void,
   newEstimateId: () => string,
 ): Promise<ChatResult> {
+  const earlierCustomerMessages = request.history.filter((t) => t.role === "user").map((t) => t.text).reverse();
+  const language = detectCustomerLanguage(request.message, request.locale, earlierCustomerMessages);
   // Text-only history: no thinking or tool blocks from earlier turns are
   // replayed, so nothing in the prefix can be invalidated between requests.
   const messages: Anthropic.Beta.BetaMessageParam[] = [
@@ -82,7 +85,7 @@ export async function runChat(
         request.locale,
         knownVehicle(request.vehicleKey),
         request.message,
-        request.history.filter((t) => t.role === "user").map((t) => t.text).reverse(),
+        earlierCustomerMessages,
       ),
     },
   ];
@@ -114,11 +117,14 @@ export async function runChat(
       (block): block is Anthropic.Beta.BetaToolUseBlock => block.type === "tool_use",
     );
     if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
-      const text = toPlainText(
-        response.content
-          .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
-          .map((block) => block.text)
-          .join("\n"),
+      const text = matchScript(
+        toPlainText(
+          response.content
+            .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
+            .map((block) => block.text)
+            .join("\n"),
+        ),
+        language,
       );
       return { text, events };
     }
@@ -132,6 +138,7 @@ export async function runChat(
           use.name,
           (use.input ?? {}) as Record<string, unknown>,
           newEstimateId,
+          request.locale,
         );
         outcome.events.forEach(emit);
         results.push({

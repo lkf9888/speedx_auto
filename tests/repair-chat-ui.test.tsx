@@ -41,10 +41,21 @@ function ndjson(events: unknown[], status = 200) {
 const lead = { name: "Kevin", phone: "604-555-0182" };
 const SESSION = "c".repeat(32);
 
-/** Answers /api/repair-lead with ok and /api/repair-chat with the queued streams. */
+const BOOKING_DAYS = [
+  { date: "2026-10-14", slots: ["11:00", "11:30", "16:30"] },
+  { date: "2026-11-02", slots: ["11:00"] },
+];
+
+/**
+ * Answers /api/repair-lead with ok, /api/repair-booking with open days (GET)
+ * or ok (POST), and /api/repair-chat with the queued streams.
+ */
 function api(...chatResponses: Response[]) {
-  return vi.fn(async (url: string) => {
+  return vi.fn(async (url: string, init?: RequestInit) => {
     if (url === "/api/repair-lead") return Response.json({ ok: true, sessionId: SESSION });
+    if (url === "/api/repair-booking") {
+      return init?.method === "POST" ? Response.json({ ok: true }) : Response.json({ days: BOOKING_DAYS });
+    }
     const next = chatResponses.shift();
     if (!next) throw new Error("no chat response queued");
     return next;
@@ -167,6 +178,97 @@ describe("RepairChat", () => {
     await waitFor(() => expect(screen.getByText(zhCN.repairChat.errors.busy)).toBeInTheDocument());
   });
 
+  it("offers the booking card once, after the first estimate, and sends the chosen slot", async () => {
+    const fetchMock = api(
+      ndjson([{ type: "estimate", estimate }, { type: "message", text: "About $291." }, { type: "done" }]),
+      ndjson([{ type: "estimate", estimate: { ...estimate, id: "E-SECOND" } }, { type: "message", text: "Rear too." }, { type: "done" }]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RepairChat locale="zh-CN" dict={zhCN} pagePath="/zh-CN/auto-repair" />);
+    await activate(zhCN);
+    const b = zhCN.repairChat.booking;
+
+    await userEvent.type(screen.getByLabelText(zhCN.repairChat.placeholder), "前刹车片{Enter}");
+    const card = await screen.findByTestId("booking-card");
+    expect(card).toHaveTextContent(b.screenshot);
+    const submit = screen.getByRole("button", { name: b.submit });
+    expect(submit).toBeDisabled();
+
+    // Only bookable days are enabled; Oct 13 (not in the list) is not.
+    await waitFor(() => expect(screen.getByRole("button", { name: /10月14日/ })).toBeEnabled());
+    expect(screen.getByRole("button", { name: /10月13日/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: /10月14日/ }));
+    await userEvent.click(screen.getByRole("button", { name: "11:30" }));
+    await userEvent.click(submit);
+    expect(await screen.findByText(/已收到您的预约请求/)).toHaveTextContent("11:30");
+
+    const post = fetchMock.mock.calls.find(
+      ([url, init]) => url === "/api/repair-booking" && (init as RequestInit | undefined)?.method === "POST",
+    ) as unknown as [string, RequestInit];
+    expect(JSON.parse(post[1].body as string)).toEqual({
+      locale: "zh-CN",
+      lead,
+      sessionId: SESSION,
+      date: "2026-10-14",
+      time: "11:30",
+    });
+
+    await userEvent.type(screen.getByLabelText(zhCN.repairChat.placeholder), "后面也要{Enter}");
+    await screen.findByText("Rear too.");
+    expect(screen.getAllByTestId("booking-card")).toHaveLength(1);
+  });
+
+  it("renders flat-price and team-quote cards", async () => {
+    const flat = {
+      ...estimate,
+      id: "E-FLAT",
+      kind: "flat",
+      service: "换机油",
+      position: "普通轿车 / 小 SUV",
+      laborHours: 0,
+      laborWalkIn: 0,
+      partOptions: [
+        { description: "普通机油 0W-20", series: "oil_standard", unitListPrice: 95, quantity: 1, total: 95, inStockLocally: false, note: "" },
+        { description: "高级机油 0W-30", series: "oil_premium", unitListPrice: 120, quantity: 1, total: 120, inStockLocally: false, note: "" },
+      ],
+      totalLow: 95,
+      totalHigh: 120,
+      laborNote: "",
+      partsNote: "一口价，含机油和机油滤芯。",
+    };
+    const team = { ...estimate, id: "E-TEAM", kind: "team_quote", service: "换机油", partOptions: [], totalLow: 0, totalHigh: 0, laborNote: "" };
+    vi.stubGlobal(
+      "fetch",
+      api(ndjson([{ type: "estimate", estimate: flat }, { type: "estimate", estimate: team }, { type: "message", text: "好的" }, { type: "done" }])),
+    );
+    render(<RepairChat locale="zh-CN" dict={zhCN} pagePath="/zh-CN/auto-repair" />);
+    await activate(zhCN);
+    await userEvent.type(screen.getByLabelText(zhCN.repairChat.placeholder), "换机油{Enter}");
+    await screen.findByText("好的");
+
+    const [flatCard, teamCard] = screen.getAllByTestId("estimate-card");
+    expect(flatCard).toHaveTextContent(zhCN.repairChat.estimate.flatOptions);
+    expect(flatCard).toHaveTextContent("$95.00 – $120.00");
+    expect(flatCard).toHaveTextContent("含机油和机油滤芯");
+    expect(flatCard).not.toHaveTextContent(zhCN.repairChat.estimate.labor);
+    expect(teamCard).toHaveTextContent(zhCN.repairChat.estimate.teamQuote);
+    expect(teamCard).not.toHaveTextContent("$");
+    expect(screen.getAllByTestId("screenshot-tip")).toHaveLength(1);
+  });
+
+  it("shows the call-us message instead of the chat when over today's limit", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ ok: true, sessionId: SESSION, capped: true })),
+    );
+    render(<RepairChat locale="zh-TW" dict={zhTW} pagePath="/zh-TW/auto-repair" />);
+    await activate(zhTW);
+    expect(await screen.findByText(/看到您今天已經多次聯絡我們了/)).toHaveTextContent("+1 (778) 917-0710");
+    expect(screen.queryByLabelText(zhTW.repairChat.placeholder)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: zhTW.repairChat.starters[0] })).not.toBeInTheDocument();
+    expect(screen.getByTestId("capped-contact")).toBeInTheDocument();
+  });
+
   it("has complete copy in every locale", () => {
     for (const dict of [en, zhCN, zhTW]) {
       expect(dict.repairChat.starters).toHaveLength(3);
@@ -174,6 +276,9 @@ describe("RepairChat", () => {
       expect(dict.privacy.sections.some((s) => /Claude/.test(s.body))).toBe(true);
       expect(dict.repairChat.greeting).toContain("{name}");
       expect(dict.repairChat.greeting).toContain("VIN");
+      expect(dict.repairChat.capped).toContain("{phone}");
+      expect(dict.repairChat.booking.done).toContain("{slot}");
+      expect(dict.repairChat.booking.weekdays).toHaveLength(7);
     }
   });
 });

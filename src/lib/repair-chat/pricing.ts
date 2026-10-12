@@ -1,4 +1,5 @@
 import type { PartOption, ServiceQuote } from "@/lib/worldpac/catalog";
+import { flatWord, flatWordEn, type FlatQuote } from "./flat-price";
 
 /** Posted shop labor rate for walk-in customers, CAD per hour. */
 export const WALK_IN_LABOR_RATE = 120;
@@ -15,9 +16,18 @@ export interface EstimatePartOption {
   note: string;
 }
 
+/**
+ * labor: labor-guide time × rate + parts list price (the default).
+ * flat: the shop's posted flat price (oil change, tires, A/C recharge).
+ * team_quote: no price; the customer is asked to contact the team.
+ */
+export type EstimateKind = "labor" | "flat" | "team_quote";
+
 /** Everything the UI renders. Built only from server-side lookups. */
 export interface EstimateCard {
   id: string;
+  /** Missing on cards made before flat prices existed: treat as "labor". */
+  kind?: EstimateKind;
   vehicle: string;
   service: string;
   position: string;
@@ -68,6 +78,7 @@ export function buildEstimate(
   const laborReferral = laborCost(quote.laborHours, true);
   return {
     id,
+    kind: "labor",
     vehicle,
     service: quote.serviceName,
     position: quote.position,
@@ -90,16 +101,125 @@ export function buildEstimate(
   };
 }
 
-/** What the model sees about an estimate: the same numbers, as plain text. */
+const emptyPrices = {
+  laborHours: 0,
+  laborRate: WALK_IN_LABOR_RATE,
+  laborWalkIn: 0,
+  laborReferral: 0,
+  laborNote: "",
+  otherPartNames: [] as string[],
+};
+
+/** Card for one of the shop's flat-price services, worded in the page language. */
+export function buildFlatEstimate(
+  vehicle: string,
+  quote: Extract<FlatQuote, { status: "ok" }>,
+  locale: string,
+  id: string,
+  now = new Date(),
+): EstimateCard {
+  const partOptions: EstimatePartOption[] = quote.options.map((o) => ({
+    description: flatWord(locale, o.code),
+    series: o.code,
+    unitListPrice: o.unitPrice,
+    quantity: o.quantity,
+    total: money(o.unitPrice * o.quantity),
+    inStockLocally: false,
+    note: "",
+  }));
+  const totals = partOptions.map((p) => p.total);
+  const low = Math.min(...totals);
+  const high = Math.max(...totals);
+  const noteKey = quote.service === "oil_change" ? "oil_note" : quote.service === "tire_change" ? "tire_note" : "ac_note";
+  return {
+    id,
+    kind: "flat",
+    vehicle,
+    service: flatWord(locale, quote.service),
+    position: quote.size ? flatWord(locale, quote.size) : "",
+    ...emptyPrices,
+    primaryPartName: "",
+    partOptions,
+    partsLow: low,
+    partsHigh: high,
+    totalLow: low,
+    totalHigh: high,
+    referralTotalLow: low,
+    referralTotalHigh: high,
+    partsNote: flatWord(locale, noteKey),
+    createdAt: now.toISOString(),
+  };
+}
+
+/** Card with no price that asks the customer to contact the team for a quote. */
+export function buildTeamQuoteCard(
+  vehicle: string,
+  service: string,
+  reason: string,
+  id: string,
+  now = new Date(),
+): EstimateCard {
+  return {
+    id,
+    kind: "team_quote",
+    vehicle,
+    service,
+    position: "",
+    ...emptyPrices,
+    primaryPartName: "",
+    partOptions: [],
+    partsLow: 0,
+    partsHigh: 0,
+    totalLow: 0,
+    totalHigh: 0,
+    referralTotalLow: 0,
+    referralTotalHigh: 0,
+    partsNote: reason,
+    createdAt: now.toISOString(),
+  };
+}
+
+/**
+ * What the model sees about an estimate: the same numbers, as plain text.
+ * Every total the customer might ask about is computed here, so the model
+ * only ever repeats numbers and never adds them up itself.
+ */
 export function summarizeEstimateForModel(card: EstimateCard): string {
+  if (card.kind === "team_quote") {
+    return [
+      `Card ${card.id} shown to the customer: "${card.service}" for ${card.vehicle} has no online price and needs a quote from the team.`,
+      `Reason (internal): ${card.partsNote}`,
+      "Tell the customer briefly that the team will confirm the price by WhatsApp or phone (buttons on the card). Do not give or guess any price for this job.",
+    ].join("\n");
+  }
+  if (card.kind === "flat") {
+    const lines = [
+      `Flat-price estimate ${card.id} shown to the customer as a card.`,
+      `Vehicle: ${card.vehicle}. Service: ${card.service}${card.position ? ` (${card.position})` : ""}.`,
+      "Options (shop flat price, before tax): " +
+        card.partOptions
+          .map(
+            (p) =>
+              `${flatWordEn(p.series)} ${p.quantity > 1 ? `$${p.unitListPrice} × ${p.quantity} = ` : ""}$${p.total}`,
+          )
+          .join("; ") +
+        ".",
+      `Total before tax: ${card.totalLow === card.totalHigh ? `$${card.totalLow}` : `$${card.totalLow}–$${card.totalHigh} depending on the option`}.`,
+    ];
+    if (card.partsNote) lines.push(`Note shown on the card: ${card.partsNote}`);
+    return lines.join("\n");
+  }
   const lines = [
     `Estimate ${card.id} shown to the customer as a card.`,
     `Vehicle: ${card.vehicle}. Service: ${card.service}${card.position ? ` (${card.position})` : ""}.`,
     `Labor: ${card.laborHours} h × $${card.laborRate}/h = $${card.laborWalkIn}.`,
     card.partOptions.length
-      ? `${card.primaryPartName} options (list price): ` +
+      ? `${card.primaryPartName} options (list price → total with labor): ` +
         card.partOptions
-          .map((p) => `${p.description}${p.quantity > 1 ? ` ×${p.quantity}` : ""} $${p.total}`)
+          .map(
+            (p) =>
+              `${p.description}${p.quantity > 1 ? ` ×${p.quantity}` : ""} $${p.total} → total $${money(p.total + card.laborWalkIn)}`,
+          )
           .join("; ") +
         "."
       : card.partsNote || "No list-priced part found; the estimate covers labor only.",
