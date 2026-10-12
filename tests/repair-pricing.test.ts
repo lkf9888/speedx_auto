@@ -55,3 +55,12 @@ describe("repair pricing", () => {
     expect(summary).toContain("Brake Hydraulic System Bleed");
   });
 });
+
+describe("referral pricing stays out of the model's view", () => {
+  it("does not include referral figures in the estimate summary", () => {
+    const summary = summarizeEstimateForModel(buildEstimate("2019 Toyota Camry", quote, "E-9"));
+    expect(summary).not.toMatch(/referral/i);
+    expect(summary).not.toContain("105.6");
+    expect(summary).not.toContain("264.65");
+  });
+});

@@ -95,7 +95,7 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
   const lines = [
     `Estimate ${card.id} shown to the customer as a card.`,
     `Vehicle: ${card.vehicle}. Service: ${card.service}${card.position ? ` (${card.position})` : ""}.`,
-    `Labor: ${card.laborHours} h × $${card.laborRate}/h = $${card.laborWalkIn} (referral rate: $${card.laborReferral}).`,
+    `Labor: ${card.laborHours} h × $${card.laborRate}/h = $${card.laborWalkIn}.`,
     card.partOptions.length
       ? `${card.primaryPartName} options (list price): ` +
         card.partOptions
@@ -103,7 +103,7 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
           .join("; ") +
         "."
       : card.partsNote || "No list-priced part found; the estimate covers labor only.",
-    `Total before tax: $${card.totalLow}–$${card.totalHigh} (referral: $${card.referralTotalLow}–$${card.referralTotalHigh}).`,
+    `Total before tax: $${card.totalLow}–$${card.totalHigh}.`,
   ];
   if (card.laborNote) lines.push(`Labor guide note: ${card.laborNote}`);
   if (card.otherPartNames.length) {

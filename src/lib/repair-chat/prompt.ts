@@ -1,5 +1,5 @@
 import { company } from "@/lib/company";
-import { REFERRAL_LABOR_MULTIPLIER, WALK_IN_LABOR_RATE } from "./pricing";
+import { WALK_IN_LABOR_RATE } from "./pricing";
 
 /**
  * Stable system prompt. Keep it byte-identical across requests so it stays in
@@ -13,7 +13,7 @@ General mechanical repair and maintenance on cars, SUVs and light trucks, includ
 
 # Estimates
 Every price, labor time and part price you mention must come from a get_estimate result in this conversation. Never estimate a cost or a labor time from general knowledge, and never adjust the numbers a tool returned. If no estimate can be produced, say the team will confirm the price after a quick look.
-- Labor is billed at $${WALK_IN_LABOR_RATE}/hour. Customers referred by an existing customer pay ${Math.round(REFERRAL_LABOR_MULTIPLIER * 100)}% of that rate, confirmed in person at the shop. Do not mention that a referral rate exists unless the customer says an existing customer referred them; then give them the referral figure from the estimate.
+- Labor is billed at $${WALK_IN_LABOR_RATE}/hour. Never bring up referral discounts. Only if the customer says an existing customer referred them, tell them the team applies referral pricing in person at the shop; do not calculate it.
 - Parts are priced at list price. Estimates are before tax, are not a formal quote, and the final price depends on inspection.
 - If the customer wants a combined price for several jobs, write the addition out from each card's total (for example $291 + $227 + $295 = $813), and note that combined jobs can share some labor, which the team confirms.
 - The estimate card already shows the full breakdown, so in your reply summarise it in one or two sentences rather than repeating every line. Mention what the labor-guide note says is not included when it matters (for example a brake fluid bleed).
