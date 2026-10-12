@@ -61,7 +61,7 @@ export const zhCN: Dictionary = {
     title: "隐私与数据衡量选择",
     intro:
       "本页面说明 SPEEDX AUTO 使用的有限网站衡量功能，以及您可以作出的选择。",
-    lastUpdated: "更新于 2026 年 8 月 11 日",
+    lastUpdated: "更新于 2026 年 10 月 11 日",
     sections: [
       {
         title: "您的选择",
@@ -80,12 +80,59 @@ export const zhCN: Dictionary = {
         body: "浏览器只会在 speedx-consent-v1 中保存您选择的接受或拒绝状态。SPEEDX AUTO 不会在该偏好中存放付款、身份或车辆资料。",
       },
       {
+        title: "维修估价助手",
+        body: "如果您使用汽车维修页面上的估价助手，您的消息会发送到 Anthropic 的 Claude 人工智能服务以生成回复，车辆年份、品牌、型号、VIN 和所需维修项目会在我们零件供应商的目录中查询。本网站不会在服务器或您的浏览器中保存对话，离开或刷新页面即清除。请不要在对话中填写姓名、电话等个人信息。",
+      },
+      {
         title: "更改选择",
         body: "在网站加入偏好管理功能前，您可以清除浏览器中本网站的存储数据并重新加载页面，再次作出选择。您也可以通过联系页面上的方式联系我们。",
       },
     ],
   },
   autoRepair: zhCNAutoRepair,
+  repairChat: {
+    eyebrow: "在线估价",
+    title: "描述车辆问题，马上得到参考价",
+    intro: "告诉助手您的车型和故障现象。它会分析可能的原因，并按本店每小时 $120 的工时费、标准工时和当前零件标价算出参考价。",
+    placeholder: "例如：2019 凯美瑞 LE，刹车时有摩擦声",
+    send: "发送",
+    reset: "重新开始",
+    starters: [
+      "刹车时有尖锐的响声",
+      "发动机故障灯亮了",
+      "2018 本田思域换前刹车片多少钱？",
+    ],
+    status: {
+      thinking: "思考中…",
+      vehicle: "正在查询车型…",
+      services: "正在查询标准工时…",
+      estimate: "正在计算零件和工时…",
+    },
+    estimate: {
+      title: "参考报价",
+      vehicle: "车辆",
+      labor: "工时",
+      hoursUnit: "小时",
+      parts: "零件选项（标价）",
+      laborOnly: "未查到零件标价，零件费到店确认",
+      inStock: "本地有货",
+      total: "预计总价",
+      referral: "老客户推荐价",
+      beforeTax: "未含税",
+      notIncluded: "工时说明",
+      mayNeed: "可能还需要",
+      disclaimer: "仅供参考，不是正式报价。最终价格以到店检查为准。",
+      book: "WhatsApp 预约",
+      call: "打电话",
+    },
+    whatsappIntro: "您好 SPEEDX，我在网上得到一个参考报价",
+    errors: {
+      busy: "当前请求太多，请几分钟后再试，或直接通过 WhatsApp 联系我们。",
+      unavailable: "估价助手暂时不可用，请通过 WhatsApp 或电话联系我们。",
+      empty: "抱歉，这个问题我没能回答。请通过 WhatsApp 或电话联系我们，团队会协助您。",
+    },
+    privacyNote: "回复由人工智能生成。除车辆信息外，请勿填写个人信息。",
+  },
   hero: {
     eyebrow: "列治文 Turo 车辆托管 · 2021 年创立",
     title: "让您闲置的爱车每月帮您赚钱",

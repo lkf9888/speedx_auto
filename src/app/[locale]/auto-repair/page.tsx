@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ContactBar } from "@/components/ContactBar";
+import { RepairChat } from "@/components/RepairChat";
 import { Container } from "@/components/Container";
 import { StructuredData } from "@/components/StructuredData";
 import { isLocale, type Locale } from "@/i18n/config";
@@ -89,6 +90,10 @@ export default async function AutoRepairPage({
           </div>
         </Container>
       </section>
+
+      {process.env.NEXT_PUBLIC_REPAIR_CHAT_ENABLED === "true" && (
+        <RepairChat locale={locale} dict={dict} pagePath={pagePath} />
+      )}
 
       <section className="py-16 sm:py-20">
         <Container>

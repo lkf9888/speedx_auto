@@ -11,7 +11,7 @@ const contactConversionDestinations = {
 
 export type ContactMethod = "whatsapp" | "phone" | "wechat" | "email";
 export type ContactIntent = "hosting" | "auto_repair" | "general";
-export type ContactPlacement = "hero" | "middle" | "footer" | "sticky_mobile";
+export type ContactPlacement = "hero" | "middle" | "footer" | "sticky_mobile" | "chat";
 
 export interface ContactClickEvent {
   method: ContactMethod;

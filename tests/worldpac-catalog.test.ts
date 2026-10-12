@@ -1,0 +1,240 @@
+import { describe, expect, it } from "vitest";
+import {
+  decodeVehicleKey,
+  encodeVehicleKey,
+  identifyByYearMakeModel,
+  quoteService,
+  refineVehicle,
+  representativeOptions,
+  sanitizePartQuotes,
+  scoreService,
+  type CatalogApi,
+  type VehicleRef,
+} from "@/lib/worldpac/catalog";
+
+const camry: VehicleRef = {
+  baseVehicleId: 146565,
+  label: "2019 Toyota Camry",
+  attributes: [
+    { name: "SubModel", id: 269, label: "LE" },
+    { name: "EngineBase", id: 17637, label: "2.5 L4" },
+  ],
+};
+
+function quote(overrides: Record<string, unknown>) {
+  return {
+    appID: "1",
+    partDescription: "Brake Pad Set, Ceramic",
+    seriesDescription: "PRO-ACT",
+    listPrice: 159.05,
+    unitPrice: 78.86,
+    jobberPrice: 101.11,
+    wholesalePrice: 77.77,
+    dcDirectUnitPrice: 76.49,
+    corePrice: 12.34,
+    availability: "Tuesday-local",
+    qtyAvailable: 5,
+    position: { description: "Front", id: 22 },
+    ...overrides,
+  };
+}
+
+/** Records calls and answers from a path → handler table. */
+function fakeApi(routes: Record<string, (data: unknown) => unknown>) {
+  const calls: Array<{ path: string; data: unknown }> = [];
+  const api: CatalogApi = {
+    async get<T>(path: string) {
+      calls.push({ path, data: null });
+      const key = Object.keys(routes).find((k) => path.startsWith(k));
+      if (!key) throw new Error(`unexpected GET ${path}`);
+      return routes[key](null) as T;
+    },
+    async post<T>(path: string, data: unknown) {
+      calls.push({ path, data });
+      const handler = routes[path];
+      if (!handler) throw new Error(`unexpected POST ${path}`);
+      return handler(data) as T;
+    },
+  };
+  return { api, calls };
+}
+
+describe("sanitizePartQuotes", () => {
+  it("keeps the list price and drops every account price", () => {
+    const options = sanitizePartQuotes(
+      {
+        applications: [{ appID: "1", qtyPerCar: 1, applicationNote: "w/ Electronic Parking Brake" }],
+        quotes: [{ productQuotes: [quote({})] }],
+      },
+      22,
+    );
+    expect(options).toEqual([
+      {
+        description: "Brake Pad Set, Ceramic",
+        series: "PRO-ACT",
+        listPrice: 159.05,
+        quantity: 1,
+        inStockLocally: true,
+        note: "w/ Electronic Parking Brake",
+      },
+    ]);
+    const serialized = JSON.stringify(options);
+    for (const leaked of ["78.86", "101.11", "77.77", "76.49", "12.34", "unitPrice", "jobber", "wholesale"]) {
+      expect(serialized).not.toContain(leaked);
+    }
+  });
+
+  it("filters to the labor position, reads quantity per car, and skips unpriced parts", () => {
+    const options = sanitizePartQuotes(
+      {
+        applications: [{ appID: "2", qtyPerCar: 2 }],
+        quotes: [
+          {
+            productQuotes: [
+              quote({ appID: "2", partDescription: "Rotor", listPrice: 90, position: { description: "Front", id: 22 } }),
+              quote({ appID: "3", partDescription: "Rear pad", listPrice: 80, position: { description: "Rear", id: 30 } }),
+              quote({ appID: "4", partDescription: "No price", listPrice: 0 }),
+            ],
+          },
+        ],
+      },
+      22,
+    );
+    expect(options.map((o) => [o.description, o.quantity])).toEqual([["Rotor", 2]]);
+  });
+});
+
+describe("representativeOptions", () => {
+  it("returns the cheapest, a middle, and the most expensive option", () => {
+    const make = (price: number) => ({
+      description: `p${price}`,
+      series: "",
+      listPrice: price,
+      quantity: 1,
+      inStockLocally: true,
+      note: "",
+    });
+    const picked = representativeOptions([make(150), make(100), make(120), make(200), make(130)]);
+    expect(picked.map((p) => p.listPrice)).toEqual([100, 130, 200]);
+  });
+});
+
+describe("vehicle keys", () => {
+  it("round-trips a vehicle", () => {
+    expect(decodeVehicleKey(encodeVehicleKey(camry))).toEqual(camry);
+  });
+
+  it("rejects tampered or malformed keys", () => {
+    const tampered = Buffer.from(
+      JSON.stringify({ b: 1, l: "x", a: [["Sub Model; drop", 1, "LE"]] }),
+    ).toString("base64url");
+    expect(decodeVehicleKey(tampered)).toBeNull();
+    expect(decodeVehicleKey("not-a-key")).toBeNull();
+    expect(decodeVehicleKey(Buffer.from(JSON.stringify({ b: -5, l: "x", a: [] })).toString("base64url"))).toBeNull();
+  });
+});
+
+describe("scoreService", () => {
+  it("ranks the matching labor operation first", () => {
+    const names = ["Brake Line R&R", "Brake Pads R&R", "Disc Brake Caliper R&R"];
+    const best = names.sort((a, b) => scoreService("front brake pads", b) - scoreService("front brake pads", a))[0];
+    expect(best).toBe("Brake Pads R&R");
+    expect(scoreService("rotors", "Brake Rotor R&R")).toBeGreaterThan(0);
+  });
+});
+
+describe("vehicle lookup", () => {
+  it("asks only about attributes with several enabled options", async () => {
+    const { api } = fakeApi({
+      "vehicle/refine": () => ({
+        recommendedVehAttrs: [
+          {
+            attrName: "SubModel",
+            attrDesc: "Sub Model",
+            vehAttrs: [
+              { isEnabled: true, value: { key: 191, value: "EX" } },
+              { isEnabled: true, value: { key: 113, value: "LX" } },
+              { isEnabled: false, value: { key: 802, value: "Type R" } },
+            ],
+          },
+          { attrName: "EngineBase", attrDesc: "Engine", vehAttrs: [{ isEnabled: true, value: { key: 17502, value: "2.0 L4" } }] },
+          { attrName: "Valves", attrDesc: "Valves", vehAttrs: [{ isEnabled: true, value: { key: 1, value: "16" } }, { isEnabled: true, value: { key: 2, value: "24" } }] },
+        ],
+      }),
+    });
+    const result = await refineVehicle(api, { baseVehicleId: 141228, label: "2017 Honda Civic", attributes: [] });
+    expect(result.status).toBe("needs_details");
+    if (result.status !== "needs_details") return;
+    expect(result.questions).toEqual([{ attribute: "SubModel", label: "Sub Model", options: ["EX", "LX"] }]);
+    expect(result.vehicle.attributes).toEqual([{ name: "EngineBase", id: 17502, label: "2.0 L4" }]);
+  });
+
+  it("resolves make aliases and exact model names", async () => {
+    const { api } = fakeApi({
+      "vehicle/makesbyyear": () => ({ makes: [{ makeID: 47, makeDesc: "Chevrolet" }] }),
+      "vehicle/modelsbyyearmake": () => ({
+        models: [
+          { baseVehicleID: "1", modelDesc: "Malibu", makeDesc: "Chevrolet", yearID: 2016 },
+          { baseVehicleID: "2", modelDesc: "Malibu Limited", makeDesc: "Chevrolet", yearID: 2016 },
+        ],
+      }),
+      "vehicle/refine": () => ({ recommendedVehAttrs: [] }),
+    });
+    const result = await identifyByYearMakeModel(api, 2016, "chevy", "malibu");
+    expect(result).toEqual({
+      status: "ok",
+      vehicle: { baseVehicleId: 1, label: "2016 Chevrolet Malibu", attributes: [] },
+    });
+  });
+});
+
+describe("quoteService", () => {
+  const routes = {
+    "labor-ops-list": () => ({
+      laborOperations: [
+        { applicationID: 10, assetName: "550032-1", position: { description: "Front", id: 22 }, positionID: 22 },
+        { applicationID: 11, assetName: "550032-2", position: { description: "Rear", id: 30 }, positionID: 30 },
+      ],
+      vehAttrOptions: [],
+    }),
+    "labor-ops-details": () => ({
+      laborOperation: {
+        estimateTimeHour: 1.1,
+        laborCategoryName: "Brake Pads R&R",
+        applicationNote: "Does not include: Brake Hydraulic System Bleed.",
+        applications: [
+          { categoryCode: "N1069", categoryName: "Anti Rattle Spring / Clip" },
+          { categoryCode: "N1010", categoryName: "Brake Pad Set" },
+        ],
+      },
+    }),
+    pna360_cat: () => ({
+      applications: [],
+      quotes: [{ productQuotes: [quote({}), quote({ listPrice: 185.84 }), quote({ listPrice: 99, position: { description: "Rear", id: 30 } })] }],
+    }),
+  };
+
+  it("asks for a position when the service has several", async () => {
+    const { api } = fakeApi(routes);
+    const result = await quoteService(api, { ...camry, baseVehicleId: 900001 }, 800550032, null);
+    expect(result).toEqual({ status: "need_position", positions: ["Front", "Rear"] });
+  });
+
+  it("prices the primary part for the chosen position", async () => {
+    const { api, calls } = fakeApi(routes);
+    const result = await quoteService(api, { ...camry, baseVehicleId: 900002 }, 800550032, "front");
+    expect(result).toMatchObject({
+      status: "ok",
+      serviceName: "Brake Pads R&R",
+      position: "Front",
+      laborHours: 1.1,
+      primaryPartName: "Brake Pad Set",
+      otherPartNames: ["Anti Rattle Spring / Clip"],
+    });
+    if (result.status !== "ok") return;
+    expect(result.partOptions.map((p) => p.listPrice)).toEqual([159.05, 185.84]);
+    const pnaCall = calls.find((c) => c.path === "pna360_cat")!.data as { partTypes: Array<{ categoryCode: string }> };
+    expect(pnaCall.partTypes[0].categoryCode).toBe("N1010");
+    expect(calls.some((c) => c.path.startsWith("vehicle/history"))).toBe(false);
+  });
+});

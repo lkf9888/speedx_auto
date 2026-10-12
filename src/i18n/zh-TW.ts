@@ -61,7 +61,7 @@ export const zhTW: Dictionary = {
     title: "隱私與資料衡量選擇",
     intro:
       "本頁面說明 SPEEDX AUTO 使用的有限網站衡量功能，以及您可以作出的選擇。",
-    lastUpdated: "更新於 2026 年 8 月 11 日",
+    lastUpdated: "更新於 2026 年 10 月 11 日",
     sections: [
       {
         title: "您的選擇",
@@ -80,12 +80,59 @@ export const zhTW: Dictionary = {
         body: "瀏覽器只會在 speedx-consent-v1 中儲存您選擇的接受或拒絕狀態。SPEEDX AUTO 不會在該偏好中存放付款、身份或車輛資料。",
       },
       {
+        title: "維修估價助手",
+        body: "如果您使用汽車維修頁面上的估價助手，您的訊息會傳送到 Anthropic 的 Claude 人工智慧服務以產生回覆，車輛年份、品牌、型號、VIN 和所需維修項目會在我們零件供應商的目錄中查詢。本網站不會在伺服器或您的瀏覽器中保存對話，離開或重新整理頁面即清除。請不要在對話中填寫姓名、電話等個人資料。",
+      },
+      {
         title: "更改選擇",
         body: "在網站加入偏好管理功能前，您可以清除瀏覽器中本網站的儲存資料並重新載入頁面，再次作出選擇。您也可以透過聯絡頁面上的方式聯絡我們。",
       },
     ],
   },
   autoRepair: zhTWAutoRepair,
+  repairChat: {
+    eyebrow: "線上估價",
+    title: "描述車輛問題，馬上得到參考價",
+    intro: "告訴助手您的車型和故障現象。它會分析可能的原因，並按本店每小時 $120 的工時費、標準工時和目前零件標價算出參考價。",
+    placeholder: "例如：2019 Camry LE，煞車時有摩擦聲",
+    send: "傳送",
+    reset: "重新開始",
+    starters: [
+      "煞車時有尖銳的響聲",
+      "引擎故障燈亮了",
+      "2018 本田 Civic 換前煞車片多少錢？",
+    ],
+    status: {
+      thinking: "思考中…",
+      vehicle: "正在查詢車型…",
+      services: "正在查詢標準工時…",
+      estimate: "正在計算零件和工時…",
+    },
+    estimate: {
+      title: "參考報價",
+      vehicle: "車輛",
+      labor: "工時",
+      hoursUnit: "小時",
+      parts: "零件選項（標價）",
+      laborOnly: "未查到零件標價，零件費到店確認",
+      inStock: "本地有貨",
+      total: "預計總價",
+      referral: "老客戶推薦價",
+      beforeTax: "未含稅",
+      notIncluded: "工時說明",
+      mayNeed: "可能還需要",
+      disclaimer: "僅供參考，不是正式報價。最終價格以到店檢查為準。",
+      book: "WhatsApp 預約",
+      call: "打電話",
+    },
+    whatsappIntro: "您好 SPEEDX，我在網上得到一個參考報價",
+    errors: {
+      busy: "目前請求太多，請幾分鐘後再試，或直接透過 WhatsApp 聯絡我們。",
+      unavailable: "估價助手暫時無法使用，請透過 WhatsApp 或電話聯絡我們。",
+      empty: "抱歉，這個問題我沒能回答。請透過 WhatsApp 或電話聯絡我們，團隊會協助您。",
+    },
+    privacyNote: "回覆由人工智慧產生。除車輛資訊外，請勿填寫個人資料。",
+  },
   hero: {
     eyebrow: "列治文 Turo 車輛託管 · 2021 年創立",
     title: "讓您閒置的愛車每月幫您賺錢",
