@@ -30,10 +30,10 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        vin: { type: ["string", "null"], description: "17-character VIN, or null" },
-        year: { type: ["integer", "null"], description: "Model year, e.g. 2019" },
-        make: { type: ["string", "null"], description: "Make in English, e.g. Toyota" },
-        model: { type: ["string", "null"], description: "Model in English, e.g. Camry" },
+        vin: { anyOf: [{ type: "string" }, { type: "null" }], description: "17-character VIN, or null" },
+        year: { anyOf: [{ type: "integer" }, { type: "null" }], description: "Model year, e.g. 2019" },
+        make: { anyOf: [{ type: "string" }, { type: "null" }], description: "Make in English, e.g. Toyota" },
+        model: { anyOf: [{ type: "string" }, { type: "null" }], description: "Model in English, e.g. Camry" },
       },
       required: ["vin", "year", "make", "model"],
       additionalProperties: false,
@@ -90,7 +90,7 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
       properties: {
         vehicle_key: { type: "string" },
         service_id: { type: "integer" },
-        position: { type: ["string", "null"], description: "e.g. Front or Rear, when asked" },
+        position: { anyOf: [{ type: "string" }, { type: "null" }], description: "e.g. Front or Rear, when asked" },
       },
       required: ["vehicle_key", "service_id", "position"],
       additionalProperties: false,
