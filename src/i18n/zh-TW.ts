@@ -81,7 +81,7 @@ export const zhTW: Dictionary = {
       },
       {
         title: "維修估價助手",
-        body: "如果您使用汽車維修頁面上的估價助手，您的訊息會傳送到 Anthropic 的 Claude 人工智慧服務以產生回覆，車輛年份、品牌、型號、VIN 和所需維修項目會在我們零件供應商的目錄中查詢。本網站不會在伺服器或您的瀏覽器中保存對話，離開或重新整理頁面即清除。請不要在對話中填寫姓名、電話等個人資料。",
+        body: "開啟汽車維修頁面上的估價助手時，您需要提供姓名和電話；SPEEDX AUTO 會收到這些資料，以及所顯示估價的車輛、維修項目和價格區間，以便團隊跟進。您的姓名和電話不會傳送給人工智慧服務。對話內容會傳送到 Anthropic 的 Claude 人工智慧服務以產生回覆，車輛年份、品牌、型號、VIN 和所需維修項目會在我們零件供應商的目錄中查詢。對話本身不會保存在我們的伺服器或您的瀏覽器中，離開或重新整理頁面即清除。",
       },
       {
         title: "更改選擇",
@@ -91,6 +91,22 @@ export const zhTW: Dictionary = {
   },
   autoRepair: zhTWAutoRepair,
   repairChat: {
+    gate: {
+      title: "開始估價",
+      intro: "請輸入姓名和電話以開啟估價助手。我們僅用於就本次估價與您聯絡。",
+      name: "姓名",
+      phone: "電話",
+      submit: "開始對話",
+      consent: "繼續即表示您同意 SPEEDX AUTO 就本次估價與您聯絡。您的姓名和電話不會提供給人工智慧服務。",
+      invalidName: "請輸入您的姓名。",
+      invalidPhone: "請輸入有效的電話號碼（至少 10 位數字）。",
+      failed: "暫時無法開啟對話，請重試，或透過 WhatsApp 聯絡我們。",
+    },
+    greeting: "{name}您好！為了給您更準確的報價，請告訴我車輛的年份、品牌和型號（或者直接提供 17 碼 VIN 車身號碼，最精準），並描述一下問題：聽到、感覺到或看到了什麼，什麼時候出現。",
+    demo: {
+      label: "報價範例",
+      caption: "以下是估價結果的樣式，價格來自一次真實查詢，僅作範例。",
+    },
     eyebrow: "線上估價",
     title: "描述車輛問題，馬上得到參考價",
     intro: "告訴助手您的車型和故障現象。它會分析可能的原因，並按本店每小時 $120 的工時費、標準工時和目前零件標價算出參考價。",
@@ -117,7 +133,6 @@ export const zhTW: Dictionary = {
       laborOnly: "未查到零件標價，零件費到店確認",
       inStock: "本地有貨",
       total: "預計總價",
-      referral: "老客戶推薦價",
       beforeTax: "未含稅",
       notIncluded: "工時說明",
       mayNeed: "可能還需要",
@@ -125,7 +140,7 @@ export const zhTW: Dictionary = {
       book: "WhatsApp 預約",
       call: "打電話",
     },
-    whatsappIntro: "您好 SPEEDX，我在網上得到一個參考報價",
+    whatsappIntro: "您好 SPEEDX，我是{name}，我在網上得到一個參考報價",
     errors: {
       busy: "目前請求太多，請幾分鐘後再試，或直接透過 WhatsApp 聯絡我們。",
       unavailable: "估價助手暫時無法使用，請透過 WhatsApp 或電話聯絡我們。",

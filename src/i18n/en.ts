@@ -80,7 +80,7 @@ export const en = {
       },
       {
         title: "Repair estimate assistant",
-        body: "If you use the estimate assistant on the auto repair page, your messages are sent to Anthropic's Claude AI service to generate replies, and the vehicle year, make, model, VIN, and requested repair are looked up in our parts supplier's catalog. The site does not store your conversation on our servers or in your browser; it is cleared when you leave or reload the page. Please do not include your name, phone number, or other personal details in the chat.",
+        body: "To open the estimate assistant on the auto repair page, you provide your name and phone number; SPEEDX AUTO receives them, together with the vehicle, service, and price range of any estimate shown, so the team can follow up. Your name and phone are not sent to the AI service. Your chat messages are sent to Anthropic's Claude AI service to generate replies, and the vehicle year, make, model, VIN, and requested repair are looked up in our parts supplier's catalog. The conversation itself is not stored on our servers or in your browser; it is cleared when you leave or reload the page.",
       },
       {
         title: "Change your preference",
@@ -90,6 +90,22 @@ export const en = {
   },
   autoRepair: enAutoRepair,
   repairChat: {
+    gate: {
+      title: "Start your estimate",
+      intro: "Enter your name and phone number to open the estimate assistant. We use them only to follow up on your estimate.",
+      name: "Name",
+      phone: "Phone",
+      submit: "Start chat",
+      consent: "By continuing, you agree SPEEDX AUTO may contact you about this estimate. Your name and phone are not shared with the AI service.",
+      invalidName: "Please enter your name.",
+      invalidPhone: "Please enter a valid phone number (at least 10 digits).",
+      failed: "Couldn't start the chat. Please try again, or message us on WhatsApp.",
+    },
+    greeting: "Hi {name}! To give you an accurate estimate, please tell me your vehicle's year, make and model (or the 17-character VIN — that's the most precise) and describe the problem: what you hear, feel or see, and when it happens.",
+    demo: {
+      label: "Sample estimate",
+      caption: "This is what an estimate looks like. Prices shown are an example from a real lookup.",
+    },
     eyebrow: "Instant estimate",
     title: "Describe the problem, get a ballpark price",
     intro: "Tell the assistant your vehicle and what it is doing. It suggests likely causes and builds an estimate from our $120/hour labor rate, labor-guide times, and current parts list prices.",
@@ -116,7 +132,6 @@ export const en = {
       laborOnly: "No list-priced part found — part cost confirmed at the shop",
       inStock: "In stock locally",
       total: "Estimated total",
-      referral: "If referred by an existing customer",
       beforeTax: "before tax",
       notIncluded: "Labor guide note",
       mayNeed: "May also need",
@@ -124,7 +139,7 @@ export const en = {
       book: "Book on WhatsApp",
       call: "Call",
     },
-    whatsappIntro: "Hi SPEEDX, I got an online estimate",
+    whatsappIntro: "Hi SPEEDX, this is {name}. I got an online estimate",
     errors: {
       busy: "Too many requests right now. Please try again in a few minutes, or message us on WhatsApp.",
       unavailable: "The estimator is unavailable right now. Please message us on WhatsApp or call.",

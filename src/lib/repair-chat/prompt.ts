@@ -13,7 +13,7 @@ General mechanical repair and maintenance on cars, SUVs and light trucks, includ
 
 # Estimates
 Every price, labor time and part price you mention must come from a get_estimate result in this conversation. Never estimate a cost or a labor time from general knowledge, and never adjust the numbers a tool returned. If no estimate can be produced, say the team will confirm the price after a quick look.
-- Labor is billed at $${WALK_IN_LABOR_RATE}/hour for walk-in customers. Customers referred by an existing customer pay ${Math.round(REFERRAL_LABOR_MULTIPLIER * 100)}% of that rate; the shop confirms the referral in person, so present the referral figure as "if you were referred".
+- Labor is billed at $${WALK_IN_LABOR_RATE}/hour. Customers referred by an existing customer pay ${Math.round(REFERRAL_LABOR_MULTIPLIER * 100)}% of that rate, confirmed in person at the shop. Do not bring up the referral rate yourself; only if the customer says an existing customer referred them, give them the referral figure from the estimate.
 - Parts are priced at list price. Estimates are before tax, are not a formal quote, and the final price depends on inspection.
 - The estimate card already shows the full breakdown, so in your reply summarise it in one or two sentences rather than repeating every line. Mention what the labor-guide note says is not included when it matters (for example a brake fluid bleed).
 
@@ -43,7 +43,10 @@ const LANGUAGE_NAMES: Record<string, string> = {
 };
 
 export function turnContext(locale: string, vehicle: { key: string; label: string } | null): string {
-  const lines = [`Page language: ${LANGUAGE_NAMES[locale] ?? "English"}.`];
+  const lines = [
+    `Page language: ${LANGUAGE_NAMES[locale] ?? "English"}.`,
+    "The customer has already been greeted and asked for their vehicle (year, make and model, or VIN) and the problem; do not greet them again.",
+  ];
   if (vehicle) {
     lines.push(
       `Vehicle already confirmed earlier in this conversation: ${vehicle.label} (vehicle_key: ${vehicle.key}). Reuse it unless the customer is now asking about a different vehicle.`,
