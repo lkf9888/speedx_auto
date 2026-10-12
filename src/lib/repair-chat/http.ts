@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { locales } from "@/i18n/config";
 import { runChat, type ChatTurn, type MessagesClient } from "@/lib/repair-chat/agent";
 import {
@@ -71,6 +71,22 @@ export function isConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   );
 }
 
+/**
+ * Evaluation runs (scripted test customers) send this header. They skip lead
+ * emails/webhooks and the per-IP limit, under their own daily cap. Only the
+ * SHA-256 of the token is in the repo; override with REPAIR_EVAL_TOKEN_SHA256.
+ */
+const EVAL_TOKEN_SHA256 =
+  process.env.REPAIR_EVAL_TOKEN_SHA256 ?? "3b681a313d5aec4e57950bfeac55f5b8a8a10bc7734cfc6d52c348e21dc70fb0";
+
+export function isEvalRequest(request: Request, expectedSha256: string = EVAL_TOKEN_SHA256): boolean {
+  const token = request.headers.get("x-repair-eval");
+  if (!token || !expectedSha256) return false;
+  const actual = createHash("sha256").update(token).digest();
+  const expected = Buffer.from(expectedSha256, "hex");
+  return expected.length === actual.length && timingSafeEqual(actual, expected);
+}
+
 function clientIp(request: Request): string {
   return (
     request.headers.get("cf-connecting-ip") ??
@@ -86,6 +102,12 @@ const leadLimiter = new RateLimiter({
   perIpDailyMax: 20,
   globalDailyMax: 500,
 });
+const evalLimiter = new RateLimiter({
+  perIpWindowMs: 60 * 1000,
+  perIpWindowMax: 1000,
+  perIpDailyMax: 3000,
+  globalDailyMax: 3000,
+});
 let anthropic: MessagesClient | null = null;
 
 export interface RouteDeps {
@@ -95,6 +117,7 @@ export interface RouteDeps {
   configured: () => boolean;
   notify: LeadNotifier;
   sessions: SessionStore;
+  evalLimiter?: RateLimiter;
 }
 
 const defaultDeps: RouteDeps = {
@@ -103,6 +126,7 @@ const defaultDeps: RouteDeps = {
   limiter,
   configured: () => isConfigured(),
   notify: createLeadNotifier(),
+  evalLimiter,
   sessions: new SessionStore(
     createFollowUpHandler(() => (isConfigured() ? (anthropic ??= new Anthropic()) : null), createMailer()),
   ),
@@ -129,6 +153,7 @@ export async function handleLead(
   const lead = parseLead(raw?.lead);
   const locale = typeof raw?.locale === "string" && (locales as readonly string[]).includes(raw.locale) ? raw.locale : null;
   if (!lead || !locale) return Response.json({ error: "invalid" }, { status: 400 });
+  if (isEvalRequest(request)) return Response.json({ ok: true, sessionId: null });
   if (deps.limiter.check(clientIp(request))) return Response.json({ error: "busy" }, { status: 429 });
   await deps.notify({ type: "lead_started", lead, locale, at: new Date().toISOString() });
   const session = deps.sessions.create(lead, locale);
@@ -177,13 +202,18 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
     body = null;
   }
   if (!body) return Response.json({ error: "invalid" }, { status: 400 });
-  const limited = deps.limiter.check(clientIp(request));
+  const evaluation = isEvalRequest(request);
+  const limited = evaluation
+    ? (deps.evalLimiter ?? deps.limiter).check("eval")
+    : deps.limiter.check(clientIp(request));
   if (limited) return Response.json({ error: "busy" }, { status: 429 });
 
   const request_ = body;
-  const session =
-    deps.sessions.get(request_.sessionId) ?? deps.sessions.create(request_.lead, request_.locale);
-  deps.sessions.record(session.id, { role: "user", text: request_.message });
+  // Evaluation traffic never opens a follow-up session or notifies the shop.
+  const sessions = evaluation ? new SessionStore(async () => {}) : deps.sessions;
+  const notify: LeadNotifier = evaluation ? async () => {} : deps.notify;
+  const session = sessions.get(request_.sessionId) ?? sessions.create(request_.lead, request_.locale);
+  sessions.record(session.id, { role: "user", text: request_.message });
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -191,11 +221,11 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
       const send = (event: StreamEvent) => {
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
         if (event.type === "estimate") {
-          deps.sessions.recordEstimate(session.id, event.estimate);
-          pendingNotices.push(deps.notify(estimateLeadEvent(request_.lead, request_.locale, event.estimate)));
+          sessions.recordEstimate(session.id, event.estimate);
+          pendingNotices.push(notify(estimateLeadEvent(request_.lead, request_.locale, event.estimate)));
         }
       };
-      if (session.id !== request_.sessionId) send({ type: "session", id: session.id });
+      if (!evaluation && session.id !== request_.sessionId) send({ type: "session", id: session.id });
       try {
         const result = await runChat(
           deps.client(),
@@ -209,7 +239,8 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
           send,
           () => `E-${randomBytes(4).toString("hex").toUpperCase()}`,
         );
-        deps.sessions.record(session.id, { role: "assistant", text: result.text });
+        sessions.record(session.id, { role: "assistant", text: result.text });
+        if (evaluation) await sessions.finish(session.id, "idle"); // drop the throwaway session's timer
         send({ type: "message", text: result.text });
       } catch (error) {
         const busy = error instanceof Anthropic.RateLimitError || error instanceof Anthropic.InternalServerError;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { handleChat, handleFinish, handleLead, isConfigured, parseBody, type RouteDeps } from "@/lib/repair-chat/http";
+import { createHash } from "node:crypto";
+import { handleChat, handleFinish, handleLead, isConfigured, isEvalRequest, parseBody, type RouteDeps } from "@/lib/repair-chat/http";
 import { SessionStore, type ChatSession, type FinishReason } from "@/lib/repair-chat/session";
 import { createLeadNotifier, parseLead, type LeadEvent } from "@/lib/repair-chat/lead";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
@@ -222,6 +223,26 @@ describe("follow-up sessions", () => {
     const { sessions, finished } = recordingSessions();
     expect((await handleFinish(request({ sessionId: "nope" }), { sessions })).status).toBe(204);
     expect((await handleFinish(request({ sessionId: "b".repeat(32) }), { sessions })).status).toBe(204);
+    expect(finished).toHaveLength(0);
+  });
+});
+
+describe("evaluation mode", () => {
+  const token = "test-eval-token";
+  const sha = createHash("sha256").update(token).digest("hex");
+
+  it("recognizes only the configured token", () => {
+    const withToken = request(validBody, { "x-repair-eval": token });
+    expect(isEvalRequest(withToken, sha)).toBe(true);
+    expect(isEvalRequest(request(validBody, { "x-repair-eval": "wrong" }), sha)).toBe(false);
+    expect(isEvalRequest(request(validBody), sha)).toBe(false);
+  });
+
+  it("does not treat a normal chat as evaluation or finish its session early", async () => {
+    const { sessions, finished } = recordingSessions();
+    const response = await handleChat(request(validBody), deps({ sessions }));
+    await response.text();
+    expect(sessions.size).toBe(1);
     expect(finished).toHaveLength(0);
   });
 });
