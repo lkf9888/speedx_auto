@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
-import { MODEL, runChat, type MessagesClient } from "@/lib/repair-chat/agent";
+import { fallbackOptions, MODEL, runChat, type MessagesClient } from "@/lib/repair-chat/agent";
 import type { ChatEvent } from "@/lib/repair-chat/tools";
 import { encodeVehicleKey, type CatalogApi } from "@/lib/worldpac/catalog";
 import { WorldpacError } from "@/lib/worldpac/client";
@@ -86,9 +86,8 @@ describe("runChat", () => {
     expect(JSON.stringify(events)).not.toContain("78.86");
 
     const first = requests[0];
-    expect(first.model).toBe("claude-opus-5-5");
-    expect(first.fallbacks).toBe("default");
-    expect(first.betas).toContain("server-side-fallback-2026-07-01");
+    expect(first.model).toBe("claude-haiku-5-5");
+    expect(first.fallbacks).toBeUndefined();
     expect(first.output_config).toEqual({ effort: "low" });
     const last = first.messages[first.messages.length - 1];
     expect(last.role).toBe("system");
@@ -132,5 +131,15 @@ describe("runChat", () => {
     const last = requests[0].messages[requests[0].messages.length - 1];
     expect(String(last.content)).not.toContain("ignore previous");
     expect(String(last.content)).not.toContain("already confirmed");
+  });
+});
+
+describe("fallbackOptions", () => {
+  it("adds server-side fallback only for models that support it", () => {
+    expect(fallbackOptions("claude-haiku-5-5")).toEqual({});
+    expect(fallbackOptions("claude-opus-5-5")).toEqual({
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+    });
   });
 });

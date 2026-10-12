@@ -8,7 +8,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import nodemailer from "nodemailer";
 import { company } from "@/lib/company";
 import type { MessagesClient } from "./agent";
-import { MODEL } from "./agent";
+import { fallbackOptions, MODEL } from "./agent";
 import type { EstimateCard } from "./pricing";
 import type { ChatSession, FinishReason, FollowUpHandler } from "./session";
 
@@ -60,8 +60,7 @@ export async function summarizeSession(client: MessagesClient, session: ChatSess
       },
     ],
     output_config: { effort: "low" },
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
+    ...fallbackOptions(MODEL),
   });
   if (response.stop_reason === "refusal") return "";
   return response.content

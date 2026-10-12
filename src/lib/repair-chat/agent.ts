@@ -4,7 +4,18 @@ import { WorldpacError } from "@/lib/worldpac/client";
 import { SYSTEM_PROMPT, turnContext } from "./prompt";
 import { runTool, statusForTool, TOOLS, type ChatEvent } from "./tools";
 
-export const MODEL = "claude-opus-5-5";
+/**
+ * Model for the chat and the follow-up summary. Override with
+ * REPAIR_CHAT_MODEL (e.g. claude-opus-5-5) without a code change.
+ */
+export const MODEL = process.env.REPAIR_CHAT_MODEL || "claude-haiku-5-5";
+
+/** Server-side refusal fallback exists for Opus/Sonnet/Fable, not Haiku 5.5 (400). */
+export function fallbackOptions(model: string) {
+  return model.startsWith("claude-haiku")
+    ? {}
+    : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const };
+}
 const MAX_STEPS = 8;
 
 export interface ChatTurn {
@@ -73,8 +84,7 @@ export async function runChat(
       tools: TOOLS,
       messages,
       output_config: { effort: "low" },
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
+      ...fallbackOptions(MODEL),
     });
 
     if (response.stop_reason === "refusal") {
