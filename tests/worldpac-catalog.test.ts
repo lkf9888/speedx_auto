@@ -300,3 +300,32 @@ describe("eval round 2 fixes", () => {
     expect(result.status === "ok" && result.vehicle.label).toBe("2003 Honda Accord");
   });
 });
+
+describe("missing part prices", () => {
+  it("asks for the trim instead of returning a labor-only card when parts depend on it", async () => {
+    const { api } = fakeApi({
+      "labor-ops-list": () => ({ laborOperations: [{ applicationID: 1, assetName: "a", positionID: 22, position: { description: "Front", id: 22 } }] }),
+      "labor-ops-details": () => ({
+        laborOperation: {
+          estimateTimeHour: 0.9,
+          laborCategoryName: "Brake Pads R&R",
+          applications: [{ categoryCode: "N1010", categoryName: "Brake Pad Set" }],
+        },
+      }),
+      pna360_cat: () => ({ quotes: [] }),
+      "vehicle/refine": () => ({
+        recommendedVehAttrs: [
+          { attrName: "SubModel", attrDesc: "Sub Model", vehAttrs: [
+            { isEnabled: true, value: { key: 1, value: "LX" } },
+            { isEnabled: true, value: { key: 2, value: "EX" } },
+          ] },
+        ],
+      }),
+    });
+    const quote = await quoteService(api, { baseVehicleId: 900004, label: "2018 Honda Civic", attributes: [] }, 800550032, null);
+    expect(quote).toEqual({
+      status: "need_details",
+      questions: [{ attribute: "SubModel", label: "Sub Model", options: ["LX", "EX"] }],
+    });
+  });
+});

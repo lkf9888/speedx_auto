@@ -640,6 +640,14 @@ export async function quoteService(
     );
   }
 
+  // No part price usually means the catalog needs the trim/engine first (e.g. brake pads).
+  if (partOptions.length === 0 && !partsNote && primary?.categoryCode) {
+    const refined = await refineVehicle(api, vehicle);
+    if (refined.status === "needs_details") {
+      return { status: "need_details", questions: refined.questions };
+    }
+  }
+
   const quote: ServiceQuote = {
     status: "ok",
     serviceName,
