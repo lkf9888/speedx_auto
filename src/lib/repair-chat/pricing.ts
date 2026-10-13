@@ -295,7 +295,7 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
   const lines = [
     `Estimate ${card.id} shown to the customer as a paper-style quote card that shows ranges only.`,
     `Vehicle: ${card.vehicle}. Service: ${card.service}${card.position ? ` (${card.position})` : ""}.`,
-    `Labor on the card: $${card.laborWalkIn} (${card.laborHours} h of labor-guide time).`,
+    `Labor on the card: $${card.laborWalkIn}.`,
     card.partOptions.length
       ? `${card.primaryPartName}: ${card.partOptions.length} option${card.partOptions.length > 1 ? "s" : ""} at list price, shown on the card only as the span $${shown.partsLow}–$${shown.partsHigh}. The card does not list the individual parts, so do not name them or give their separate prices.`
       : card.partsNote || "No list-priced part found; the estimate covers labor only.",

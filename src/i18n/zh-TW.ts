@@ -167,7 +167,7 @@ export const zhTW: Dictionary = {
       title: "預約到店時間",
       screenshot: "別忘了先截圖保存上面的報價，到店時出示即可。",
       intro: "選一個方便的日期和時間，店裡會透過電話或 WhatsApp 跟您確認。",
-      hours: "可預約時間：週一至週六 11:00–17:00，法定假日除外。",
+      hours: "網上可約時段：週一至週六 11:00–17:00，法定假日除外。營業時間為 10:00–18:30，其他時間請透過 WhatsApp 或電話預約。",
       pickDate: "選擇日期",
       pickTime: "選擇時間",
       prevMonth: "上個月",

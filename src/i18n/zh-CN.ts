@@ -167,7 +167,7 @@ export const zhCN: Dictionary = {
       title: "预约到店时间",
       screenshot: "别忘了先截图保存上面的报价，到店时出示即可。",
       intro: "选一个方便的日期和时间，店里会通过电话或 WhatsApp 跟您确认。",
-      hours: "可预约时间：周一至周六 11:00–17:00，法定节假日除外。",
+      hours: "网上可约时段：周一至周六 11:00–17:00，法定节假日除外。营业时间为 10:00–18:30，其他时间请通过 WhatsApp 或电话预约。",
       pickDate: "选择日期",
       pickTime: "选择时间",
       prevMonth: "上个月",

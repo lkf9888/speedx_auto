@@ -264,3 +264,10 @@ describe("safety detection", () => {
     expect(safetyWarning("front pads squeak", "English")).toBeNull();
   });
 });
+
+describe("what the model is told about pricing", () => {
+  it("never gives the hourly rate or the referral discount", async () => {
+    const { SYSTEM_PROMPT } = await import("@/lib/repair-chat/prompt");
+    expect(SYSTEM_PROMPT).not.toMatch(/\$120|\/hour|referral pricing in person|80%/);
+  });
+});

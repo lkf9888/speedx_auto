@@ -166,7 +166,7 @@ export const en = {
       title: "Book a time at the shop",
       screenshot: "Don't forget to screenshot the estimate above and show it when you come in.",
       intro: "Pick a day and time that suits you. We'll confirm by phone or WhatsApp.",
-      hours: "Appointments Monday–Saturday, 11:00–17:00, closed on statutory holidays.",
+      hours: "Online booking: Monday–Saturday, 11:00–17:00, not on statutory holidays. The shop is open 10:00–18:30; for other times, message us on WhatsApp or call.",
       pickDate: "Choose a date",
       pickTime: "Choose a time",
       prevMonth: "Previous month",

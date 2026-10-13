@@ -141,6 +141,8 @@ describe("estimate summary for the model", () => {
     expect(summary).toContain("$262–$350");
     expect(summary).not.toContain("Pads A");
     expect(summary).not.toMatch(/referral|105\.6|264\.65/i);
+    // Neither the hourly rate nor the hours that would reveal it reach the model.
+    expect(summary).not.toMatch(/\/h\b|per hour|1\.1 ?h|\$120/i);
   });
 });
 
