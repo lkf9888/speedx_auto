@@ -182,7 +182,7 @@ export const zhCN: Dictionary = {
       none: "目前网上没有可预约的时间，请通过 WhatsApp 或电话联系我们。",
     },
     capped: "看到您今天已经多次联系我们了，谢谢您的信任！如果还有更多问题，欢迎直接致电店里 {phone}（也可以 WhatsApp），我们会为您详细介绍服务细节。",
-    privacyNote: "回复由人工智能生成。除车辆信息外，请勿填写个人信息。",
+    privacyNote: "回复由 Claude 生成。汽车故障原因多变，尽量将问题描述得越详细越好，AI 能够给您提供更精准的报价。",
   },
   hero: {
     eyebrow: "列治文 Turo 车辆托管 · 2021 年创立",
