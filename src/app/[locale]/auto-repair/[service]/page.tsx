@@ -4,7 +4,6 @@ import { RepairServicePage } from "@/components/RepairServicePage";
 import { StructuredData } from "@/components/StructuredData";
 import { isLocale, locales, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
-import { WALK_IN_LABOR_RATE } from "@/lib/repair-chat/pricing";
 import { buildPageMetadata } from "@/lib/seo";
 import {
   absoluteRouteUrl,
@@ -63,11 +62,6 @@ export default async function RepairDetailPage({
           serviceType: copy.serviceType,
           description: copy.summary,
           areaServed: hub.serviceAreaPlaces,
-          hourlyRate: {
-            price: WALK_IN_LABOR_RATE,
-            currency: "CAD",
-            description: hub.pricing.laborRateLabel,
-          },
         }}
         breadcrumbs={[
           { name: dict.nav.home, url: absoluteRouteUrl(locale, "home") },

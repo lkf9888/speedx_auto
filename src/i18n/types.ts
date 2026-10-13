@@ -92,7 +92,6 @@ export interface AutoRepairCopy {
   pricing: {
     title: string;
     intro: string;
-    laborRateLabel: string;
     laborTitle: string;
     laborBody: string;
     columns: RepairPriceRow;

@@ -8,11 +8,11 @@ import type { AutoRepairCopy } from "@/i18n/types";
 export const enAutoRepair: AutoRepairCopy = {
   metaTitle: "Auto Repair & Tesla Service in Richmond, BC",
   metaDescription:
-    "Richmond auto repair near YVR: maintenance, brakes, diagnostics, suspension and Tesla/EV service. $120/hr labor billed by industry-standard times. English, Cantonese, Mandarin.",
+    "Richmond auto repair near YVR: maintenance, brakes, diagnostics, suspension and Tesla/EV service. Labor billed by industry-standard times. English, Cantonese, Mandarin.",
   eyebrow: "Auto repair · Richmond, BC",
   title: "Auto Repair & EV Service in Richmond, BC",
   summary:
-    "SPEEDX AUTO is an auto repair shop at 2980 Number 3 Road in Richmond, BC, near YVR. We handle maintenance, brakes, diagnostics, suspension, and electric vehicles, mainly Tesla. Labor is $120 per hour, billed by industry-standard labor-guide times, and parts come from WorldPac at list price. We speak English, Cantonese, and Mandarin. Appointments are required.",
+    "SPEEDX AUTO is an auto repair shop at 2980 Number 3 Road in Richmond, BC, near YVR. We handle maintenance, brakes, diagnostics, suspension, and electric vehicles, mainly Tesla. Labor is billed by industry-standard labor-guide times, and parts come from WorldPac at list price. We speak English, Cantonese, and Mandarin. Appointments are required.",
   serviceName: "Auto repair and maintenance",
   serviceType: "Auto repair",
   facts: {
@@ -33,11 +33,10 @@ export const enAutoRepair: AutoRepairCopy = {
   pricing: {
     title: "What repairs cost",
     intro:
-      "Every quote is labor plus parts. You see the labor hours, the hourly rate, and the parts options before any work starts.",
-    laborRateLabel: "Labor rate",
+      "Every quote is labor plus parts. You see the labor hours and the parts options before any work starts.",
     laborTitle: "How labor is calculated",
     laborBody:
-      "Labor is $120 per hour, multiplied by the time an industry-standard labor guide sets for that job on your exact vehicle. Our shop system is ALLDATA. The guide sets the hours, not a clock running in the bay. For example, front brake pads on a 2019 Toyota Camry LE are rated at 1.1 hours, so labor is $132.",
+      "Labor is billed by the time an industry-standard labor guide sets for that job on your exact vehicle. Our shop system is ALLDATA. The guide sets the hours, not a clock running in the bay. For example, front brake pads on a 2019 Toyota Camry LE are rated at 1.1 hours of labor.",
     columns: {
       job: "Job",
       laborTime: "Labor-guide time",
@@ -136,7 +135,7 @@ export const enAutoRepair: AutoRepairCopy = {
   ev: {
     title: "Tesla and electric vehicle service",
     body:
-      "We service electric vehicles, mainly Tesla. Labor is billed at the same $120 per hour, using labor-guide times.",
+      "We service electric vehicles, mainly Tesla. Labor is billed the same way, using labor-guide times.",
     items: [
       "High-voltage battery checks",
       "Drive motor repair",
@@ -177,7 +176,7 @@ export const enAutoRepair: AutoRepairCopy = {
     {
       question: "How much does a repair cost at SPEEDX AUTO?",
       answer:
-        "Labor is $120 per hour times the labor-guide time for the job, plus parts at WorldPac list price. Front brake pads on most 2015–2020 cars came to $205–$405 including parts. You get the full quote before any work starts.",
+        "Labor is billed by the labor-guide time for the job, plus parts at WorldPac list price. Front brake pads on most 2015–2020 cars came to $205–$405 including parts. You get the full quote before any work starts.",
     },
     {
       question: "How much is an oil change?",
@@ -192,7 +191,7 @@ export const enAutoRepair: AutoRepairCopy = {
     {
       question: "Can I get an estimate online?",
       answer:
-        "Yes. Open the estimate assistant on this page with your name and phone number, then describe the vehicle and the problem. It suggests likely causes and builds a ballpark price from our labor rate, labor-guide times, and current parts list prices. The final quote follows an inspection.",
+        "Yes. Open the estimate assistant on this page with your name and phone number, then describe the vehicle and the problem. It suggests likely causes and builds a ballpark price from labor-guide times and current parts list prices. The final quote follows an inspection.",
     },
     {
       question: "Do you repair Teslas and other electric vehicles?",
@@ -246,11 +245,11 @@ export const enAutoRepair: AutoRepairCopy = {
 export const zhCNAutoRepair: AutoRepairCopy = {
   metaTitle: "列治文汽车维修 · 特斯拉电动车维修",
   metaDescription:
-    "列治文修车厂，靠近温哥华机场：保养、刹车、故障诊断、悬挂转向、特斯拉电动车维修。工时费每小时 $120，按行业标准工时计费。普通话、粤语、英语服务。",
+    "列治文修车厂，靠近温哥华机场：保养、刹车、故障诊断、悬挂转向、特斯拉电动车维修。工时费按行业标准工时计费。普通话、粤语、英语服务。",
   eyebrow: "汽车维修 · 列治文",
   title: "列治文汽车维修与电动车维修",
   summary:
-    "SPEEDX AUTO 速驰汽车是位于列治文 2980 Number 3 Road 的修车厂，靠近温哥华国际机场（YVR）。我们做常规保养、刹车、故障诊断、悬挂转向，也修电动车，以特斯拉为主。工时费每小时 120 加元，按行业标准工时计费；配件来自 WorldPac，按标价报价。店里讲普通话、粤语和英语，需提前预约。",
+    "SPEEDX AUTO 速驰汽车是位于列治文 2980 Number 3 Road 的修车厂，靠近温哥华国际机场（YVR）。我们做常规保养、刹车、故障诊断、悬挂转向，也修电动车，以特斯拉为主。工时费按行业标准工时计费；配件来自 WorldPac，按标价报价。店里讲普通话、粤语和英语，需提前预约。",
   serviceName: "汽车维修与保养",
   serviceType: "汽车维修",
   facts: {
@@ -270,11 +269,10 @@ export const zhCNAutoRepair: AutoRepairCopy = {
   },
   pricing: {
     title: "修车大概多少钱",
-    intro: "每份报价都由工时费和配件费组成。开工前，您会看到工时数、每小时费率和可选配件。",
-    laborRateLabel: "工时费",
+    intro: "每份报价都由工时费和配件费组成。开工前，您会看到工时数和可选配件。",
     laborTitle: "工时费怎么算",
     laborBody:
-      "工时费 = 每小时 120 加元 × 行业标准工时手册给这款车、这项工作规定的工时。店里使用的系统是 ALLDATA。工时由手册决定，不是看技师在车间里实际干了多久。例如 2019 款丰田凯美瑞 LE 换前刹车片，标准工时 1.1 小时，工时费就是 132 加元。",
+      "工时费按行业标准工时手册给这款车、这项工作规定的工时计算。店里使用的系统是 ALLDATA。工时由手册决定，不是看技师在车间里实际干了多久。例如 2019 款丰田凯美瑞 LE 换前刹车片，标准工时为 1.1 小时。",
     columns: {
       job: "项目",
       laborTime: "标准工时",
@@ -371,7 +369,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
   },
   ev: {
     title: "特斯拉与电动车维修",
-    body: "我们维修电动车，以特斯拉为主。工时费同样是每小时 120 加元，按标准工时计费。",
+    body: "我们维修电动车，以特斯拉为主。工时费同样按标准工时计费。",
     items: ["高压电池检测", "驱动电机维修", "故障码读取与诊断", "电动车的刹车、悬挂和常规保养"],
     note: "其他品牌的电动车，请先发送车型和问题，我们确认能否承接。",
     linkLabel: "查看特斯拉与电动车维修详情",
@@ -394,7 +392,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
     {
       question: "在 SPEEDX AUTO 修车大概多少钱？",
       answer:
-        "工时费为每小时 120 加元乘以该项目的标准工时，再加上按 WorldPac 标价计算的配件费。大多数 2015–2020 年车型换前刹车片，含配件约 205–405 加元。开工前会给您完整报价。",
+        "工时费按该项目的标准工时计算，再加上按 WorldPac 标价计算的配件费。大多数 2015–2020 年车型换前刹车片，含配件约 205–405 加元。开工前会给您完整报价。",
     },
     {
       question: "换机油多少钱？",
@@ -438,11 +436,11 @@ export const zhCNAutoRepair: AutoRepairCopy = {
 const zhTWHub: Omit<AutoRepairCopy, "services"> = {
   metaTitle: "列治文車房 · 汽車維修與 Tesla 電動車維修",
   metaDescription:
-    "列治文車房，近溫哥華機場：保養、煞車、故障診斷、避震轉向、Tesla 電動車維修。工時費每小時 $120，按行業標準工時收費。粵語、普通話、英語服務。",
+    "列治文車房，近溫哥華機場：保養、煞車、故障診斷、避震轉向、Tesla 電動車維修。工時費按行業標準工時收費。粵語、普通話、英語服務。",
   eyebrow: "汽車維修 · 列治文",
   title: "列治文汽車維修與電動車維修",
   summary:
-    "SPEEDX AUTO 速馳汽車是位於列治文 2980 Number 3 Road 的車房，鄰近溫哥華國際機場（YVR）。我們提供定期保養、煞車、故障診斷、避震及轉向維修，亦維修電動車，以 Tesla 為主。工時費每小時 120 加元，按行業標準工時收費；零件來自 WorldPac，按標價報價。店內可說粵語、普通話及英語，須預先預約。",
+    "SPEEDX AUTO 速馳汽車是位於列治文 2980 Number 3 Road 的車房，鄰近溫哥華國際機場（YVR）。我們提供定期保養、煞車、故障診斷、避震及轉向維修，亦維修電動車，以 Tesla 為主。工時費按行業標準工時收費；零件來自 WorldPac，按標價報價。店內可說粵語、普通話及英語，須預先預約。",
   serviceName: "汽車維修與保養",
   serviceType: "汽車維修",
   facts: {
@@ -462,11 +460,10 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
   },
   pricing: {
     title: "維修大概要多少錢",
-    intro: "每份報價都由工時費和零件費組成。開工前，您會看到工時數、每小時收費和可選零件。",
-    laborRateLabel: "工時費",
+    intro: "每份報價都由工時費和零件費組成。開工前，您會看到工時數和可選零件。",
     laborTitle: "工時費怎樣計算",
     laborBody:
-      "工時費 = 每小時 120 加元 × 行業標準工時手冊為該車型、該項工作訂明的工時。車房使用的系統是 ALLDATA。工時由手冊決定，並非看師傅實際做了多久。例如 2019 年 Toyota Camry LE 更換前煞車片，標準工時為 1.1 小時，工時費即 132 加元。",
+      "工時費按行業標準工時手冊為該車型、該項工作訂明的工時計算。車房使用的系統是 ALLDATA。工時由手冊決定，並非看師傅實際做了多久。例如 2019 年 Toyota Camry LE 更換前煞車片，標準工時為 1.1 小時。",
     columns: {
       job: "項目",
       laborTime: "標準工時",
@@ -563,7 +560,7 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
   },
   ev: {
     title: "Tesla 及電動車維修",
-    body: "我們維修電動車，以 Tesla 為主。工時費同樣是每小時 120 加元，按標準工時收費。",
+    body: "我們維修電動車，以 Tesla 為主。工時費同樣按標準工時收費。",
     items: ["高壓電池檢測", "電動馬達維修", "故障碼讀取及診斷", "電動車的煞車、避震及定期保養"],
     note: "其他品牌的電動車，請先傳送車款和問題，我們確認能否承接。",
     linkLabel: "查看 Tesla 及電動車維修詳情",
@@ -585,7 +582,7 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
     {
       question: "在 SPEEDX AUTO 維修大概要多少錢？",
       answer:
-        "工時費為每小時 120 加元乘以該項目的標準工時，再加上按 WorldPac 標價計算的零件費。大部分 2015–2020 年車款更換前煞車片，連零件約 205–405 加元。開工前會給您完整報價。",
+        "工時費按該項目的標準工時計算，再加上按 WorldPac 標價計算的零件費。大部分 2015–2020 年車款更換前煞車片，連零件約 205–405 加元。開工前會給您完整報價。",
     },
     {
       question: "換機油要多少錢？",

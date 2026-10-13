@@ -10,7 +10,6 @@ import { getDictionary } from "@/i18n/dictionaries";
 import type { RepairFlatPriceLabels } from "@/i18n/types";
 import { company } from "@/lib/company";
 import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
-import { WALK_IN_LABOR_RATE } from "@/lib/repair-chat/pricing";
 import { buildPageMetadata } from "@/lib/seo";
 import {
   absoluteRouteUrl,
@@ -83,11 +82,6 @@ export default async function AutoRepairPage({
           serviceType: copy.serviceType,
           description: copy.summary,
           areaServed: copy.serviceAreaPlaces,
-          hourlyRate: {
-            price: WALK_IN_LABOR_RATE,
-            currency: "CAD",
-            description: copy.pricing.laborRateLabel,
-          },
           catalog: { name: copy.scope.offeredTitle, items: copy.scope.offered },
         }}
         breadcrumbs={[

@@ -47,22 +47,15 @@ describe("auto repair hub page", () => {
     expect(screen.getByText("Mon–Sat · 10:00 AM – 6:30 PM")).toBeInTheDocument();
   });
 
-  it("marks up the hourly labor rate and the visible service list", async () => {
+  it("marks up the visible service list without publishing an hourly rate", async () => {
     const { graph } = await renderPage("en");
     const service = graph.find((node) => node["@type"] === "Service");
 
     expect(service).toMatchObject({
       name: "Auto repair and maintenance",
       serviceType: "Auto repair",
-      offers: {
-        priceSpecification: {
-          "@type": "UnitPriceSpecification",
-          price: 120,
-          priceCurrency: "CAD",
-          unitCode: "HUR",
-        },
-      },
     });
+    expect(service).not.toHaveProperty("offers");
     const catalog = service?.hasOfferCatalog as { itemListElement: Array<{ itemOffered: { name: string } }> };
     expect(catalog.itemListElement.map((item) => item.itemOffered.name)).toEqual(en.autoRepair.scope.offered);
   });
@@ -94,8 +87,8 @@ describe("repair service guides", () => {
     expect(service).toMatchObject({
       name: copy.title,
       serviceType: copy.serviceType,
-      offers: { priceSpecification: { price: 120, priceCurrency: "CAD", unitCode: "HUR" } },
     });
+    expect(service).not.toHaveProperty("offers");
     expect(screen.getByRole("heading", { level: 1, name: copy.title })).toBeInTheDocument();
     expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(copy.pricingRows.length + 1);
   });
