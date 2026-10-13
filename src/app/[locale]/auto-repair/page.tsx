@@ -92,7 +92,16 @@ export default async function AutoRepairPage({
       </section>
 
       {chatEnabled && (
-        <RepairChat locale={locale} dict={dict} pagePath={pagePath} />
+        <RepairChat
+          locale={locale}
+          dict={dict}
+          pagePath={pagePath}
+          cardCopies={{
+            en: getDictionary("en").repairChat,
+            "zh-CN": getDictionary("zh-CN").repairChat,
+            "zh-TW": getDictionary("zh-TW").repairChat,
+          }}
+        />
       )}
 
       <section id="pricing" className="bg-ink-50 py-6 sm:py-10">

@@ -375,6 +375,39 @@ describe("RepairChat", () => {
     expect(screen.queryByTestId("booking-card")).not.toBeInTheDocument();
   });
 
+  it("labels a card in the customer's language, not the page's", async () => {
+    vi.stubGlobal("fetch", api(held("About $291.", { ...estimate, lang: "en" })));
+    render(
+      <RepairChat
+        locale="zh-CN"
+        dict={zhCN}
+        pagePath="/zh-CN/auto-repair"
+        cardCopies={{ en: en.repairChat, "zh-CN": zhCN.repairChat, "zh-TW": zhTW.repairChat }}
+      />,
+    );
+    await ask("front brake pads for my camry", zhCN);
+    await giveContact(zhCN);
+    await screen.findByText("About $291.");
+    const card = screen.getByTestId("estimate-card");
+    expect(card).toHaveTextContent(en.repairChat.estimate.total);
+    expect(card).not.toHaveTextContent(zhCN.repairChat.estimate.total);
+  });
+
+  it("doesn't ask the AI the same question twice in a row", async () => {
+    const fetchMock = api(ndjson([{ type: "message", text: "Which car is it?" }, { type: "done" }]));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
+    await ask("brake noise");
+    await screen.findByText("Which car is it?");
+    await ask("brake noise");
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/repair-chat")).toHaveLength(1);
+    expect(screen.getAllByText("brake noise")).toHaveLength(1);
+  });
+
+  it("offers a starter question that names the trim, so it can be priced straight away", () => {
+    for (const dict of [en, zhCN, zhTW]) expect(dict.repairChat.starters[2]).toMatch(/Civic LX|思域 LX/);
+  });
+
   it("has complete copy in every locale", () => {
     for (const dict of [en, zhCN, zhTW]) {
       expect(dict.repairChat.starters).toHaveLength(3);

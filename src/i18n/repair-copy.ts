@@ -196,7 +196,7 @@ export const enAutoRepair: AutoRepairCopy = {
     {
       question: "Can I get an estimate online?",
       answer:
-        "Yes. Open the estimate assistant on this page with your name and phone number, then describe the vehicle and the problem. It suggests likely causes and builds a ballpark price from labor-guide times and current parts list prices. The final quote follows an inspection.",
+        "Yes. Describe the vehicle and the problem to the estimate assistant on this page. It suggests likely causes and builds a ballpark price from labor-guide times and current parts list prices; when the estimate is ready, leave your name and phone number to see it. The final quote follows an inspection.",
     },
     {
       question: "Do you repair Teslas and other electric vehicles?",
@@ -414,7 +414,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
     {
       question: "可以在网上先估价吗？",
       answer:
-        "可以。在本页面填写姓名和电话打开估价助手，描述车辆和问题，它会给出可能的原因，并按我们的工时费、标准工时和当前配件标价算出参考价。最终报价以到店检查为准。",
+        "可以。直接在本页面的估价助手里描述车辆和问题，它会给出可能的原因，并按标准工时和当前配件标价算出参考价；报价出来时留下姓名和电话即可查看。最终报价以到店检查为准。",
     },
     {
       question: "能修特斯拉和其他电动车吗？",
@@ -607,7 +607,7 @@ const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide"> = {
     {
       question: "可以先在網上估價嗎？",
       answer:
-        "可以。在本頁填寫姓名和電話開啟估價助手，描述車輛和問題，它會列出可能原因，並按我們的工時費、標準工時和現時零件標價計出參考價。最終報價以到店檢查為準。",
+        "可以。直接在本頁的估價助手裡描述車輛和問題，它會列出可能原因，並按標準工時和現時零件標價計出參考價；報價出來時留下姓名和電話即可查看。最終報價以到店檢查為準。",
     },
     {
       question: "可以維修 Tesla 和其他電動車嗎？",

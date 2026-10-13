@@ -48,6 +48,8 @@ export interface EstimateCard {
   otherPartNames: string[];
   partsNote: string;
   createdAt: string;
+  /** Language the card's labels are shown in: the customer's, not the page's. */
+  lang?: "en" | "zh-CN" | "zh-TW";
 }
 
 const money = (value: number) => Math.round(value * 100) / 100;

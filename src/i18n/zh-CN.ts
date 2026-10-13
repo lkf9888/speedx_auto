@@ -127,7 +127,7 @@ export const zhCN: Dictionary = {
     starters: [
       "刹车时有尖锐的响声",
       "发动机故障灯亮了",
-      "2018 本田思域换前刹车片多少钱？",
+      "2018 本田思域 LX 换前刹车片多少钱？",
     ],
     status: {
       thinking: "思考中…",

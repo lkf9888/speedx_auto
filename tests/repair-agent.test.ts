@@ -185,3 +185,24 @@ describe("safety warning", () => {
     expect(result.text).toContain("這可能是點火系統失火。");
   });
 });
+
+describe("card language", () => {
+  it("tags estimate cards with the customer's language", async () => {
+    const { client } = scriptedClient([
+      message("tool_use", [
+        { type: "tool_use", id: "t1", name: "get_estimate", input: { vehicle_key: camryKey, service_id: 800550032, position: "Front" } },
+      ]),
+      message("end_turn", [{ type: "text", text: "About $291." }]),
+    ]);
+    const events: ChatEvent[] = [];
+    await runChat(
+      client,
+      catalog,
+      { history: [], message: "How much are front brake pads on my 2019 Camry LE?", locale: "zh-CN", vehicleKey: camryKey },
+      (e) => events.push(e),
+      () => "E-1",
+    );
+    const card = events.find((e) => e.type === "estimate");
+    expect(card && card.type === "estimate" && card.estimate.lang).toBe("en");
+  });
+});

@@ -126,7 +126,7 @@ export const en = {
     starters: [
       "My brakes squeal when I stop",
       "My check engine light is on",
-      "Front brake pads for a 2018 Honda Civic?",
+      "Front brake pads for a 2018 Honda Civic LX?",
     ],
     status: {
       thinking: "Thinking…",

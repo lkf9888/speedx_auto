@@ -241,12 +241,16 @@ export function RepairChat({
   locale,
   dict,
   pagePath,
+  cardCopies,
 }: {
   locale: Locale;
   dict: Dictionary;
   pagePath: string;
+  /** Chat copy in every language, so an estimate card follows the customer's language. */
+  cardCopies?: Partial<Record<Locale, ChatCopy>>;
 }) {
   const copy = dict.repairChat;
+  const copyFor = (card: EstimateCard) => (card.lang && cardCopies?.[card.lang]) || copy;
   const [lead, setLead] = useState<Lead | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const greeting: Turn = { role: "assistant", text: copy.greeting, estimates: [], localOnly: true };
@@ -260,6 +264,8 @@ export function RepairChat({
   /** The server is holding a reply with an estimate until name and phone are given. */
   const [awaitingLead, setAwaitingLead] = useState<false | "estimate" | "appointment">(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
+  const seenTurns = useRef(1);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Tell the server the visit is over so the shop gets its follow-up email now
@@ -282,9 +288,31 @@ export function RepairChat({
     box.style.height = `${Math.min(box.scrollHeight, 120)}px`;
   }, [input]);
 
+  // Keep the conversation in view. Scroll the chat box itself (not the page,
+  // and without smooth scrolling, which phones often drop inside a nested
+  // scroller): to the bottom while waiting, and to the top of a new reply so
+  // it is read from its first line.
   useEffect(() => {
-    if (turns.length > 1) endRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
-  }, [turns, pending]);
+    const log = logRef.current;
+    if (!log) return;
+    const added = turns.length > seenTurns.current;
+    seenTurns.current = turns.length;
+    const last = turns[turns.length - 1];
+    if (added && last?.role === "assistant" && turns.length > 1) {
+      const el = log.querySelector<HTMLElement>(`[data-turn="${turns.length - 1}"]`);
+      if (!el) return;
+      log.scrollTop += el.getBoundingClientRect().top - log.getBoundingClientRect().top - 8;
+      // The page may have the chat box half off screen (phones): bring the reply's first line into view.
+      const top = el.getBoundingClientRect().top;
+      if (top < 0 || top > window.innerHeight - 160) window.scrollBy({ top: top - 96, behavior: "instant" });
+    } else if (added || pending || awaitingLead) {
+      log.scrollTop = log.scrollHeight;
+      const bottom = log.getBoundingClientRect().bottom;
+      if (turns.length > 1 && (bottom > window.innerHeight || bottom < 120)) {
+        window.scrollBy({ top: bottom - window.innerHeight + 140, behavior: "instant" });
+      }
+    }
+  }, [turns, pending, awaitingLead]);
 
   /** Add an assistant reply; the first reply with an estimate also gets the booking card. */
   function appendReply(text: string, estimates: EstimateCard[], localOnly = false) {
@@ -328,6 +356,23 @@ export function RepairChat({
   async function send(text: string, options: { repeat?: boolean; contact?: Lead } = {}) {
     const message = text.trim();
     if (!message || pending) return;
+    // Sending the question just answered again (e.g. the reply was missed):
+    // show that reply instead of paying for the same answer twice.
+    const lastAsked = [...turns].reverse().find((t) => t.role === "user");
+    const lastTurn = turns[turns.length - 1];
+    if (
+      !options.repeat &&
+      lastAsked?.text === message &&
+      lastTurn?.role === "assistant" &&
+      !lastTurn.localOnly &&
+      Date.now() - (lastTurn.at ?? 0) < 5 * 60 * 1000
+    ) {
+      setInput("");
+      const log = logRef.current;
+      const el = log?.querySelector<HTMLElement>(`[data-turn="${turns.length - 1}"]`);
+      if (log && el) log.scrollTop += el.getBoundingClientRect().top - log.getBoundingClientRect().top - 8;
+      return;
+    }
     const contact = options.contact ?? lead;
     const earlier = options.repeat ? turns.slice(0, turns.map((t) => t.role).lastIndexOf("user")) : turns;
     const history = earlier
@@ -445,9 +490,9 @@ export function RepairChat({
           </div>
 
           {/* min-h: the opening state is ~20% taller than its content; kept afterwards so it doesn't jump when the starter chips go away */}
-          <div className="wa-chat-bg max-h-[32rem] min-h-[16.5rem] space-y-2 overflow-y-auto px-3 py-4 sm:px-5" aria-live="polite">
+          <div ref={logRef} className="wa-chat-bg max-h-[32rem] min-h-[16.5rem] space-y-2 overflow-y-auto px-3 py-4 sm:px-5" aria-live="polite">
             {turns.map((turn, index) => (
-              <div key={index} className={turn.role === "user" ? "flex justify-end" : ""}>
+              <div key={index} data-turn={index} className={turn.role === "user" ? "flex justify-end" : ""}>
                 {turn.role === "user" ? (
                   <p className="wa-bubble wa-bubble-out max-w-[80%] whitespace-pre-wrap">
                     {turn.text}
@@ -465,7 +510,7 @@ export function RepairChat({
                       <EstimateView
                         key={card.id}
                         card={card}
-                        copy={copy}
+                        copy={copyFor(card)}
                         locale={locale}
                         pagePath={pagePath}
                         leadName={lead?.name ?? ""}

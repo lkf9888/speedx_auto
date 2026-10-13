@@ -127,7 +127,7 @@ export const zhTW: Dictionary = {
     starters: [
       "煞車時有尖銳的響聲",
       "引擎故障燈亮了",
-      "2018 本田 Civic 換前煞車片多少錢？",
+      "2018 本田 Civic LX 換前煞車片多少錢？",
     ],
     status: {
       thinking: "思考中…",

@@ -19,6 +19,12 @@ export function fallbackOptions(model: string) {
 }
 const MAX_STEPS = 8;
 
+const LANGUAGE_LOCALE: Record<string, "en" | "zh-CN" | "zh-TW"> = {
+  English: "en",
+  "Simplified Chinese": "zh-CN",
+  "Traditional Chinese": "zh-TW",
+};
+
 export interface ChatTurn {
   role: "user" | "assistant";
   text: string;
@@ -76,6 +82,8 @@ export async function runChat(
 ): Promise<ChatResult> {
   const earlierCustomerMessages = request.history.filter((t) => t.role === "user").map((t) => t.text).reverse();
   const language = detectCustomerLanguage(request.message, request.locale, earlierCustomerMessages);
+  // Cards are labelled in the customer's language, which can differ from the page's.
+  const cardLocale = LANGUAGE_LOCALE[language] ?? "en";
   // Text-only history: no thinking or tool blocks from earlier turns are
   // replayed, so nothing in the prefix can be invalidated between requests.
   const messages: Anthropic.Beta.BetaMessageParam[] = [
@@ -145,10 +153,12 @@ export async function runChat(
           use.name,
           (use.input ?? {}) as Record<string, unknown>,
           newEstimateId,
-          request.locale,
+          cardLocale,
           knownVehicleKey,
         );
-        outcome.events.forEach(emit);
+        outcome.events
+          .map((event) => (event.type === "estimate" ? { ...event, estimate: { ...event.estimate, lang: cardLocale } } : event))
+          .forEach(emit);
         results.push({
           type: "tool_result",
           tool_use_id: use.id,
