@@ -94,12 +94,12 @@ export function composeFollowUpEmail(
 ): OutgoingEmail {
   const asked = session.transcript.some((line) => line.role === "user");
   const vehicle = session.estimates[0]?.vehicle ?? "";
-  const subject = `【网站估价线索】${session.lead.name} ${session.lead.phone}${vehicle ? ` · ${vehicle}` : ""}`;
+  const subject = `【网站估价线索】${session.lead?.name ?? ""} ${session.lead?.phone ?? ""}${vehicle ? ` · ${vehicle}` : ""}`;
   const lines = [
     "网站维修估价助手有一位客户需要回访。",
     "",
-    `客户姓名：${session.lead.name}`,
-    `客户电话：${session.lead.phone}`,
+    `客户姓名：${session.lead?.name ?? "（未留）"}`,
+    `客户电话：${session.lead?.phone ?? "（未留）"}`,
     `使用语言：${LANGUAGE_LABEL[session.locale] ?? session.locale}`,
     `开始时间：${localTime(session.startedAt)}`,
     `最后活动：${localTime(session.lastActivityAt)}`,
@@ -153,6 +153,11 @@ export function createMailer(env: NodeJS.ProcessEnv = process.env): Mailer {
 
 export function createFollowUpHandler(client: () => MessagesClient | null, mailer: Mailer): FollowUpHandler {
   return async (session, reason) => {
+    // No name or phone: nobody to call back, so no email (and no summary call).
+    if (!session.lead) {
+      console.info("repair-followup skipped: visitor left no contact details", session.transcript.length, "lines");
+      return;
+    }
     let summary: string | null = null;
     const api = client();
     if (api && session.transcript.some((line) => line.role === "user")) {

@@ -23,6 +23,7 @@ import {
   isAllowlisted,
   parseAllowlist,
 } from "@/lib/repair-chat/visitor";
+import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import type { ChatEvent } from "@/lib/repair-chat/tools";
 import type { CatalogApi } from "@/lib/worldpac/catalog";
 import { getWorldpacClient } from "@/lib/worldpac/client";
@@ -35,6 +36,10 @@ const ALLOWED_ORIGINS = [/^https:\/\/(www\.)?speedxrental\.com$/, /^http:\/\/loc
 export type StreamEvent =
   | ChatEvent
   | { type: "message"; text: string }
+  /** The reply has estimates: the browser must collect name and phone to see it. */
+  | { type: "lead_required" }
+  /** Over today's limit: the reply is the fixed "please call us" text. */
+  | { type: "capped" }
   | { type: "session"; id: string }
   | { type: "error"; code: "unavailable" | "busy" | "invalid" }
   | { type: "done" };
@@ -44,7 +49,8 @@ export interface ChatRequestBody {
   history: ChatTurn[];
   message: string;
   vehicleKey: string | null;
-  lead: Lead;
+  /** Absent until the visitor gives name and phone. */
+  lead: Lead | null;
   sessionId: string | null;
 }
 
@@ -52,8 +58,8 @@ export function parseBody(raw: unknown): ChatRequestBody | null {
   if (!raw || typeof raw !== "object") return null;
   const body = raw as Record<string, unknown>;
   if (typeof body.locale !== "string" || !(locales as readonly string[]).includes(body.locale)) return null;
-  const lead = parseLead(body.lead);
-  if (!lead) return null;
+  const lead = body.lead == null ? null : parseLead(body.lead);
+  if (body.lead != null && !lead) return null;
   if (typeof body.message !== "string") return null;
   const message = body.message.trim();
   if (!message || message.length > MAX_MESSAGE) return null;
@@ -196,7 +202,12 @@ function foreignOrigin(request: Request): boolean {
   return Boolean(origin && !ALLOWED_ORIGINS.some((pattern) => pattern.test(origin)));
 }
 
-/** Called once when a visitor submits name + phone to open the assistant. */
+/**
+ * The visitor gave name and phone on the "your estimate is ready" form.
+ * Attaches them to the conversation, tells the shop, and releases the reply
+ * that was held back. If the session was lost (restart), `pending` is null
+ * and the browser asks its last question again.
+ */
 export async function handleLead(
   request: Request,
   deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "opens" | "allowlist"> & { limiter: RateLimiter },
@@ -212,15 +223,22 @@ export async function handleLead(
   const lead = parseLead(raw?.lead);
   const locale = typeof raw?.locale === "string" && (locales as readonly string[]).includes(raw.locale) ? raw.locale : null;
   if (!lead || !locale) return Response.json({ error: "invalid" }, { status: 400 });
-  if (isEvalRequest(request)) return Response.json({ ok: true, sessionId: null, capped: false });
+  if (isEvalRequest(request)) return Response.json({ ok: true, sessionId: null, pending: null });
   const ip = clientIp(request);
-  const owner = trusted(request, deps.allowlist);
-  if (!owner && deps.limiter.check(ip)) return Response.json({ error: "busy" }, { status: 429 });
-  const opensToday = owner ? 0 : (deps.opens?.record(ip) ?? 0);
-  const capped = opensToday > DAILY_OPEN_LIMIT;
-  await deps.notify({ type: "lead_started", lead, locale, at: new Date().toISOString() });
-  const session = deps.sessions.create(lead, locale, { opensToday, capped });
-  return Response.json({ ok: true, sessionId: session.id, capped });
+  if (!trusted(request, deps.allowlist) && deps.limiter.check(ip)) {
+    return Response.json({ error: "busy" }, { status: 429 });
+  }
+  const sessionId = typeof raw?.sessionId === "string" && /^[a-f0-9]{32}$/.test(raw.sessionId) ? raw.sessionId : null;
+  const at = new Date().toISOString();
+  const session = deps.sessions.get(sessionId) ?? deps.sessions.create(lead, locale);
+  const firstTime = !session.lead || session.id !== sessionId;
+  deps.sessions.attachLead(session.id, lead);
+  if (firstTime) {
+    await deps.notify({ type: "lead_started", lead, locale, at });
+    await Promise.all(session.estimates.map((card) => deps.notify(estimateLeadEvent(lead, locale, card))));
+  }
+  const pending = deps.sessions.takeReply(session.id) ?? null;
+  return Response.json({ ok: true, sessionId: session.id, pending });
 }
 
 /** Sent by the browser (sendBeacon) when the visitor leaves the page. */
@@ -274,7 +292,8 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
   // Evaluation traffic never opens a follow-up session or notifies the shop.
   const sessions = evaluation ? new SessionStore(async () => {}) : deps.sessions;
   const known = sessions.get(request_.sessionId);
-  const opensToday = known?.opensToday ?? (evaluation || owner ? 0 : (deps.opens?.today(ip) ?? 0));
+  // A conversation the server hasn't seen counts toward today's limit.
+  const opensToday = known?.opensToday ?? (evaluation || owner ? 0 : (deps.opens?.record(ip) ?? 0));
   const capped = known ? known.capped : opensToday > DAILY_OPEN_LIMIT;
 
   const limited = capped || owner
@@ -286,6 +305,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
 
   const notify: LeadNotifier = evaluation ? async () => {} : deps.notify;
   const session = known ?? sessions.create(request_.lead, request_.locale, { opensToday, capped });
+  if (!session.lead && request_.lead) sessions.attachLead(session.id, request_.lead);
   // A session this process doesn't know was opened before a restart: keep
   // the earlier part of the conversation for the shop's email.
   if (!known) sessions.seed(session.id, request_.history);
@@ -294,12 +314,18 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const pendingNotices: Array<Promise<void>> = [];
+      // Without name and phone, estimates (and the reply quoting them) stay on the server.
+      const held: EstimateCard[] = [];
       const send = (event: StreamEvent) => {
-        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
         if (event.type === "estimate") {
           sessions.recordEstimate(session.id, event.estimate);
-          pendingNotices.push(notify(estimateLeadEvent(request_.lead, request_.locale, event.estimate)));
+          if (!session.lead) {
+            held.push(event.estimate);
+            return;
+          }
+          pendingNotices.push(notify(estimateLeadEvent(session.lead, request_.locale, event.estimate)));
         }
+        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       };
       if (!evaluation && session.id !== request_.sessionId) send({ type: "session", id: session.id });
       try {
@@ -319,7 +345,13 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
         );
         sessions.record(session.id, { role: "assistant", text: result.text });
         if (evaluation) await sessions.finish(session.id, "idle"); // drop the throwaway session's timer
-        send({ type: "message", text: result.text });
+        if (capped) send({ type: "capped" });
+        if (held.length > 0) {
+          sessions.holdReply(session.id, { text: result.text, estimates: held });
+          send({ type: "lead_required" });
+        } else {
+          send({ type: "message", text: result.text });
+        }
       } catch (error) {
         const busy = error instanceof Anthropic.RateLimitError || error instanceof Anthropic.InternalServerError;
         const status = error instanceof Anthropic.APIError ? error.status : undefined;

@@ -315,13 +315,16 @@ export function RepairChat({
   const copy = dict.repairChat;
   const [lead, setLead] = useState<Lead | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const greeting: Turn = { role: "assistant", text: copy.greeting, estimates: [], localOnly: true };
+  const [turns, setTurns] = useState<Turn[]>([greeting]);
   const [vehicle, setVehicle] = useState<KnownVehicle>(null);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<StatusKey | null>(null);
   /** Over today's limit: show "please call us" instead of the chat. */
   const [capped, setCapped] = useState(false);
+  /** The server is holding a reply with an estimate until name and phone are given. */
+  const [awaitingLead, setAwaitingLead] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   // Tell the server the visit is over so the shop gets its follow-up email now
@@ -340,42 +343,57 @@ export function RepairChat({
     if (turns.length > 1) endRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
   }, [turns, pending]);
 
-  async function start(next: Lead): Promise<boolean> {
+  /** Add an assistant reply; the first reply with an estimate also gets the booking card. */
+  function appendReply(text: string, estimates: EstimateCard[], localOnly = false) {
+    setTurns((prev) => {
+      const booking = estimates.length > 0 && !prev.some((t) => t.booking);
+      return [...prev, { role: "assistant", text, estimates, localOnly, booking }];
+    });
+  }
+
+  /** Name and phone given on the "estimate ready" form: release the held reply. */
+  async function unlock(next: Lead): Promise<boolean> {
+    let held: { text: string; estimates: EstimateCard[] } | null = null;
     try {
       const response = await fetch("/api/repair-lead", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locale, lead: next }),
+        body: JSON.stringify({ locale, lead: next, sessionId }),
       });
       if (!response.ok) return false;
-      const data = (await response.json()) as { sessionId?: string; capped?: boolean };
-      setSessionId(typeof data.sessionId === "string" ? data.sessionId : null);
-      setCapped(data.capped === true);
-      setLead(next);
-      setTurns([
-        {
-          role: "assistant",
-          text: data.capped === true ? copy.capped.replaceAll("{phone}", company.phoneDisplay) : fill(copy.greeting, next.name),
-          estimates: [],
-          localOnly: true,
-        },
-      ]);
-      return true;
+      const data = (await response.json()) as {
+        sessionId?: string;
+        pending?: { text: string; estimates: EstimateCard[] } | null;
+      };
+      if (typeof data.sessionId === "string") setSessionId(data.sessionId);
+      held = data.pending ?? null;
     } catch {
       return false;
     }
+    setLead(next);
+    setAwaitingLead(false);
+    if (held) {
+      appendReply(held.text, held.estimates);
+    } else {
+      // The server lost the held reply (e.g. it restarted): ask again, now with the contact details.
+      const lastQuestion = [...turns].reverse().find((t) => t.role === "user");
+      if (lastQuestion) void send(lastQuestion.text, { repeat: true, contact: next });
+    }
+    return true;
   }
 
-  async function send(text: string) {
+  async function send(text: string, options: { repeat?: boolean; contact?: Lead } = {}) {
     const message = text.trim();
-    if (!message || pending || !lead) return;
-    const history = turns
+    if (!message || pending) return;
+    const contact = options.contact ?? lead;
+    const earlier = options.repeat ? turns.slice(0, turns.map((t) => t.role).lastIndexOf("user")) : turns;
+    const history = earlier
       .filter((t) => t.text.trim() && !t.localOnly)
       .slice(-MAX_TURNS)
       .map((t) => ({ role: t.role, text: t.text }));
     while (history.length > 0 && history[0].role !== "user") history.shift();
 
-    setTurns((prev) => [...prev, { role: "user", text: message, estimates: [] }]);
+    if (!options.repeat) setTurns((prev) => [...prev, { role: "user", text: message, estimates: [] }]);
     setInput("");
     setPending(true);
     setStatus("thinking");
@@ -384,12 +402,13 @@ export function RepairChat({
     let reply = "";
     let failure: keyof ChatCopy["errors"] | null = null;
     let nextVehicle = vehicle;
+    let needsLead = false;
 
     try {
       const response = await fetch("/api/repair-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locale, history, message, vehicleKey: vehicle?.key ?? null, lead, sessionId }),
+        body: JSON.stringify({ locale, history, message, vehicleKey: vehicle?.key ?? null, lead: contact, sessionId }),
       });
       if (!response.ok || !response.body) {
         failure = response.status === 429 ? "busy" : "unavailable";
@@ -412,6 +431,8 @@ export function RepairChat({
               | { type: "estimate"; estimate: EstimateCard }
               | { type: "message"; text: string }
               | { type: "session"; id: string }
+              | { type: "lead_required" }
+              | { type: "capped" }
               | { type: "error"; code: "busy" | "unavailable" | "invalid" }
               | { type: "done" };
             if (event.type === "status") setStatus(event.status);
@@ -419,6 +440,8 @@ export function RepairChat({
             else if (event.type === "estimate") estimates.push(event.estimate);
             else if (event.type === "message") reply = event.text;
             else if (event.type === "session") setSessionId(event.id);
+            else if (event.type === "lead_required") needsLead = true;
+            else if (event.type === "capped") setCapped(true);
             else if (event.type === "error") failure = event.code === "busy" ? "busy" : "unavailable";
           }
           if (done) break;
@@ -428,17 +451,11 @@ export function RepairChat({
       failure = "unavailable";
     }
 
-    if (!failure && !reply && estimates.length === 0) failure = "empty";
+    if (!failure && !needsLead && !reply && estimates.length === 0) failure = "empty";
     setVehicle(nextVehicle);
-    setTurns((prev) => {
-      const offerBooking = estimates.length > 0 && !prev.some((t) => t.booking);
-      return [
-        ...prev,
-        failure
-          ? { role: "assistant", text: copy.errors[failure], estimates, localOnly: true, booking: offerBooking }
-          : { role: "assistant", text: reply, estimates, booking: offerBooking },
-      ];
-    });
+    if (failure) appendReply(copy.errors[failure], estimates, true);
+    else if (needsLead) setAwaitingLead(true);
+    else appendReply(reply, estimates);
     setPending(false);
     setStatus(null);
   }
@@ -449,8 +466,8 @@ export function RepairChat({
   }
 
   function reset() {
-    if (!lead) return;
-    setTurns([{ role: "assistant", text: fill(copy.greeting, lead.name), estimates: [], localOnly: true }]);
+    setTurns([greeting]);
+    setAwaitingLead(false);
     setVehicle(null);
     setInput("");
   }
@@ -469,131 +486,132 @@ export function RepairChat({
         <p className="mt-3 leading-7 text-ink-600">{copy.intro}</p>
 
         <div className="mt-8 rounded-3xl border border-ink-100 bg-ink-50/60 p-4 sm:p-6">
-          {!lead ? (
-            <LeadGate copy={copy} onStart={start} />
-          ) : (
-            <>
-              <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-1" aria-live="polite">
-                {turns.map((turn, index) => (
-                  <div key={index} className={turn.role === "user" ? "flex justify-end" : ""}>
-                    {turn.role === "user" ? (
-                      <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-ink-900 px-4 py-2.5 text-sm text-white">
-                        {turn.text}
-                      </p>
-                    ) : (
-                      <div className="max-w-full">
-                        {turn.text && (
-                          <p className="whitespace-pre-wrap rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-ink-800 ring-1 ring-ink-100">
-                            {turn.text}
-                          </p>
-                        )}
-                        {turn.estimates.map((card) => (
-                          <EstimateView
-                            key={card.id}
-                            card={card}
-                            copy={copy}
-                            locale={locale}
-                            pagePath={pagePath}
-                            leadName={lead.name}
-                          />
-                        ))}
-                        {turn.booking && (
-                          <RepairBooking copy={copy.booking} locale={locale} lead={lead} sessionId={sessionId} />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {capped && (
-                  <div data-testid="capped-contact" className="flex flex-wrap gap-2">
-                    <TrackedContactLink
-                      href={telLink}
-                      method="phone"
-                      intent="auto_repair"
-                      locale={locale}
-                      placement="chat"
-                      pagePath={pagePath}
-                      className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
-                    >
-                      {copy.estimate.call} {company.phoneDisplay}
-                    </TrackedContactLink>
-                    <TrackedContactLink
-                      href={whatsappLink}
-                      method="whatsapp"
-                      intent="auto_repair"
-                      locale={locale}
-                      placement="chat"
-                      pagePath={pagePath}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-                    >
-                      WhatsApp
-                    </TrackedContactLink>
-                  </div>
-                )}
-                {noQuestionYet && !capped && (
-                  <div className="flex flex-wrap gap-2">
-                    {copy.starters.map((starter) => (
-                      <button
-                        key={starter}
-                        type="button"
-                        onClick={() => void send(starter)}
-                        className="rounded-full border border-ink-200 bg-white px-4 py-2 text-sm text-ink-700 hover:border-brand-300 hover:text-brand-700"
-                      >
-                        {starter}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {pending && status && (
-                  <p role="status" className="flex items-center gap-2 text-sm text-ink-500">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500" />
-                    {copy.status[status]}
-                  </p>
-                )}
-                <div ref={endRef} />
-              </div>
-
-              {!capped && (
-                <form onSubmit={onSubmit} className="mt-4 flex gap-2">
-                  <label htmlFor="repair-chat-input" className="sr-only">
-                    {copy.placeholder}
-                  </label>
-                  <textarea
-                    id="repair-chat-input"
-                    value={input}
-                    onChange={(event) => setInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                        event.preventDefault();
-                        void send(input);
-                      }
-                    }}
-                    rows={2}
-                    maxLength={1500}
-                    placeholder={copy.placeholder}
-                    className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-ink-200 bg-white px-4 py-3 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
-                  />
-                  <button
-                    type="submit"
-                    disabled={pending || !input.trim()}
-                    className="self-end rounded-full bg-ink-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+          <>
+            <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-1" aria-live="polite">
+              {turns.map((turn, index) => (
+                <div key={index} className={turn.role === "user" ? "flex justify-end" : ""}>
+                  {turn.role === "user" ? (
+                    <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-ink-900 px-4 py-2.5 text-sm text-white">
+                      {turn.text}
+                    </p>
+                  ) : (
+                    <div className="max-w-full">
+                      {turn.text && (
+                        <p className="whitespace-pre-wrap rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-ink-800 ring-1 ring-ink-100">
+                          {turn.text}
+                        </p>
+                      )}
+                      {turn.estimates.map((card) => (
+                        <EstimateView
+                          key={card.id}
+                          card={card}
+                          copy={copy}
+                          locale={locale}
+                          pagePath={pagePath}
+                          leadName={lead?.name ?? ""}
+                        />
+                      ))}
+                      {turn.booking && lead && (
+                        <RepairBooking copy={copy.booking} locale={locale} lead={lead} sessionId={sessionId} />
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {capped && (
+                <div data-testid="capped-contact" className="flex flex-wrap gap-2">
+                  <TrackedContactLink
+                    href={telLink}
+                    method="phone"
+                    intent="auto_repair"
+                    locale={locale}
+                    placement="chat"
+                    pagePath={pagePath}
+                    className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
                   >
-                    {copy.send}
-                  </button>
-                </form>
+                    {copy.estimate.call} {company.phoneDisplay}
+                  </TrackedContactLink>
+                  <TrackedContactLink
+                    href={whatsappLink}
+                    method="whatsapp"
+                    intent="auto_repair"
+                    locale={locale}
+                    placement="chat"
+                    pagePath={pagePath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                  >
+                    WhatsApp
+                  </TrackedContactLink>
+                </div>
               )}
-              <div className="mt-3 flex items-center justify-between gap-4 text-xs text-ink-400">
-                <span>{copy.privacyNote}</span>
-                {!noQuestionYet && !pending && (
-                  <button type="button" onClick={reset} className="shrink-0 underline hover:text-ink-600">
-                    {copy.reset}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
+              {noQuestionYet && !capped && !pending && (
+                <div className="flex flex-wrap gap-2">
+                  {copy.starters.map((starter) => (
+                    <button
+                      key={starter}
+                      type="button"
+                      onClick={() => void send(starter)}
+                      className="rounded-full border border-ink-200 bg-white px-4 py-2 text-sm text-ink-700 hover:border-brand-300 hover:text-brand-700"
+                    >
+                      {starter}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {awaitingLead && (
+                <div data-testid="lead-gate" className="rounded-2xl bg-white p-5 ring-1 ring-brand-100">
+                  <LeadGate copy={copy} onStart={unlock} />
+                </div>
+              )}
+              {pending && status && (
+                <p role="status" className="flex items-center gap-2 text-sm text-ink-500">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500" />
+                  {copy.status[status]}
+                </p>
+              )}
+              <div ref={endRef} />
+            </div>
+
+            {!capped && !awaitingLead && (
+              <form onSubmit={onSubmit} className="mt-4 flex gap-2">
+                <label htmlFor="repair-chat-input" className="sr-only">
+                  {copy.placeholder}
+                </label>
+                <textarea
+                  id="repair-chat-input"
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                      event.preventDefault();
+                      void send(input);
+                    }
+                  }}
+                  rows={2}
+                  maxLength={1500}
+                  placeholder={copy.placeholder}
+                  className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-ink-200 bg-white px-4 py-3 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={pending || !input.trim()}
+                  className="self-end rounded-full bg-ink-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {copy.send}
+                </button>
+              </form>
+            )}
+            <div className="mt-3 flex items-center justify-between gap-4 text-xs text-ink-400">
+              <span>{copy.privacyNote}</span>
+              {!noQuestionYet && !pending && (
+                <button type="button" onClick={reset} className="shrink-0 underline hover:text-ink-600">
+                  {copy.reset}
+                </button>
+              )}
+            </div>
+          </>
         </div>
 
         <div className="mt-10">

@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
-import { cappedReply, handleChat, handleLead, type RouteDeps } from "@/lib/repair-chat/http";
+import { cappedReply, handleChat, type RouteDeps } from "@/lib/repair-chat/http";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 import { SessionStore, type ChatSession, type FinishReason } from "@/lib/repair-chat/session";
 import { registerShutdownFlush } from "@/lib/repair-chat/shutdown";
@@ -59,63 +59,56 @@ function setup(allowlist = "") {
     catalog: () => ({ get: async () => ({}) as never, post: async () => ({}) as never }),
     client: () => ({ beta: { messages: { create: model } } }),
   };
-  const open = async (ip?: string) => {
-    const response = await handleLead(request("/api/repair-lead", { locale: "zh-CN", lead }, ip), {
-      ...deps,
-      limiter: new RateLimiter(),
-    });
-    return (await response.json()) as { sessionId: string; capped: boolean };
-  };
+  /** One chat message; sessionId null starts a new conversation. */
   const chat = async (sessionId: string | null, ip?: string, history: unknown[] = []) => {
     const response = await handleChat(
-      request("/api/repair-chat", { locale: "zh-CN", history, message: "刹车响", vehicleKey: null, lead, sessionId }, ip),
+      request("/api/repair-chat", { locale: "zh-CN", history, message: "刹车响", vehicleKey: null, sessionId }, ip),
       deps,
     );
     const lines = (await response.text()).trim().split("\n").map((l) => JSON.parse(l));
-    return lines.find((l) => l.type === "message")?.text as string;
+    return {
+      text: lines.find((l) => l.type === "message")?.text as string,
+      capped: lines.some((l) => l.type === "capped"),
+      sessionId: (lines.find((l) => l.type === "session")?.id as string | undefined) ?? sessionId,
+    };
   };
-  return { deps, sessions, finished, model, open, chat };
+  return { deps, sessions, finished, model, chat };
 }
 
 describe("daily conversation limit", () => {
   it("answers the 4th conversation of the day with the call-us reply, without the AI", async () => {
-    const { open, chat, model, sessions } = setup();
-    const first = await open();
-    await open();
-    await open();
-    const fourth = await open();
-    expect(first.capped).toBe(false);
+    const { chat, model, sessions } = setup();
+    const first = await chat(null);
+    await chat(null);
+    await chat(null);
+    expect(model).toHaveBeenCalledTimes(3);
+    const fourth = await chat(null);
     expect(fourth.capped).toBe(true);
-
-    expect(await chat(first.sessionId)).toBe("AI reply");
-    expect(model).toHaveBeenCalledTimes(1);
-
-    const reply = await chat(fourth.sessionId);
-    expect(reply).toBe(cappedReply("zh-CN"));
-    expect(reply).toContain("+1 (778) 917-0710");
-    expect(model).toHaveBeenCalledTimes(1);
+    expect(fourth.text).toBe(cappedReply("zh-CN"));
+    expect(fourth.text).toContain("+1 (778) 917-0710");
+    expect(model).toHaveBeenCalledTimes(3);
     expect(sessions.get(fourth.sessionId)).toMatchObject({ capped: true, opensToday: 4 });
-  });
 
-  it("also caps a chat that arrives without a known session", async () => {
-    const { open, chat, model } = setup();
-    for (let i = 0; i < 4; i += 1) await open();
-    expect(await chat(null)).toBe(cappedReply("zh-CN"));
-    expect(model).not.toHaveBeenCalled();
+    // Messages in an earlier conversation still reach the AI; the capped one stays capped.
+    expect((await chat(first.sessionId)).text).toBe("AI reply");
+    expect((await chat(fourth.sessionId)).capped).toBe(true);
+    expect(model).toHaveBeenCalledTimes(4);
   });
 
   it("never caps allowlisted IPs, and other IPs are counted separately", async () => {
-    const { open, chat, model } = setup("198.51.100.7");
-    for (let i = 0; i < 6; i += 1) expect((await open()).capped).toBe(false);
-    expect(await chat(null)).toBe("AI reply");
-    for (let i = 0; i < 3; i += 1) await open("192.0.2.1");
-    expect((await open("192.0.2.1")).capped).toBe(true);
-    expect(model).toHaveBeenCalledTimes(1);
+    const { chat, model } = setup("198.51.100.7");
+    for (let i = 0; i < 6; i += 1) expect((await chat(null)).capped).toBe(false);
+    for (let i = 0; i < 3; i += 1) await chat(null, "192.0.2.1");
+    expect((await chat(null, "192.0.2.1")).capped).toBe(true);
+    expect(model).toHaveBeenCalledTimes(9);
   });
 
   it("names the daily count in the shop's email", async () => {
-    const { open, sessions, finished } = setup();
-    for (let i = 0; i < 4; i += 1) await open();
+    const { chat, sessions, finished } = setup();
+    for (let i = 0; i < 4; i += 1) {
+      const { sessionId } = await chat(null);
+      sessions.attachLead(sessionId!, lead);
+    }
     await sessions.finishAll("idle");
     const { composeFollowUpEmail } = await import("@/lib/repair-chat/followup");
     const capped = finished.find(([s]) => s.capped)!;

@@ -46,27 +46,45 @@ const BOOKING_DAYS = [
   { date: "2026-11-02", slots: ["11:00"] },
 ];
 
+type Card = typeof estimate | Record<string, unknown>;
+
 /**
- * Answers /api/repair-lead with ok, /api/repair-booking with open days (GET)
- * or ok (POST), and /api/repair-chat with the queued streams.
+ * Fake server. Chat requests take the queued streams in order. A reply made
+ * with `held()` streams only lead_required; /api/repair-lead then releases
+ * it. /api/repair-booking answers open days (GET) or ok (POST).
  */
-function api(...chatResponses: Response[]) {
+function api(...chatResponses: Array<Response | { held: { text: string; estimates: Card[] } }>) {
+  let pending: { text: string; estimates: Card[] } | null = null;
   return vi.fn(async (url: string, init?: RequestInit) => {
-    if (url === "/api/repair-lead") return Response.json({ ok: true, sessionId: SESSION });
+    if (url === "/api/repair-lead") {
+      const released = pending;
+      pending = null;
+      return Response.json({ ok: true, sessionId: SESSION, pending: released });
+    }
     if (url === "/api/repair-booking") {
       return init?.method === "POST" ? Response.json({ ok: true }) : Response.json({ days: BOOKING_DAYS });
     }
     const next = chatResponses.shift();
     if (!next) throw new Error("no chat response queued");
-    return next;
+    if (next instanceof Response) return next;
+    pending = next.held;
+    return ndjson([{ type: "session", id: SESSION }, { type: "status", status: "estimate" }, { type: "lead_required" }, { type: "done" }]);
   });
 }
 
-async function activate(dict = en) {
-  await userEvent.type(screen.getByLabelText(dict.repairChat.gate.name), lead.name);
-  await userEvent.type(screen.getByLabelText(dict.repairChat.gate.phone), lead.phone);
+const held = (text: string, ...estimates: Card[]) => ({ held: { text, estimates } });
+
+async function ask(text: string, dict = en) {
+  await userEvent.type(screen.getByLabelText(dict.repairChat.placeholder), `${text}{Enter}`);
+}
+
+async function giveContact(dict = en, phone = lead.phone) {
+  await userEvent.type(await screen.findByLabelText(dict.repairChat.gate.name), lead.name);
+  await userEvent.type(screen.getByLabelText(dict.repairChat.gate.phone), phone);
   await userEvent.click(screen.getByRole("button", { name: dict.repairChat.gate.submit }));
 }
+
+const bodyOf = (call: unknown) => JSON.parse(((call as [string, RequestInit])[1].body as string));
 
 describe("RepairChat", () => {
   beforeEach(() => {
@@ -76,27 +94,115 @@ describe("RepairChat", () => {
     vi.unstubAllGlobals();
   });
 
-  it("keeps the chat locked until a name and valid phone are entered", async () => {
-    const fetchMock = api();
+  it("opens the chat right away, without asking for name or phone", async () => {
+    const fetchMock = api(ndjson([{ type: "session", id: SESSION }, { type: "message", text: "Which car is it?" }, { type: "done" }]));
     vi.stubGlobal("fetch", fetchMock);
     render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
+    expect(screen.getByText(en.repairChat.greeting)).toBeInTheDocument();
+    expect(screen.queryByLabelText(en.repairChat.gate.name)).not.toBeInTheDocument();
+
+    await ask("brake noise");
+    expect(await screen.findByText("Which car is it?")).toBeInTheDocument();
+    expect(bodyOf(fetchMock.mock.calls[0])).toEqual({
+      locale: "en",
+      history: [],
+      message: "brake noise",
+      vehicleKey: null,
+      lead: null,
+      sessionId: null,
+    });
+  });
+
+  it("asks for name and phone when the estimate is ready, then shows it", async () => {
+    const fetchMock = api(
+      held("Front pads are about $291 before tax.", estimate),
+      ndjson([{ type: "message", text: "Rear pads too?" }, { type: "done" }]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
+    await userEvent.click(screen.getByRole("button", { name: en.repairChat.starters[0] }));
+
+    const gate = await screen.findByTestId("lead-gate");
+    expect(gate).toHaveTextContent(en.repairChat.gate.title);
+    expect(screen.queryByTestId("estimate-card")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Front pads are about/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(en.repairChat.placeholder)).not.toBeInTheDocument();
 
-    await userEvent.type(screen.getByLabelText(en.repairChat.gate.name), "Kevin");
-    await userEvent.type(screen.getByLabelText(en.repairChat.gate.phone), "917-0710");
-    await userEvent.click(screen.getByRole("button", { name: en.repairChat.gate.submit }));
+    await giveContact(en, "917-0710");
     expect(screen.getByRole("alert")).toHaveTextContent(en.repairChat.gate.invalidPhone);
-    expect(fetchMock).not.toHaveBeenCalled();
-
     await userEvent.clear(screen.getByLabelText(en.repairChat.gate.phone));
     await userEvent.type(screen.getByLabelText(en.repairChat.gate.phone), lead.phone);
     await userEvent.click(screen.getByRole("button", { name: en.repairChat.gate.submit }));
-    expect(await screen.findByText(en.repairChat.greeting.replace("{name}", "Kevin"))).toBeInTheDocument();
-    expect(screen.getByLabelText(en.repairChat.placeholder)).toBeInTheDocument();
-    expect(JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({
-      locale: "en",
-      lead,
-    });
+
+    expect(await screen.findByText("Front pads are about $291 before tax.")).toBeInTheDocument();
+    const card = screen.getByTestId("estimate-card");
+    expect(card).toHaveTextContent("$291.05");
+    expect(card).not.toHaveTextContent("$264.65");
+    expect(screen.getByTestId("screenshot-tip")).toHaveTextContent("E-ABC123");
+    const whatsapp = screen.getByRole("link", { name: en.repairChat.estimate.book });
+    expect(decodeURIComponent(whatsapp.getAttribute("href")!)).toContain("this is Kevin");
+    expect(screen.queryByTestId("lead-gate")).not.toBeInTheDocument();
+
+    const unlock = fetchMock.mock.calls.find(([url]) => url === "/api/repair-lead");
+    expect(bodyOf(unlock)).toEqual({ locale: "en", lead, sessionId: SESSION });
+
+    // Later messages carry the contact details and the released reply.
+    await ask("ok");
+    await screen.findByText("Rear pads too?");
+    const later = bodyOf(fetchMock.mock.calls.filter(([url]) => url === "/api/repair-chat")[1]);
+    expect(later.lead).toEqual(lead);
+    expect(later.sessionId).toBe(SESSION);
+    expect(later.history).toEqual([
+      { role: "user", text: en.repairChat.starters[0] },
+      { role: "assistant", text: "Front pads are about $291 before tax." },
+    ]);
+
+    const beacon = vi.fn(() => true);
+    Object.defineProperty(navigator, "sendBeacon", { value: beacon, configurable: true });
+    window.dispatchEvent(new Event("pagehide"));
+    expect(beacon).toHaveBeenCalledWith("/api/repair-lead/finish", expect.any(Blob));
+  });
+
+  it("asks the last question again if the server lost the held reply", async () => {
+    const fetchMock = api(
+      ndjson([{ type: "session", id: SESSION }, { type: "lead_required" }, { type: "done" }]),
+      ndjson([{ type: "estimate", estimate }, { type: "message", text: "About $291." }, { type: "done" }]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
+    await ask("2019 Camry front pads");
+    await giveContact();
+    expect(await screen.findByText("About $291.")).toBeInTheDocument();
+    const retry = bodyOf(fetchMock.mock.calls.filter(([url]) => url === "/api/repair-chat")[1]);
+    expect(retry).toMatchObject({ message: "2019 Camry front pads", lead, history: [] });
+    expect(screen.getAllByText("2019 Camry front pads")).toHaveLength(1);
+  });
+
+  it("sends the prior conversation and confirmed vehicle on the next message", async () => {
+    const fetchMock = api(
+      ndjson([{ type: "vehicle", vehicle: { key: "k1", label: "Camry" } }, { type: "message", text: "Which axle?" }, { type: "done" }]),
+      ndjson([{ type: "message", text: "Got it." }, { type: "done" }]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
+    await ask("2019 Camry pads");
+    await screen.findByText("Which axle?");
+    await ask("Front");
+    await screen.findByText("Got it.");
+
+    const second = bodyOf(fetchMock.mock.calls[1]);
+    expect(second.history).toEqual([
+      { role: "user", text: "2019 Camry pads" },
+      { role: "assistant", text: "Which axle?" },
+    ]);
+    expect(second.vehicleKey).toBe("k1");
+  });
+
+  it("shows the localized busy message when rate-limited", async () => {
+    vi.stubGlobal("fetch", api(new Response("{}", { status: 429 })));
+    render(<RepairChat locale="zh-CN" dict={zhCN} pagePath="/zh-CN/auto-repair" />);
+    await userEvent.click(screen.getByRole("button", { name: zhCN.repairChat.starters[1] }));
+    await waitFor(() => expect(screen.getByText(zhCN.repairChat.errors.busy)).toBeInTheDocument());
   });
 
   it("always shows the sample estimate without the referral price or booking buttons", () => {
@@ -109,92 +215,22 @@ describe("RepairChat", () => {
     expect(screen.queryByTestId("screenshot-tip")).not.toBeInTheDocument();
   });
 
-  it("sends a starter question and renders the estimate card with booking links", async () => {
-    const fetchMock = api(
-      ndjson([
-        { type: "status", status: "estimate" },
-        { type: "vehicle", vehicle: { key: "k1", label: "2019 Toyota Camry LE 2.5 L4" } },
-        { type: "estimate", estimate },
-        { type: "message", text: "Front pads are about $291 before tax." },
-        { type: "done" },
-      ]),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
-    await activate();
-
-    await userEvent.click(screen.getByRole("button", { name: en.repairChat.starters[0] }));
-
-    expect(await screen.findByText("Front pads are about $291 before tax.")).toBeInTheDocument();
-    const card = screen.getByTestId("estimate-card");
-    expect(card).toHaveTextContent("$291.05");
-    expect(card).not.toHaveTextContent("$264.65");
-    expect(card).toHaveTextContent("Brake Hydraulic System Bleed");
-    expect(screen.getByTestId("screenshot-tip")).toHaveTextContent("Take a screenshot of this estimate");
-    expect(screen.getByTestId("screenshot-tip")).toHaveTextContent("E-ABC123");
-    expect(card).toHaveTextContent("Date 2026-10-1");
-    const whatsapp = screen.getByRole("link", { name: en.repairChat.estimate.book });
-    const prefilled = decodeURIComponent(whatsapp.getAttribute("href")!);
-    expect(prefilled).toContain("E-ABC123");
-    expect(prefilled).toContain("this is Kevin");
-
-    const body = JSON.parse((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body as string);
-    expect(body).toEqual({ locale: "en", history: [], message: en.repairChat.starters[0], vehicleKey: null, lead, sessionId: SESSION });
-
-    const beacon = vi.fn(() => true);
-    Object.defineProperty(navigator, "sendBeacon", { value: beacon, configurable: true });
-    window.dispatchEvent(new Event("pagehide"));
-    expect(beacon).toHaveBeenCalledWith("/api/repair-lead/finish", expect.any(Blob));
-  });
-
-  it("sends the prior conversation and confirmed vehicle on the next message", async () => {
-    const fetchMock = api(
-      ndjson([{ type: "vehicle", vehicle: { key: "k1", label: "Camry" } }, { type: "message", text: "Which axle?" }, { type: "done" }]),
-      ndjson([{ type: "message", text: "Got it." }, { type: "done" }]),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
-    await activate();
-    const input = screen.getByLabelText(en.repairChat.placeholder);
-
-    await userEvent.type(input, "2019 Camry pads{Enter}");
-    await screen.findByText("Which axle?");
-    await userEvent.type(input, "Front{Enter}");
-    await screen.findByText("Got it.");
-
-    const second = JSON.parse((fetchMock.mock.calls[2] as unknown as [string, RequestInit])[1].body as string);
-    expect(second.history).toEqual([
-      { role: "user", text: "2019 Camry pads" },
-      { role: "assistant", text: "Which axle?" },
-    ]);
-    expect(second.vehicleKey).toBe("k1");
-  });
-
-  it("shows the localized busy message when rate-limited", async () => {
-    vi.stubGlobal("fetch", api(new Response("{}", { status: 429 })));
-    render(<RepairChat locale="zh-CN" dict={zhCN} pagePath="/zh-CN/auto-repair" />);
-    await activate(zhCN);
-    await userEvent.click(screen.getByRole("button", { name: zhCN.repairChat.starters[1] }));
-    await waitFor(() => expect(screen.getByText(zhCN.repairChat.errors.busy)).toBeInTheDocument());
-  });
-
   it("offers the booking card once, after the first estimate, and sends the chosen slot", async () => {
     const fetchMock = api(
-      ndjson([{ type: "estimate", estimate }, { type: "message", text: "About $291." }, { type: "done" }]),
+      held("About $291.", estimate),
       ndjson([{ type: "estimate", estimate: { ...estimate, id: "E-SECOND" } }, { type: "message", text: "Rear too." }, { type: "done" }]),
     );
     vi.stubGlobal("fetch", fetchMock);
     render(<RepairChat locale="zh-CN" dict={zhCN} pagePath="/zh-CN/auto-repair" />);
-    await activate(zhCN);
     const b = zhCN.repairChat.booking;
 
-    await userEvent.type(screen.getByLabelText(zhCN.repairChat.placeholder), "前刹车片{Enter}");
+    await ask("前刹车片", zhCN);
+    await giveContact(zhCN);
     const card = await screen.findByTestId("booking-card");
     expect(card).toHaveTextContent(b.screenshot);
     const submit = screen.getByRole("button", { name: b.submit });
     expect(submit).toBeDisabled();
 
-    // Only bookable days are enabled; Oct 13 (not in the list) is not.
     await waitFor(() => expect(screen.getByRole("button", { name: /10月14日/ })).toBeEnabled());
     expect(screen.getByRole("button", { name: /10月13日/ })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: /10月14日/ }));
@@ -204,16 +240,10 @@ describe("RepairChat", () => {
 
     const post = fetchMock.mock.calls.find(
       ([url, init]) => url === "/api/repair-booking" && (init as RequestInit | undefined)?.method === "POST",
-    ) as unknown as [string, RequestInit];
-    expect(JSON.parse(post[1].body as string)).toEqual({
-      locale: "zh-CN",
-      lead,
-      sessionId: SESSION,
-      date: "2026-10-14",
-      time: "11:30",
-    });
+    );
+    expect(bodyOf(post)).toEqual({ locale: "zh-CN", lead, sessionId: SESSION, date: "2026-10-14", time: "11:30" });
 
-    await userEvent.type(screen.getByLabelText(zhCN.repairChat.placeholder), "后面也要{Enter}");
+    await ask("后面也要", zhCN);
     await screen.findByText("Rear too.");
     expect(screen.getAllByTestId("booking-card")).toHaveLength(1);
   });
@@ -237,13 +267,10 @@ describe("RepairChat", () => {
       partsNote: "一口价，含机油和机油滤芯。",
     };
     const team = { ...estimate, id: "E-TEAM", kind: "team_quote", service: "换机油", partOptions: [], totalLow: 0, totalHigh: 0, laborNote: "" };
-    vi.stubGlobal(
-      "fetch",
-      api(ndjson([{ type: "estimate", estimate: flat }, { type: "estimate", estimate: team }, { type: "message", text: "好的" }, { type: "done" }])),
-    );
+    vi.stubGlobal("fetch", api(held("好的", flat, team)));
     render(<RepairChat locale="zh-CN" dict={zhCN} pagePath="/zh-CN/auto-repair" />);
-    await activate(zhCN);
-    await userEvent.type(screen.getByLabelText(zhCN.repairChat.placeholder), "换机油{Enter}");
+    await ask("换机油", zhCN);
+    await giveContact(zhCN);
     await screen.findByText("好的");
 
     const [flatCard, teamCard] = screen.getAllByTestId("estimate-card");
@@ -256,16 +283,13 @@ describe("RepairChat", () => {
     expect(screen.getAllByTestId("screenshot-tip")).toHaveLength(1);
   });
 
-  it("shows the call-us message instead of the chat when over today's limit", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => Response.json({ ok: true, sessionId: SESSION, capped: true })),
-    );
+  it("shows the call-us message and closes the input when over today's limit", async () => {
+    const text = zhTW.repairChat.capped.replaceAll("{phone}", "+1 (778) 917-0710");
+    vi.stubGlobal("fetch", api(ndjson([{ type: "session", id: SESSION }, { type: "capped" }, { type: "message", text }, { type: "done" }])));
     render(<RepairChat locale="zh-TW" dict={zhTW} pagePath="/zh-TW/auto-repair" />);
-    await activate(zhTW);
+    await ask("煞車有聲音", zhTW);
     expect(await screen.findByText(/看到您今天已經多次聯絡我們了/)).toHaveTextContent("+1 (778) 917-0710");
     expect(screen.queryByLabelText(zhTW.repairChat.placeholder)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: zhTW.repairChat.starters[0] })).not.toBeInTheDocument();
     expect(screen.getByTestId("capped-contact")).toBeInTheDocument();
   });
 
@@ -274,11 +298,12 @@ describe("RepairChat", () => {
       expect(dict.repairChat.starters).toHaveLength(3);
       expect(Object.keys(dict.repairChat.status).sort()).toEqual(["estimate", "services", "thinking", "vehicle"]);
       expect(dict.privacy.sections.some((s) => /Claude/.test(s.body))).toBe(true);
-      expect(dict.repairChat.greeting).toContain("{name}");
+      expect(dict.repairChat.greeting).not.toContain("{name}");
       expect(dict.repairChat.greeting).toContain("VIN");
       expect(dict.repairChat.capped).toContain("{phone}");
       expect(dict.repairChat.booking.done).toContain("{slot}");
       expect(dict.repairChat.booking.weekdays).toHaveLength(7);
     }
+    expect(zhCN.repairChat.intro).toBe("告诉助手您的车型和故障现象。它会分析可能的原因并给出零件和维修参考估价。");
   });
 });

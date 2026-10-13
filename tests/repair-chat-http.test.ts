@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { handleChat, handleFinish, handleLead, isConfigured, isEvalRequest, parseBody, type RouteDeps } from "@/lib/repair-chat/http";
 import { SessionStore, type ChatSession, type FinishReason } from "@/lib/repair-chat/session";
@@ -53,8 +53,9 @@ describe("parseBody", () => {
     expect(parseBody({ ...validBody, history: [{ role: "assistant", text: "first" }] })).toBeNull();
   });
 
-  it("requires a name and a phone number with at least 10 digits", () => {
-    expect(parseBody({ ...validBody, lead: undefined })).toBeNull();
+  it("accepts no contact details yet, but rejects malformed ones", () => {
+    expect(parseBody({ ...validBody, lead: undefined })).toEqual({ ...validBody, lead: null });
+    expect(parseBody({ ...validBody, lead: null })).toEqual({ ...validBody, lead: null });
     expect(parseBody({ ...validBody, lead: { name: "", phone: "7789170710" } })).toBeNull();
     expect(parseBody({ ...validBody, lead: { name: "K", phone: "917-0710" } })).toBeNull();
     expect(parseLead({ name: "  Kevin   Liu ", phone: "+1 (778) 917-0710" })).toEqual({ name: "Kevin Liu", phone: "+1 (778) 917-0710" });
@@ -174,6 +175,63 @@ describe("lead delivery", () => {
     ]);
     expect(prompts.join("")).not.toContain("Kevin");
     expect(prompts.join("")).not.toContain("555-0182");
+  });
+
+  it("holds an estimate until the visitor gives name and phone, then releases it once", async () => {
+    const events: LeadEvent[] = [];
+    const { sessions } = recordingSessions();
+    const key = Buffer.from(JSON.stringify({ b: 1, l: "2019 Toyota Camry", a: [] })).toString("base64url");
+    const responses = [
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t", name: "get_estimate", input: { vehicle_key: key, service_id: 5, position: null } }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "About $120 before tax." }] },
+    ];
+    const chatDeps = deps({
+      sessions,
+      notify: async (e) => void events.push(e),
+      catalog: () => ({
+        get: async () => ({}) as never,
+        post: async (path: string) =>
+          ({
+            "labor-ops-list": { laborOperations: [{ applicationID: 1, assetName: "a", positionID: -1 }] },
+            "labor-ops-details": { laborOperation: { estimateTimeHour: 1, laborCategoryName: "Alternator R&R", applications: [] } },
+          })[path] as never,
+      }),
+      client: () => ({ beta: { messages: { create: async () => responses.shift() as never } } }),
+    });
+    const chat = await handleChat(request({ ...validBody, lead: null }), chatDeps);
+    const text = await chat.text();
+    const lines = text.trim().split("\n").map((l) => JSON.parse(l));
+    expect(lines.map((l) => l.type)).toEqual(["session", "status", "lead_required", "done"]);
+    expect(text).not.toContain("$120");
+    expect(text).not.toContain("Alternator");
+    expect(events).toEqual([]);
+
+    const sessionId = lines[0].id as string;
+    const unlock = () =>
+      handleLead(request({ locale: "en", lead, sessionId }), { ...chatDeps, limiter: new RateLimiter() }).then((r) => r.json());
+    const released = (await unlock()) as { sessionId: string; pending: { text: string; estimates: Array<{ service: string }> } };
+    expect(released.sessionId).toBe(sessionId);
+    expect(released.pending.text).toBe("About $120 before tax.");
+    expect(released.pending.estimates[0].service).toBe("Alternator R&R");
+    expect(events).toMatchObject([
+      { type: "lead_started", lead },
+      { type: "estimate_shown", lead, estimate: { service: "Alternator R&R" } },
+    ]);
+    expect(sessions.get(sessionId)?.lead).toEqual(lead);
+    expect(((await unlock()) as { pending: unknown }).pending).toBeNull();
+    expect(events).toHaveLength(2);
+  });
+
+  it("sends no follow-up email for a visitor who never left contact details", async () => {
+    const sent: unknown[] = [];
+    const { createFollowUpHandler } = await import("@/lib/repair-chat/followup");
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const store = new SessionStore(createFollowUpHandler(() => null, async (email) => void sent.push(email)));
+    const anonymous = store.create(null, "en");
+    store.record(anonymous.id, { role: "user", text: "brake noise" });
+    await store.finish(anonymous.id, "idle");
+    expect(sent).toEqual([]);
+    info.mockRestore();
   });
 
   it("posts to the webhook and falls back to the log when delivery fails", async () => {

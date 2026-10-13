@@ -23,9 +23,16 @@ export interface TranscriptLine {
   at: string;
 }
 
+/** A reply that contains estimates, held until the visitor leaves name and phone. */
+export interface PendingReply {
+  text: string;
+  estimates: EstimateCard[];
+}
+
 export interface ChatSession {
   id: string;
-  lead: Lead;
+  /** Null until the visitor gives name and phone (asked when the first estimate is ready). */
+  lead: Lead | null;
   locale: string;
   startedAt: string;
   lastActivityAt: string;
@@ -37,6 +44,7 @@ export interface ChatSession {
   capped: boolean;
   /** Appointment the visitor requested from the booking card, shop time. */
   booking?: { date: string; time: string };
+  pending?: PendingReply;
 }
 
 export interface SessionOptions {
@@ -60,7 +68,7 @@ export class SessionStore {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  create(lead: Lead, locale: string, options: SessionOptions = {}): ChatSession {
+  create(lead: Lead | null, locale: string, options: SessionOptions = {}): ChatSession {
     if (this.entries.size >= MAX_SESSIONS) {
       const oldest = this.entries.keys().next().value;
       if (oldest) void this.finish(oldest, "idle");
@@ -106,6 +114,26 @@ export class SessionStore {
     for (const line of lines.slice(-MAX_TRANSCRIPT)) {
       if (line.text.trim()) entry.session.transcript.push({ ...line, text: line.text.slice(0, 4000), at });
     }
+  }
+
+  attachLead(id: string, lead: Lead): void {
+    const entry = this.entries.get(id);
+    if (!entry) return;
+    entry.session.lead = lead;
+    this.touch(id);
+  }
+
+  holdReply(id: string, pending: PendingReply): void {
+    const entry = this.entries.get(id);
+    if (entry) entry.session.pending = pending;
+  }
+
+  /** The held reply, once; undefined if there is none. */
+  takeReply(id: string): PendingReply | undefined {
+    const entry = this.entries.get(id);
+    const pending = entry?.session.pending;
+    if (entry) delete entry.session.pending;
+    return pending;
   }
 
   recordBooking(id: string, booking: { date: string; time: string }): void {
