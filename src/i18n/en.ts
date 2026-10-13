@@ -38,6 +38,7 @@ export const en = {
     callNow: "Call Now",
     whatsapp: "WhatsApp",
     email: "Email Us",
+    aiQuote: "Chat with our AI assistant for an instant quote",
     viewTuroFleet: "Browse Our Turo Fleet",
     becomeHost: "Host My Car With SPEEDX",
     learnMore: "Learn More",

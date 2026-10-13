@@ -39,6 +39,7 @@ export const zhCN: Dictionary = {
     callNow: "立即致电",
     whatsapp: "WhatsApp",
     email: "发邮件",
+    aiQuote: "联系AI助手获得立即报价",
     viewTuroFleet: "浏览我们的 Turo 车队",
     becomeHost: "托管我的车辆",
     learnMore: "了解更多",

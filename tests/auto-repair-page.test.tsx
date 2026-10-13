@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import AutoRepairPage from "@/app/[locale]/auto-repair/page";
 import RepairDetailPage from "@/app/[locale]/auto-repair/[service]/page";
 import { en } from "@/i18n/en";
@@ -21,6 +21,36 @@ async function renderPage(locale: string) {
 }
 
 describe("auto repair hub page", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each(locales)("keeps facts and price tables collapsed but in the markup in %s", async (_, dict) => {
+    const { view } = await renderPage(dict === en ? "en" : dict === zhCN ? "zh-CN" : "zh-TW");
+    const sections = [...view.container.querySelectorAll("details")].filter((el) =>
+      [dict.autoRepair.facts.title, dict.autoRepair.pricing.title, dict.autoRepair.pricing.flat.title].includes(
+        el.querySelector("summary h2")?.textContent ?? "",
+      ),
+    );
+
+    expect(sections).toHaveLength(3);
+    for (const details of sections) expect(details.open).toBe(false);
+    expect(view.container.querySelectorAll("table")).toHaveLength(2);
+  });
+
+  it("offers a quote button that jumps to the assistant only when the assistant is on the page", async () => {
+    await renderPage("en");
+    expect(screen.queryByRole("link", { name: en.cta.aiQuote })).not.toBeInTheDocument();
+    cleanup();
+
+    vi.stubEnv("NEXT_PUBLIC_REPAIR_CHAT_ENABLED", "true");
+    await renderPage("zh-CN");
+    const buttons = screen.getAllByRole("link", { name: "联系AI助手获得立即报价" });
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) expect(button).toHaveAttribute("href", "#estimate");
+    expect(document.getElementById("estimate")).not.toBeNull();
+  });
+
   it.each(locales)("publishes the same FAQs in %s markup and visible text", async (locale, dict) => {
     const { graph } = await renderPage(locale);
     const faq = graph.find((node) => node["@type"] === "FAQPage");

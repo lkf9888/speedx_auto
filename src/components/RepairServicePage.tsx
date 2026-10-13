@@ -21,11 +21,15 @@ export function RepairServicePage({
 }) {
   const copy = dict.autoRepair.services[serviceSlug];
   const pagePath = routePath(locale, repairRouteKeys[serviceSlug]);
+  const quoteHref =
+    process.env.NEXT_PUBLIC_REPAIR_CHAT_ENABLED === "true"
+      ? `${routePath(locale, "autoRepair")}#estimate`
+      : undefined;
 
   return (
     <>
       <section className="bg-hero-gradient">
-        <Container className="py-14 sm:py-20 lg:py-24">
+        <Container className="py-10 sm:py-20 lg:py-24">
           <nav aria-label="Breadcrumb" className="text-sm text-ink-500">
             <Link href={routePath(locale, "home")} className="hover:text-ink-900">
               {dict.nav.home}
@@ -42,12 +46,12 @@ export function RepairServicePage({
             <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700">
               {copy.eyebrow}
             </span>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight text-ink-900 sm:text-5xl lg:text-6xl">
+            <h1 className="mt-4 text-[1.65rem] font-bold leading-tight tracking-tight text-ink-900 sm:text-5xl lg:text-6xl">
               {copy.title}
             </h1>
             <p
               data-testid="answer-summary"
-              className="mt-6 text-lg leading-8 text-ink-600"
+              className="mt-5 text-base leading-7 text-ink-600 sm:mt-6 sm:text-lg sm:leading-8"
             >
               {copy.summary}
             </p>
@@ -58,6 +62,7 @@ export function RepairServicePage({
                 intent="auto_repair"
                 placement="hero"
                 pagePath={pagePath}
+                quoteHref={quoteHref}
               />
             </div>
             <p className="mt-3 text-xs font-semibold text-ink-400">
@@ -67,7 +72,7 @@ export function RepairServicePage({
         </Container>
       </section>
 
-      <section className="py-16 sm:py-20">
+      <section className="py-10 sm:py-20">
         <Container>
           <div className="grid gap-8 lg:grid-cols-2">
             <InfoList title={copy.symptomsTitle} items={copy.symptoms} />
@@ -83,9 +88,9 @@ export function RepairServicePage({
         </Container>
       </section>
 
-      <section id="pricing" className="bg-ink-50 py-16 sm:py-20">
+      <section id="pricing" className="bg-ink-50 py-10 sm:py-20">
         <Container>
-          <h2 className="text-3xl font-bold text-ink-900">{copy.pricingTitle}</h2>
+          <h2 className="text-2xl font-bold sm:text-3xl text-ink-900">{copy.pricingTitle}</h2>
           <p className="mt-4 max-w-3xl leading-7 text-ink-600">{copy.pricingBody}</p>
           {copy.pricingRows.length > 0 && (
             <div className="mt-8 overflow-x-auto rounded-2xl bg-white ring-1 ring-ink-100">
@@ -115,16 +120,16 @@ export function RepairServicePage({
         </Container>
       </section>
 
-      <section className="py-16 sm:py-20">
+      <section className="py-10 sm:py-20">
         <Container>
           <div className="max-w-3xl">
-            <h2 className="text-3xl font-bold text-ink-900">
+            <h2 className="text-2xl font-bold sm:text-3xl text-ink-900">
               {copy.serviceAreaTitle}
             </h2>
             <p className="mt-4 leading-7 text-ink-600">{copy.serviceAreaBody}</p>
           </div>
           <div className="mt-12 max-w-4xl">
-            <h2 className="text-3xl font-bold text-ink-900">{copy.faqTitle}</h2>
+            <h2 className="text-2xl font-bold sm:text-3xl text-ink-900">{copy.faqTitle}</h2>
             <div className="mt-6 space-y-3">
               {copy.faqs.map((faq) => (
                 <details key={faq.question} className="rounded-2xl bg-ink-50 p-5 ring-1 ring-ink-100">
@@ -141,10 +146,10 @@ export function RepairServicePage({
         </Container>
       </section>
 
-      <section className="py-16 sm:py-20">
+      <section className="py-10 sm:py-20">
         <Container>
           <div className="rounded-3xl bg-dark-hero p-8 text-white sm:p-12">
-            <h2 className="text-3xl font-bold">{copy.ctaTitle}</h2>
+            <h2 className="text-2xl font-bold sm:text-3xl">{copy.ctaTitle}</h2>
             <p className="mt-4 max-w-2xl leading-7 text-ink-200">{copy.ctaBody}</p>
             <div className="mt-7">
               <ContactBar
@@ -154,6 +159,7 @@ export function RepairServicePage({
                 placement="middle"
                 pagePath={pagePath}
                 theme="dark"
+                quoteHref={quoteHref}
               />
             </div>
           </div>

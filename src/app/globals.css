@@ -37,6 +37,17 @@
     color-scheme: light;
   }
 
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+
+  /* Keep anchor targets clear of the sticky site header. */
+  [id] {
+    scroll-margin-top: 5rem;
+  }
+
   html,
   body {
     background: #ffffff;

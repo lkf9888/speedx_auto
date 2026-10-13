@@ -19,6 +19,8 @@ interface ContactBarProps {
   pagePath?: string;
   variant?: "inline" | "sticky";
   theme?: "light" | "dark";
+  /** Anchor of the AI estimate assistant; adds the prominent quote button above the contact buttons. */
+  quoteHref?: string;
 }
 
 export function ContactBar({
@@ -29,6 +31,7 @@ export function ContactBar({
   pagePath,
   variant = "inline",
   theme = "light",
+  quoteHref,
 }: ContactBarProps) {
   const [copyStatus, setCopyStatus] = useState<"success" | "failure" | null>(
     null,
@@ -122,6 +125,15 @@ export function ContactBar({
 
   return (
     <div>
+      {quoteHref ? (
+        <a
+          href={quoteHref}
+          data-ai-quote-cta
+          className="mb-3 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 to-brand-700 px-5 py-3.5 text-base font-bold text-white shadow-lg shadow-brand-500/30 transition hover:from-brand-600 hover:to-brand-800 sm:inline-flex sm:w-auto"
+        >
+          <SparkleIcon /> {dict.cta.aiQuote}
+        </a>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
@@ -152,6 +164,14 @@ export function ContactBar({
         {feedback}
       </p>
     </div>
+  );
+}
+
+function SparkleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2zm7 11l.9 2.6 2.6.9-2.6.9L19 20l-.9-2.6-2.6-.9 2.6-.9L19 13zM5 14l.7 2 2 .7-2 .7L5 19.5l-.7-2.1-2-.7 2-.7L5 14z" />
+    </svg>
   );
 }
 

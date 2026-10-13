@@ -39,6 +39,7 @@ export const zhTW: Dictionary = {
     callNow: "立即致電",
     whatsapp: "WhatsApp",
     email: "發郵件",
+    aiQuote: "聯絡AI助手獲得即時報價",
     viewTuroFleet: "瀏覽我們的 Turo 車隊",
     becomeHost: "託管我的車輛",
     learnMore: "了解更多",

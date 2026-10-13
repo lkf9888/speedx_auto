@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Collapsible } from "@/components/Collapsible";
 import { ContactBar } from "@/components/ContactBar";
 import { RepairChat } from "@/components/RepairChat";
 import { Container } from "@/components/Container";
@@ -69,6 +70,8 @@ export default async function AutoRepairPage({
   const dict = getDictionary(locale as Locale);
   const copy = dict.autoRepair;
   const pagePath = routePath(locale, "autoRepair");
+  const chatEnabled = process.env.NEXT_PUBLIC_REPAIR_CHAT_ENABLED === "true";
+  const quoteHref = chatEnabled ? "#estimate" : undefined;
 
   return (
     <>
@@ -94,107 +97,110 @@ export default async function AutoRepairPage({
         faqs={copy.faqs}
       />
       <section className="bg-hero-gradient">
-        <Container className="py-16 sm:py-24 lg:py-28">
+        <Container className="py-10 sm:py-24 lg:py-28">
           <div className="max-w-3xl">
             <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700">
               {copy.eyebrow}
             </span>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight text-ink-900 sm:text-5xl lg:text-6xl">
+            <h1 className="mt-4 text-[1.65rem] font-bold leading-tight tracking-tight text-ink-900 sm:text-5xl lg:text-6xl">
               {copy.title}
             </h1>
-            <p data-testid="answer-summary" className="mt-6 text-lg leading-8 text-ink-600">
+            <p data-testid="answer-summary" className="mt-5 text-base leading-7 text-ink-600 sm:mt-6 sm:text-lg sm:leading-8">
               {copy.summary}
             </p>
             <div className="mt-8">
-              <ContactBar dict={dict} locale={locale} intent="auto_repair" placement="hero" pagePath={pagePath} />
+              <ContactBar dict={dict} locale={locale} intent="auto_repair" placement="hero" pagePath={pagePath} quoteHref={quoteHref} />
             </div>
             <p className="mt-3 text-xs font-semibold text-ink-400">{copy.lastUpdated}</p>
           </div>
         </Container>
       </section>
 
-      <section className="border-y border-ink-100 bg-white py-12 sm:py-14">
+      <section className="border-y border-ink-100 bg-ink-50 py-4 sm:py-6">
         <Container>
-          <h2 className="text-2xl font-bold text-ink-900">{copy.facts.title}</h2>
-          <dl className="mt-6 grid gap-x-10 gap-y-4 md:grid-cols-2">
-            {[
-              ...copy.facts.items,
-              { label: copy.facts.hoursLabel, value: dict.footer.hoursValue },
-              { label: copy.facts.addressLabel, value: company.addressFull },
-            ].map((fact) => (
-              <div key={fact.label} className="grid grid-cols-[6.5rem_1fr] gap-3 sm:grid-cols-[8.5rem_1fr] sm:gap-4 border-b border-ink-100 pb-4 text-sm">
-                <dt className="font-semibold text-ink-900">{fact.label}</dt>
-                <dd className="leading-6 text-ink-600">{fact.value}</dd>
-              </div>
-            ))}
-          </dl>
+          <Collapsible title={copy.facts.title}>
+            <dl className="grid gap-x-10 gap-y-4 md:grid-cols-2">
+              {[
+                ...copy.facts.items,
+                { label: copy.facts.hoursLabel, value: dict.footer.hoursValue },
+                { label: copy.facts.addressLabel, value: company.addressFull },
+              ].map((fact) => (
+                <div key={fact.label} className="grid grid-cols-[6.5rem_1fr] gap-3 sm:grid-cols-[8.5rem_1fr] sm:gap-4 border-b border-ink-100 pb-4 text-sm">
+                  <dt className="font-semibold text-ink-900">{fact.label}</dt>
+                  <dd className="leading-6 text-ink-600">{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </Collapsible>
         </Container>
       </section>
 
-      {process.env.NEXT_PUBLIC_REPAIR_CHAT_ENABLED === "true" && (
+      {chatEnabled && (
         <RepairChat locale={locale} dict={dict} pagePath={pagePath} />
       )}
 
-      <section id="pricing" className="bg-ink-50 py-16 sm:py-20">
-        <Container>
-          <h2 className="text-3xl font-bold text-ink-900 sm:text-4xl">{copy.pricing.title}</h2>
-          <p className="mt-4 max-w-2xl leading-7 text-ink-600">{copy.pricing.intro}</p>
-          <div className="mt-8 max-w-3xl rounded-2xl bg-white p-6 ring-1 ring-ink-100">
-            <h3 className="font-semibold text-ink-900">{copy.pricing.laborTitle}</h3>
-            <p className="mt-3 text-sm leading-7 text-ink-600">{copy.pricing.laborBody}</p>
-          </div>
-          <div className="mt-8 overflow-x-auto rounded-2xl bg-white ring-1 ring-ink-100">
-            <table className="w-full min-w-[40rem] text-left text-sm">
-              <thead className="border-b border-ink-100 text-xs uppercase tracking-wider text-ink-400">
-                <tr>
-                  <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.columns.job}</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.columns.laborTime}</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.columns.total}</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.columns.examples}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink-100">
-                {copy.pricing.rows.map((row) => (
-                  <tr key={row.job}>
-                    <th scope="row" className="px-5 py-4 font-semibold text-ink-900">{row.job}</th>
-                    <td className="whitespace-nowrap px-5 py-4 tabular-nums text-ink-600">{row.laborTime}</td>
-                    <td className="whitespace-nowrap px-5 py-4 font-semibold tabular-nums text-ink-900">{row.total}</td>
-                    <td className="px-5 py-4 text-ink-600">{row.examples}</td>
+      <section id="pricing" className="bg-ink-50 py-6 sm:py-10">
+        <Container className="space-y-3">
+          <Collapsible title={copy.pricing.title}>
+            <p className="max-w-2xl text-sm leading-7 text-ink-600 sm:text-base">{copy.pricing.intro}</p>
+            <div className="mt-5 max-w-3xl rounded-2xl bg-ink-50 p-5 ring-1 ring-ink-100">
+              <h3 className="font-semibold text-ink-900">{copy.pricing.laborTitle}</h3>
+              <p className="mt-3 text-sm leading-7 text-ink-600">{copy.pricing.laborBody}</p>
+            </div>
+            <div className="mt-5 overflow-x-auto rounded-2xl ring-1 ring-ink-100">
+              <table className="w-full min-w-[40rem] text-left text-sm">
+                <thead className="border-b border-ink-100 text-xs uppercase tracking-wider text-ink-400">
+                  <tr>
+                    <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.columns.job}</th>
+                    <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.columns.laborTime}</th>
+                    <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.columns.total}</th>
+                    <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.columns.examples}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-4 max-w-3xl text-xs leading-6 text-ink-400">{copy.pricing.footnote}</p>
-          <h3 className="mt-12 text-2xl font-bold text-ink-900">{copy.pricing.flat.title}</h3>
-          <p className="mt-3 max-w-2xl leading-7 text-ink-600">{copy.pricing.flat.intro}</p>
-          <div className="mt-6 overflow-x-auto rounded-2xl bg-white ring-1 ring-ink-100">
-            <table className="w-full min-w-[36rem] text-left text-sm">
-              <thead className="border-b border-ink-100 text-xs uppercase tracking-wider text-ink-400">
-                <tr>
-                  <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.flat.columns.service}</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.flat.columns.price}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink-100">
-                {flatPriceRows(copy.pricing.flat).map((row) => (
-                  <tr key={row.service}>
-                    <th scope="row" className="px-5 py-4 font-semibold text-ink-900">{row.service}</th>
-                    <td className="px-5 py-4 tabular-nums text-ink-600">{row.price}</td>
+                </thead>
+                <tbody className="divide-y divide-ink-100">
+                  {copy.pricing.rows.map((row) => (
+                    <tr key={row.job}>
+                      <th scope="row" className="px-5 py-4 font-semibold text-ink-900">{row.job}</th>
+                      <td className="whitespace-nowrap px-5 py-4 tabular-nums text-ink-600">{row.laborTime}</td>
+                      <td className="whitespace-nowrap px-5 py-4 font-semibold tabular-nums text-ink-900">{row.total}</td>
+                      <td className="px-5 py-4 text-ink-600">{row.examples}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-4 max-w-3xl text-xs leading-6 text-ink-400">{copy.pricing.footnote}</p>
+          </Collapsible>
+          <Collapsible title={copy.pricing.flat.title}>
+            <p className="max-w-2xl text-sm leading-7 text-ink-600 sm:text-base">{copy.pricing.flat.intro}</p>
+            <div className="mt-5 overflow-x-auto rounded-2xl ring-1 ring-ink-100">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-ink-100 text-xs uppercase tracking-wider text-ink-400">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 font-semibold sm:px-5">{copy.pricing.flat.columns.service}</th>
+                    <th scope="col" className="px-4 py-3 font-semibold sm:px-5">{copy.pricing.flat.columns.price}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-4 max-w-3xl text-xs leading-6 text-ink-400">{copy.pricing.flat.note}</p>
+                </thead>
+                <tbody className="divide-y divide-ink-100">
+                  {flatPriceRows(copy.pricing.flat).map((row) => (
+                    <tr key={row.service}>
+                      <th scope="row" className="px-4 py-4 align-top font-semibold text-ink-900 sm:px-5">{row.service}</th>
+                      <td className="px-4 py-4 tabular-nums leading-6 text-ink-600 sm:px-5">{row.price}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-4 max-w-3xl text-xs leading-6 text-ink-400">{copy.pricing.flat.note}</p>
+          </Collapsible>
         </Container>
       </section>
 
-      <section className="py-16 sm:py-20">
+      <section className="py-10 sm:py-20">
         <Container>
-          <h2 className="text-3xl font-bold text-ink-900 sm:text-4xl">{copy.scope.title}</h2>
+          <h2 className="text-2xl font-bold text-ink-900 sm:text-4xl">{copy.scope.title}</h2>
           <div className="mt-8 grid gap-6 lg:grid-cols-2">
-            <div className="rounded-3xl border border-ink-100 bg-white p-7">
+            <div className="rounded-3xl border border-ink-100 bg-white p-5 sm:p-7">
               <h3 className="text-xl font-semibold text-ink-900">{copy.scope.offeredTitle}</h3>
               <ul className="mt-4 space-y-2 text-sm leading-7 text-ink-600">
                 {copy.scope.offered.map((item) => (
@@ -215,7 +221,7 @@ export default async function AutoRepairPage({
                 </div>
               </div>
             </div>
-            <div id="ev" className="rounded-3xl bg-ink-50 p-7">
+            <div id="ev" className="rounded-3xl bg-ink-50 p-5 sm:p-7">
               <h3 className="text-xl font-semibold text-ink-900">{copy.ev.title}</h3>
               <p className="mt-3 text-sm leading-7 text-ink-600">{copy.ev.body}</p>
               <ul className="mt-4 space-y-2 text-sm leading-7 text-ink-600">
@@ -235,15 +241,15 @@ export default async function AutoRepairPage({
         </Container>
       </section>
 
-      <section className="bg-ink-50 py-16 sm:py-20">
+      <section className="bg-ink-50 py-10 sm:py-20">
         <Container>
-          <h2 className="text-3xl font-bold text-ink-900 sm:text-4xl">{copy.servicesTitle}</h2>
+          <h2 className="text-2xl font-bold text-ink-900 sm:text-4xl">{copy.servicesTitle}</h2>
           <p className="mt-4 max-w-2xl leading-7 text-ink-600">{copy.servicesIntro}</p>
           <div className="mt-10 grid gap-5 md:grid-cols-2">
             {repairServiceSlugs.map((slug) => {
               const service = copy.services[slug];
               return (
-                <Link key={slug} href={routePath(locale, repairRouteKeys[slug])} className="rounded-3xl border border-ink-100 bg-white p-7 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-lg">
+                <Link key={slug} href={routePath(locale, repairRouteKeys[slug])} className="rounded-3xl border border-ink-100 bg-white p-5 sm:p-7 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-lg">
                   <h3 className="text-xl font-semibold text-ink-900">{service.title}</h3>
                   <p className="mt-3 text-sm leading-7 text-ink-600">{service.metaDescription}</p>
                   <span className="mt-5 inline-flex text-sm font-semibold text-brand-600">{dict.cta.learnMore} →</span>
@@ -254,9 +260,9 @@ export default async function AutoRepairPage({
         </Container>
       </section>
 
-      <section className="py-16 sm:py-20">
+      <section className="py-10 sm:py-20">
         <Container>
-          <h2 className="text-3xl font-bold text-ink-900">{copy.whyTitle}</h2>
+          <h2 className="text-2xl font-bold text-ink-900 sm:text-3xl">{copy.whyTitle}</h2>
           <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
             {copy.whyItems.map((item) => (
               <article key={item.title} className="rounded-2xl bg-white p-6 ring-1 ring-ink-100">
@@ -266,7 +272,7 @@ export default async function AutoRepairPage({
             ))}
           </div>
           <div className="mt-12 max-w-3xl">
-            <h2 className="text-3xl font-bold text-ink-900">{copy.serviceAreaTitle}</h2>
+            <h2 className="text-2xl font-bold text-ink-900 sm:text-3xl">{copy.serviceAreaTitle}</h2>
             <p className="mt-4 leading-7 text-ink-600">{copy.serviceAreaBody}</p>
             <ul className="mt-5 flex flex-wrap gap-2">
               {copy.serviceAreaPlaces.map((place) => (
@@ -275,7 +281,7 @@ export default async function AutoRepairPage({
             </ul>
           </div>
           <div className="mt-12 max-w-4xl">
-            <h2 className="text-3xl font-bold text-ink-900">{copy.faqTitle}</h2>
+            <h2 className="text-2xl font-bold text-ink-900 sm:text-3xl">{copy.faqTitle}</h2>
             <div className="mt-6 space-y-3">
               {copy.faqs.map((faq) => (
                 <details key={faq.question} className="rounded-2xl bg-white p-5 ring-1 ring-ink-100">
@@ -288,13 +294,13 @@ export default async function AutoRepairPage({
         </Container>
       </section>
 
-      <section className="py-16 sm:py-20">
+      <section className="py-10 sm:py-20">
         <Container>
-          <div className="rounded-3xl bg-dark-hero p-8 text-white sm:p-12">
-            <h2 className="text-3xl font-bold">{copy.ctaTitle}</h2>
+          <div className="rounded-3xl bg-dark-hero p-6 text-white sm:p-12">
+            <h2 className="text-2xl font-bold sm:text-3xl">{copy.ctaTitle}</h2>
             <p className="mt-4 max-w-2xl leading-7 text-ink-200">{copy.ctaBody}</p>
             <div className="mt-7">
-              <ContactBar dict={dict} locale={locale} intent="auto_repair" placement="middle" pagePath={pagePath} theme="dark" />
+              <ContactBar dict={dict} locale={locale} intent="auto_repair" placement="middle" pagePath={pagePath} theme="dark" quoteHref={quoteHref} />
             </div>
           </div>
         </Container>

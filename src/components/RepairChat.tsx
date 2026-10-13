@@ -475,12 +475,12 @@ export function RepairChat({
   const noQuestionYet = !turns.some((t) => t.role === "user");
 
   return (
-    <section id="estimate" className="py-16 sm:py-20" aria-labelledby="repair-chat-title">
+    <section id="estimate" className="py-10 sm:py-20" aria-labelledby="repair-chat-title">
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
         <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700">
           {copy.eyebrow}
         </span>
-        <h2 id="repair-chat-title" className="mt-3 text-3xl font-bold text-ink-900 sm:text-4xl">
+        <h2 id="repair-chat-title" className="mt-3 text-2xl font-bold text-ink-900 sm:text-4xl">
           {copy.title}
         </h2>
         <p className="mt-3 leading-7 text-ink-600">{copy.intro}</p>
