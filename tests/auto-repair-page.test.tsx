@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import AutoRepairPage from "@/app/[locale]/auto-repair/page";
+import RepairDetailPage from "@/app/[locale]/auto-repair/[service]/page";
 import { en } from "@/i18n/en";
 import { zhCN } from "@/i18n/zh-CN";
 import { zhTW } from "@/i18n/zh-TW";
@@ -64,5 +65,38 @@ describe("auto repair hub page", () => {
     });
     const catalog = service?.hasOfferCatalog as { itemListElement: Array<{ itemOffered: { name: string } }> };
     expect(catalog.itemListElement.map((item) => item.itemOffered.name)).toEqual(en.autoRepair.scope.offered);
+  });
+
+  it("links the hub's EV section to the Tesla and EV guide", async () => {
+    await renderPage("en");
+
+    expect(screen.getByRole("link", { name: /Read the Tesla and EV repair guide/ })).toHaveAttribute(
+      "href",
+      "/en/auto-repair/tesla-ev",
+    );
+  });
+});
+
+describe("repair service guides", () => {
+  it.each(locales)("renders the %s Tesla guide with matching FAQ markup and a labor-rate offer", async (locale, dict) => {
+    const view = render(
+      await RepairDetailPage({ params: Promise.resolve({ locale, service: "tesla-ev" }) }),
+    );
+    const script = view.container.querySelector('script[type="application/ld+json"]');
+    const graph = JSON.parse(script?.textContent ?? "{}")["@graph"] as JsonLdNode[];
+    const copy = dict.autoRepair.services["tesla-ev"];
+    const faq = graph.find((node) => node["@type"] === "FAQPage");
+    const service = graph.find((node) => node["@type"] === "Service");
+
+    expect((faq?.mainEntity as Array<{ name: string }>).map((q) => q.name)).toEqual(
+      copy.faqs.map((item) => item.question),
+    );
+    expect(service).toMatchObject({
+      name: copy.title,
+      serviceType: copy.serviceType,
+      offers: { priceSpecification: { price: 120, priceCurrency: "CAD", unitCode: "HUR" } },
+    });
+    expect(screen.getByRole("heading", { level: 1, name: copy.title })).toBeInTheDocument();
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(copy.pricingRows.length + 1);
   });
 });

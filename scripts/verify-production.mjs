@@ -16,6 +16,7 @@ const routeSuffixes = [
   "/auto-repair/brakes",
   "/auto-repair/diagnostics",
   "/auto-repair/suspension",
+  "/auto-repair/tesla-ev",
   "/services",
   "/about",
   "/contact",
@@ -27,8 +28,11 @@ const answerMarkers = {
   "/zh-CN/hosting": "SPEEDX AUTO 为大温地区",
   "/zh-TW/hosting": "SPEEDX AUTO 為大溫地區",
   "/en/auto-repair": "SPEEDX AUTO is an auto repair shop",
-  "/zh-CN/auto-repair": "SPEEDX AUTO 在列治文",
-  "/zh-TW/auto-repair": "SPEEDX AUTO 在列治文",
+  "/zh-CN/auto-repair": "SPEEDX AUTO 速驰汽车是位于列治文",
+  "/zh-TW/auto-repair": "SPEEDX AUTO 速馳汽車是位於列治文",
+  "/en/auto-repair/tesla-ev": "SPEEDX AUTO repairs electric vehicles, mainly Tesla",
+  "/zh-CN/auto-repair/tesla-ev": "SPEEDX AUTO 在列治文 2980 Number 3 Road",
+  "/zh-TW/auto-repair/tesla-ev": "SPEEDX AUTO 在列治文 2980 Number 3 Road",
 };
 
 export const localizedPages = localeCatalog.flatMap(({ locale, lang }) =>

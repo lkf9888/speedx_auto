@@ -108,4 +108,40 @@ describe("localized auto repair copy", () => {
       expect(faqText).toContain(String(price));
     }
   });
+
+  it.each(dictionaries)("gives every %s service guide prices and enough FAQs", (_, dict) => {
+    for (const slug of repairServiceSlugs) {
+      const service = dict.autoRepair.services[slug];
+      expect(service.faqs.length).toBeGreaterThanOrEqual(6);
+      expect(service.pricingRows.length).toBeGreaterThanOrEqual(slug === "tesla-ev" ? 2 : 4);
+      expect(service.pricingBody).toContain(String(WALK_IN_LABOR_RATE));
+      expect(service.serviceType.length).toBeGreaterThan(1);
+    }
+  });
+
+  it.each(dictionaries)("keeps the %s maintenance flat prices equal to the posted price list", (_, dict) => {
+    const rows = JSON.stringify(dict.autoRepair.services.maintenance.pricingRows);
+    const { oil, tirePerWheel, acRecharge } = FLAT_PRICES;
+
+    for (const price of [
+      oil.standard.regular,
+      oil.premium.regular,
+      oil.standard.large,
+      oil.premium.large,
+      ...Object.values(tirePerWheel),
+      acRecharge.r134a,
+      acRecharge.r1234yf,
+    ]) {
+      expect(rows).toContain(`$${price}`);
+    }
+  });
+
+  it("writes each Chinese locale in its own script", () => {
+    const simplifiedOnly = /[车维检价这时会发动电刹轮转换与为后么们师务无设]/;
+    const traditionalOnly = /[車維檢價這時會發動電煞輪轉換與為後麼們師務無設]/;
+    const strip = (value: unknown) => JSON.stringify(value).replace(/WorldPac|ALLDATA/g, "");
+
+    expect(strip(zhTW.autoRepair)).not.toMatch(simplifiedOnly);
+    expect(strip(zhCN.autoRepair)).not.toMatch(traditionalOnly);
+  });
 });

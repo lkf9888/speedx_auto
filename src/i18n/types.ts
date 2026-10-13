@@ -26,6 +26,15 @@ export interface RepairServiceCopy {
   ctaTitle: string;
   ctaBody: string;
   lastUpdated: string;
+  /** Plain service type for structured data. */
+  serviceType: string;
+  pricingTitle: string;
+  pricingBody: string;
+  pricingColumns: RepairPriceRow;
+  /** Real quotes for this service; may be empty when none are published. */
+  pricingRows: RepairPriceRow[];
+  pricingFootnote: string;
+  relatedTitle: string;
 }
 
 export interface RepairFact {
@@ -105,6 +114,7 @@ export interface AutoRepairCopy {
     body: string;
     items: string[];
     note: string;
+    linkLabel: string;
   };
   servicesTitle: string;
   servicesIntro: string;

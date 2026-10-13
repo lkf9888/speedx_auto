@@ -6,8 +6,8 @@ describe("sitemap", () => {
     const entries = sitemap();
     const urls = entries.map((entry) => entry.url);
 
-    expect(entries).toHaveLength(33);
-    expect(new Set(urls).size).toBe(33);
+    expect(entries).toHaveLength(36);
+    expect(new Set(urls).size).toBe(36);
     expect(urls).toContain(
       "https://speedxrental.com/zh-TW/auto-repair/suspension",
     );
@@ -21,7 +21,7 @@ describe("sitemap", () => {
     );
 
     expect(brakePage).toMatchObject({
-      lastModified: "2026-08-11",
+      lastModified: "2026-10-12",
       alternates: {
         languages: {
           en: "https://speedxrental.com/en/auto-repair/brakes",
@@ -33,10 +33,11 @@ describe("sitemap", () => {
     });
   });
 
-  it("dates the auto repair hub by its own last content change", () => {
-    const hub = sitemap().filter((entry) => entry.url.endsWith("/auto-repair"));
+  it("dates the auto repair pages by their own last content change", () => {
+    const repairPages = sitemap().filter((entry) => entry.url.includes("/auto-repair"));
 
-    expect(hub).toHaveLength(3);
-    expect(hub.every((entry) => entry.lastModified === "2026-10-12")).toBe(true);
+    expect(repairPages).toHaveLength(18);
+    expect(repairPages.every((entry) => entry.lastModified === "2026-10-12")).toBe(true);
+    expect(sitemap().find((entry) => entry.url.endsWith("/en/hosting"))?.lastModified).toBe("2026-08-11");
   });
 });

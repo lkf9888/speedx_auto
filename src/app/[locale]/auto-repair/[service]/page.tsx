@@ -4,20 +4,14 @@ import { RepairServicePage } from "@/components/RepairServicePage";
 import { StructuredData } from "@/components/StructuredData";
 import { isLocale, locales, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
+import { WALK_IN_LABOR_RATE } from "@/lib/repair-chat/pricing";
 import { buildPageMetadata } from "@/lib/seo";
 import {
   absoluteRouteUrl,
+  repairRouteKeys,
   repairServiceSlugs,
   type RepairServiceSlug,
-  type RouteKey,
 } from "@/lib/site-routes";
-
-const repairRouteKeys: Record<RepairServiceSlug, RouteKey> = {
-  maintenance: "repairMaintenance",
-  brakes: "repairBrakes",
-  diagnostics: "repairDiagnostics",
-  suspension: "repairSuspension",
-};
 
 function isRepairServiceSlug(value: string): value is RepairServiceSlug {
   return (repairServiceSlugs as readonly string[]).includes(value);
@@ -53,7 +47,8 @@ export default async function RepairDetailPage({
   const { locale, service } = await params;
   if (!isLocale(locale) || !isRepairServiceSlug(service)) notFound();
   const dict = getDictionary(locale as Locale);
-  const copy = dict.autoRepair.services[service];
+  const hub = dict.autoRepair;
+  const copy = hub.services[service];
   const route = repairRouteKeys[service];
 
   return (
@@ -65,8 +60,14 @@ export default async function RepairDetailPage({
         pageDescription={copy.summary}
         service={{
           name: copy.title,
+          serviceType: copy.serviceType,
           description: copy.summary,
-          areaServed: ["Richmond", "Metro Vancouver"],
+          areaServed: hub.serviceAreaPlaces,
+          hourlyRate: {
+            price: WALK_IN_LABOR_RATE,
+            currency: "CAD",
+            description: hub.pricing.laborRateLabel,
+          },
         }}
         breadcrumbs={[
           { name: dict.nav.home, url: absoluteRouteUrl(locale, "home") },

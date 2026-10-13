@@ -11,6 +11,7 @@ export const repairServiceSlugs = [
   "brakes",
   "diagnostics",
   "suspension",
+  "tesla-ev",
 ] as const;
 
 export type RepairServiceSlug = (typeof repairServiceSlugs)[number];
@@ -23,6 +24,7 @@ export const routePaths = {
   repairBrakes: "/auto-repair/brakes",
   repairDiagnostics: "/auto-repair/diagnostics",
   repairSuspension: "/auto-repair/suspension",
+  repairTeslaEv: "/auto-repair/tesla-ev",
   services: "/services",
   about: "/about",
   contact: "/contact",
@@ -31,9 +33,22 @@ export const routePaths = {
 
 export type RouteKey = keyof typeof routePaths;
 
+export const repairRouteKeys: Record<RepairServiceSlug, RouteKey> = {
+  maintenance: "repairMaintenance",
+  brakes: "repairBrakes",
+  diagnostics: "repairDiagnostics",
+  suspension: "repairSuspension",
+  "tesla-ev": "repairTeslaEv",
+};
+
 /** Routes whose content changed after CONTENT_LAST_MODIFIED. */
 export const routeLastModified: Partial<Record<RouteKey, string>> = {
   autoRepair: "2026-10-12",
+  repairMaintenance: "2026-10-12",
+  repairBrakes: "2026-10-12",
+  repairDiagnostics: "2026-10-12",
+  repairSuspension: "2026-10-12",
+  repairTeslaEv: "2026-10-12",
 };
 
 const hreflangByLocale: Record<Locale, string> = {

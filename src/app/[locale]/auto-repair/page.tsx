@@ -14,18 +14,10 @@ import { WALK_IN_LABOR_RATE } from "@/lib/repair-chat/pricing";
 import { buildPageMetadata } from "@/lib/seo";
 import {
   absoluteRouteUrl,
+  repairRouteKeys,
   repairServiceSlugs,
   routePath,
-  type RepairServiceSlug,
-  type RouteKey,
 } from "@/lib/site-routes";
-
-const routeKeyByService: Record<RepairServiceSlug, RouteKey> = {
-  maintenance: "repairMaintenance",
-  brakes: "repairBrakes",
-  diagnostics: "repairDiagnostics",
-  suspension: "repairSuspension",
-};
 
 const usd = (amount: number) => `$${amount}`;
 
@@ -241,6 +233,9 @@ export default async function AutoRepairPage({
                 ))}
               </ul>
               <p className="mt-4 text-sm leading-7 text-ink-500">{copy.ev.note}</p>
+              <Link href={routePath(locale, "repairTeslaEv")} className="mt-5 inline-flex text-sm font-semibold text-brand-600 hover:text-brand-700">
+                {copy.ev.linkLabel} →
+              </Link>
             </div>
           </div>
         </Container>
@@ -254,7 +249,7 @@ export default async function AutoRepairPage({
             {repairServiceSlugs.map((slug) => {
               const service = copy.services[slug];
               return (
-                <Link key={slug} href={routePath(locale, routeKeyByService[slug])} className="rounded-3xl border border-ink-100 bg-white p-7 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-lg">
+                <Link key={slug} href={routePath(locale, repairRouteKeys[slug])} className="rounded-3xl border border-ink-100 bg-white p-7 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-lg">
                   <h3 className="text-xl font-semibold text-ink-900">{service.title}</h3>
                   <p className="mt-3 text-sm leading-7 text-ink-600">{service.metaDescription}</p>
                   <span className="mt-5 inline-flex text-sm font-semibold text-brand-600">{dict.cta.learnMore} →</span>

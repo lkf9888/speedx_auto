@@ -3,19 +3,12 @@ import { ContactBar } from "@/components/ContactBar";
 import { Container } from "@/components/Container";
 import type { Dictionary } from "@/i18n/dictionaries";
 import {
+  repairRouteKeys,
   repairServiceSlugs,
   routePath,
   type Locale,
   type RepairServiceSlug,
-  type RouteKey,
 } from "@/lib/site-routes";
-
-const routeKeyByService: Record<RepairServiceSlug, RouteKey> = {
-  maintenance: "repairMaintenance",
-  brakes: "repairBrakes",
-  diagnostics: "repairDiagnostics",
-  suspension: "repairSuspension",
-};
 
 export function RepairServicePage({
   locale,
@@ -27,7 +20,7 @@ export function RepairServicePage({
   serviceSlug: RepairServiceSlug;
 }) {
   const copy = dict.autoRepair.services[serviceSlug];
-  const pagePath = routePath(locale, routeKeyByService[serviceSlug]);
+  const pagePath = routePath(locale, repairRouteKeys[serviceSlug]);
 
   return (
     <>
@@ -90,7 +83,39 @@ export function RepairServicePage({
         </Container>
       </section>
 
-      <section className="bg-ink-50 py-16 sm:py-20">
+      <section id="pricing" className="bg-ink-50 py-16 sm:py-20">
+        <Container>
+          <h2 className="text-3xl font-bold text-ink-900">{copy.pricingTitle}</h2>
+          <p className="mt-4 max-w-3xl leading-7 text-ink-600">{copy.pricingBody}</p>
+          {copy.pricingRows.length > 0 && (
+            <div className="mt-8 overflow-x-auto rounded-2xl bg-white ring-1 ring-ink-100">
+              <table className="w-full min-w-[40rem] text-left text-sm">
+                <thead className="border-b border-ink-100 text-xs uppercase tracking-wider text-ink-400">
+                  <tr>
+                    <th scope="col" className="px-5 py-3 font-semibold">{copy.pricingColumns.job}</th>
+                    <th scope="col" className="px-5 py-3 font-semibold">{copy.pricingColumns.laborTime}</th>
+                    <th scope="col" className="px-5 py-3 font-semibold">{copy.pricingColumns.total}</th>
+                    <th scope="col" className="px-5 py-3 font-semibold">{copy.pricingColumns.examples}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-ink-100">
+                  {copy.pricingRows.map((row) => (
+                    <tr key={row.job}>
+                      <th scope="row" className="px-5 py-4 font-semibold text-ink-900">{row.job}</th>
+                      <td className="whitespace-nowrap px-5 py-4 tabular-nums text-ink-600">{row.laborTime}</td>
+                      <td className="whitespace-nowrap px-5 py-4 font-semibold tabular-nums text-ink-900">{row.total}</td>
+                      <td className="px-5 py-4 text-ink-600">{row.examples}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="mt-4 max-w-3xl text-xs leading-6 text-ink-400">{copy.pricingFootnote}</p>
+        </Container>
+      </section>
+
+      <section className="py-16 sm:py-20">
         <Container>
           <div className="max-w-3xl">
             <h2 className="text-3xl font-bold text-ink-900">
@@ -102,7 +127,7 @@ export function RepairServicePage({
             <h2 className="text-3xl font-bold text-ink-900">{copy.faqTitle}</h2>
             <div className="mt-6 space-y-3">
               {copy.faqs.map((faq) => (
-                <details key={faq.question} className="rounded-2xl bg-white p-5 ring-1 ring-ink-100">
+                <details key={faq.question} className="rounded-2xl bg-ink-50 p-5 ring-1 ring-ink-100">
                   <summary className="cursor-pointer list-none">
                     <h3 className="inline text-base font-semibold text-ink-900">
                       {faq.question}
@@ -132,13 +157,14 @@ export function RepairServicePage({
               />
             </div>
           </div>
-          <nav aria-label="Related repair services" className="mt-10 flex flex-wrap gap-3">
+          <h2 className="mt-12 text-xl font-semibold text-ink-900">{copy.relatedTitle}</h2>
+          <nav aria-label={copy.relatedTitle} className="mt-4 flex flex-wrap gap-3">
             {repairServiceSlugs
               .filter((slug) => slug !== serviceSlug)
               .map((slug) => (
                 <Link
                   key={slug}
-                  href={routePath(locale, routeKeyByService[slug])}
+                  href={routePath(locale, repairRouteKeys[slug])}
                   className="rounded-full border border-ink-200 px-4 py-2 text-sm font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700"
                 >
                   {dict.autoRepair.services[slug].title}
