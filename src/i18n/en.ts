@@ -103,10 +103,12 @@ export const en = {
       failed: "Couldn't show the estimate. Please try again, or message us on WhatsApp.",
     },
     greeting: "Hi! To give you an accurate estimate, please tell me your vehicle's year, make and model (or the 17-character VIN — that's the most precise) and describe the problem: what you hear, feel or see, and when it happens.",
+    assistantStatus: "AI repair assistant",
     demo: {
       label: "Sample estimate",
       caption: "This is what an estimate looks like. Prices shown are an example from a real lookup.",
       partsLine: "Parts · {count} options available",
+      partsLineOne: "Parts · 1 option available",
       remarksTitle: "Notes",
       remarkReference: "For reference only. This is not a formal quote.",
       remarkRange: "Prices can vary by about 10% either way. The actual price is quoted by our shop staff.",

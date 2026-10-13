@@ -116,7 +116,7 @@ describe("flat prices", () => {
 });
 
 describe("estimate summary for the model", () => {
-  it("spells out each option's total with labor so the model never adds", () => {
+  it("gives the model the ranges shown on the card so it never adds", () => {
     const card = buildEstimate(
       "2019 Toyota Camry LE",
       {
@@ -136,8 +136,10 @@ describe("estimate summary for the model", () => {
       "E-1",
     );
     const summary = summarizeEstimateForModel(card);
-    expect(summary).toContain("Pads A $159.05 → total $291.05");
-    expect(summary).toContain("Pads B $185.84 → total $317.84");
+    expect(summary).toContain("2 options");
+    expect(summary).toContain("$159–$186");
+    expect(summary).toContain("$262–$350");
+    expect(summary).not.toContain("Pads A");
     expect(summary).not.toMatch(/referral|105\.6|264\.65/i);
   });
 });

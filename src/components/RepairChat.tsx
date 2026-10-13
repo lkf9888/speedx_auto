@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Dictionary } from "@/i18n/dictionaries";
-import type { EstimateCard } from "@/lib/repair-chat/pricing";
+import { estimateRanges, type EstimateCard } from "@/lib/repair-chat/pricing";
 import { company, telLink, whatsappLink } from "@/lib/company";
 import type { Locale } from "@/lib/site-routes";
 import { RepairBooking } from "./RepairBooking";
-import { SampleQuote } from "./SampleQuote";
+import { QuoteSheet } from "./QuoteSheet";
 import { TrackedContactLink } from "./TrackedContactLink";
 
 type ChatCopy = Dictionary["repairChat"];
@@ -20,6 +20,8 @@ interface Turn {
   localOnly?: boolean;
   /** Show the booking card under this reply (once per conversation, after the first estimate). */
   booking?: boolean;
+  /** When the message was sent or received; unset on the greeting so server and browser render the same. */
+  at?: number;
 }
 
 interface Lead {
@@ -60,12 +62,11 @@ export const DEMO_ESTIMATE: EstimateCard = {
   createdAt: "2026-10-11T00:00:00.000Z",
 };
 
-const currency = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
-const money = (value: number) => currency.format(value);
-const range = (low: number, high: number) => (low === high ? money(low) : `${money(low)} – ${money(high)}`);
+const shownRange = (card: EstimateCard) => {
+  const { totalLow, totalHigh } = estimateRanges(card);
+  return totalLow === totalHigh ? `$${totalLow}` : `$${totalLow} – $${totalHigh}`;
+};
 const fill = (template: string, name: string) => template.replaceAll("{name}", name);
-const quoteDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Vancouver" });
 
 function phoneDigits(phone: string): number {
   return phone.replace(/\D/g, "").length;
@@ -77,9 +78,28 @@ function whatsappHref(copy: ChatCopy, card: EstimateCard, name: string): string 
     `${card.vehicle} — ${card.service}${card.position ? ` (${card.position})` : ""}`,
     card.kind === "team_quote"
       ? copy.estimate.teamQuoteTitle
-      : `${copy.estimate.total}: ${range(card.totalLow, card.totalHigh)} ${copy.estimate.beforeTax}`,
+      : `${copy.estimate.total}: ${shownRange(card)} ${copy.estimate.beforeTax}`,
   ];
   return `${whatsappLink}?text=${encodeURIComponent(lines.join("\n"))}`;
+}
+
+function Meta({ at, locale, sent = false }: { at?: number; locale: Locale; sent?: boolean }) {
+  if (at === undefined) return null;
+  const time = new Date(at).toLocaleTimeString(locale === "en" ? "en-CA" : locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return (
+    <span className="wa-meta">
+      {time}
+      {sent && (
+        <svg width="16" height="11" viewBox="0 0 16 11" fill="none" stroke="#53bdeb" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M1 6l3 3 6-7M6.5 8.5l.5.5 6-7" />
+        </svg>
+      )}
+    </span>
+  );
 }
 
 function EstimateView({
@@ -88,141 +108,50 @@ function EstimateView({
   locale,
   pagePath,
   leadName,
-  demo = false,
 }: {
   card: EstimateCard;
   copy: ChatCopy;
   locale: Locale;
   pagePath: string;
   leadName: string;
-  demo?: boolean;
 }) {
   const e = copy.estimate;
   const kind = card.kind ?? "labor";
   return (
-    <article
-      data-testid={demo ? "demo-estimate-card" : "estimate-card"}
-      className="mt-3 rounded-2xl border border-brand-100 bg-white p-5 text-sm text-ink-700 shadow-sm"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-            {demo ? copy.demo.label : kind === "team_quote" ? e.teamQuoteTitle : e.title}
-          </p>
-          <h4 className="mt-1 text-base font-semibold text-ink-900">
-            {card.service}
-            {card.position ? ` · ${card.position}` : ""}
-          </h4>
-          <p className="mt-0.5 text-xs text-ink-500">
-            {e.vehicle}: {card.vehicle}
-          </p>
-        </div>
-        {!demo && (
-          <span className="shrink-0 text-right text-xs text-ink-400">
-            {card.id}
-            <br />
-            {e.date} {quoteDate(card.createdAt)}
-          </span>
-        )}
-      </div>
-
-      {kind === "team_quote" ? (
-        <p data-testid="team-quote" className="mt-4 leading-6">
-          {e.teamQuote}
-        </p>
-      ) : (
-        <dl className="mt-4 space-y-3">
-          {kind === "labor" && (
-            <div className="flex justify-between gap-4">
-              <dt>
-                {e.labor} · {card.laborHours} {e.hoursUnit} × {money(card.laborRate)}
-              </dt>
-              <dd className="font-medium text-ink-900">{money(card.laborWalkIn)}</dd>
-            </div>
-          )}
-          <div>
-            <dt className="text-ink-500">
-              {kind === "flat" ? e.flatOptions : card.partOptions.length ? e.parts : e.laborOnly}
-            </dt>
-            {card.partOptions.length > 0 && (
-              <dd>
-                <ul className="mt-1 space-y-1">
-                  {card.partOptions.map((part) => (
-                    <li key={`${part.description}-${part.total}`} className="flex justify-between gap-4">
-                      <span>
-                        {part.description}
-                        {part.quantity > 1 ? ` ×${part.quantity}` : ""}
-                        {part.inStockLocally && (
-                          <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
-                            {e.inStock}
-                          </span>
-                        )}
-                      </span>
-                      <span className="shrink-0 font-medium text-ink-900">{money(part.total)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </dd>
-            )}
-          </div>
-          <div className="flex justify-between gap-4 border-t border-ink-100 pt-3 text-base">
-            <dt className="font-semibold text-ink-900">
-              {e.total} <span className="text-xs font-normal text-ink-500">({e.beforeTax})</span>
-            </dt>
-            <dd className="font-semibold text-ink-900">{range(card.totalLow, card.totalHigh)}</dd>
-          </div>
-        </dl>
-      )}
-      {kind === "flat" && card.partsNote && (
-        <p className="mt-3 text-xs leading-5 text-ink-500">{card.partsNote}</p>
-      )}
-
-      {card.laborNote && (
-        <p className="mt-3 text-xs leading-5 text-ink-500">
-          {e.notIncluded}: {card.laborNote}
-        </p>
-      )}
-      {card.otherPartNames.length > 0 && (
-        <p className="mt-1 text-xs leading-5 text-ink-500">
-          {e.mayNeed}: {card.otherPartNames.join(", ")}
-        </p>
-      )}
-      {kind !== "team_quote" && <p className="mt-3 text-xs leading-5 text-ink-500">{e.disclaimer}</p>}
-      {!demo && kind !== "team_quote" && (
-        <p data-testid="screenshot-tip" className="mt-3 rounded-xl bg-brand-50 px-3 py-2 text-xs font-medium leading-5 text-brand-700">
+    <div className="mt-2">
+      <QuoteSheet card={card} copy={copy} />
+      {kind !== "team_quote" && (
+        <p data-testid="screenshot-tip" className="mt-3 max-w-md rounded-lg bg-white/80 px-3 py-2 text-xs font-medium leading-5 text-[#3b4a54]">
           {e.screenshotTip.replace("{id}", card.id)}
         </p>
       )}
-
-      {!demo && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <TrackedContactLink
-            href={whatsappHref(copy, card, leadName)}
-            method="whatsapp"
-            intent="auto_repair"
-            locale={locale}
-            placement="chat"
-            pagePath={pagePath}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-          >
-            {e.book}
-          </TrackedContactLink>
-          <TrackedContactLink
-            href={telLink}
-            method="phone"
-            intent="auto_repair"
-            locale={locale}
-            placement="chat"
-            pagePath={pagePath}
-            className="rounded-full border border-ink-200 px-4 py-2 text-sm font-semibold text-ink-700 hover:bg-ink-50"
-          >
-            {e.call} {company.phoneDisplay}
-          </TrackedContactLink>
-        </div>
-      )}
-    </article>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <TrackedContactLink
+          href={whatsappHref(copy, card, leadName)}
+          method="whatsapp"
+          intent="auto_repair"
+          locale={locale}
+          placement="chat"
+          pagePath={pagePath}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-full bg-[#00a884] px-4 py-2 text-sm font-semibold text-white hover:bg-[#008069]"
+        >
+          {e.book}
+        </TrackedContactLink>
+        <TrackedContactLink
+          href={telLink}
+          method="phone"
+          intent="auto_repair"
+          locale={locale}
+          placement="chat"
+          pagePath={pagePath}
+          className="rounded-full border border-ink-200 bg-white px-4 py-2 text-sm font-semibold text-ink-700 hover:bg-ink-50"
+        >
+          {e.call} {company.phoneDisplay}
+        </TrackedContactLink>
+      </div>
+    </div>
   );
 }
 
@@ -327,6 +256,7 @@ export function RepairChat({
   /** The server is holding a reply with an estimate until name and phone are given. */
   const [awaitingLead, setAwaitingLead] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Tell the server the visit is over so the shop gets its follow-up email now
   // rather than after the idle timeout.
@@ -340,6 +270,14 @@ export function RepairChat({
     return () => window.removeEventListener("pagehide", finish);
   }, [sessionId]);
 
+  // Grow the message box with its text, up to about five lines, like a messaging app.
+  useEffect(() => {
+    const box = inputRef.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${Math.min(box.scrollHeight, 120)}px`;
+  }, [input]);
+
   useEffect(() => {
     if (turns.length > 1) endRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
   }, [turns, pending]);
@@ -348,7 +286,7 @@ export function RepairChat({
   function appendReply(text: string, estimates: EstimateCard[], localOnly = false) {
     setTurns((prev) => {
       const booking = estimates.length > 0 && !prev.some((t) => t.booking);
-      return [...prev, { role: "assistant", text, estimates, localOnly, booking }];
+      return [...prev, { role: "assistant", text, estimates, localOnly, booking, at: Date.now() }];
     });
   }
 
@@ -394,7 +332,7 @@ export function RepairChat({
       .map((t) => ({ role: t.role, text: t.text }));
     while (history.length > 0 && history[0].role !== "user") history.shift();
 
-    if (!options.repeat) setTurns((prev) => [...prev, { role: "user", text: message, estimates: [] }]);
+    if (!options.repeat) setTurns((prev) => [...prev, { role: "user", text: message, estimates: [], at: Date.now() }]);
     setInput("");
     setPending(true);
     setStatus("thinking");
@@ -486,139 +424,158 @@ export function RepairChat({
         </h2>
         <p className="mt-3 leading-7 text-ink-600">{copy.intro}</p>
 
-        <div className="mt-8 rounded-3xl border border-ink-100 bg-ink-50/60 p-4 sm:p-6">
-          <>
-            <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-1" aria-live="polite">
-              {turns.map((turn, index) => (
-                <div key={index} className={turn.role === "user" ? "flex justify-end" : ""}>
-                  {turn.role === "user" ? (
-                    <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-ink-900 px-4 py-2.5 text-sm text-white">
-                      {turn.text}
-                    </p>
-                  ) : (
-                    <div className="max-w-full">
-                      {turn.text && (
-                        <p className="whitespace-pre-wrap rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-ink-800 ring-1 ring-ink-100">
-                          {turn.text}
-                        </p>
-                      )}
-                      {turn.estimates.map((card) => (
-                        <EstimateView
-                          key={card.id}
-                          card={card}
-                          copy={copy}
-                          locale={locale}
-                          pagePath={pagePath}
-                          leadName={lead?.name ?? ""}
-                        />
-                      ))}
-                      {turn.booking && lead && (
-                        <RepairBooking copy={copy.booking} locale={locale} lead={lead} sessionId={sessionId} />
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {capped && (
-                <div data-testid="capped-contact" className="flex flex-wrap gap-2">
-                  <TrackedContactLink
-                    href={telLink}
-                    method="phone"
-                    intent="auto_repair"
-                    locale={locale}
-                    placement="chat"
-                    pagePath={pagePath}
-                    className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
-                  >
-                    {copy.estimate.call} {company.phoneDisplay}
-                  </TrackedContactLink>
-                  <TrackedContactLink
-                    href={whatsappLink}
-                    method="whatsapp"
-                    intent="auto_repair"
-                    locale={locale}
-                    placement="chat"
-                    pagePath={pagePath}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-                  >
-                    WhatsApp
-                  </TrackedContactLink>
-                </div>
-              )}
-              {noQuestionYet && !capped && !pending && (
-                <div className="flex flex-wrap gap-2">
-                  {copy.starters.map((starter) => (
-                    <button
-                      key={starter}
-                      type="button"
-                      onClick={() => void send(starter)}
-                      className="rounded-full border border-ink-200 bg-white px-4 py-2 text-sm text-ink-700 hover:border-brand-300 hover:text-brand-700"
-                    >
-                      {starter}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {awaitingLead && (
-                <div data-testid="lead-gate" className="rounded-2xl bg-white p-5 ring-1 ring-brand-100">
-                  <LeadGate copy={copy} onStart={unlock} />
-                </div>
-              )}
-              {pending && status && (
-                <p role="status" className="flex items-center gap-2 text-sm text-ink-500">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500" />
-                  {copy.status[status]}
-                </p>
-              )}
-              <div ref={endRef} />
+        <div className="mt-8 overflow-hidden rounded-2xl border border-ink-200 bg-[#efeae2] shadow-sm">
+          <div className="flex items-center gap-3 bg-[#008069] px-3 py-2 text-white">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="" width={28} height={28} className="h-7 w-7 object-contain" />
+            </span>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-[0.9375rem] font-semibold">{company.name}</p>
+              <p className="truncate text-xs text-white/80">{copy.assistantStatus}</p>
             </div>
+          </div>
 
-            {!capped && !awaitingLead && (
-              <form onSubmit={onSubmit} className="mt-4 flex gap-2">
-                <label htmlFor="repair-chat-input" className="sr-only">
-                  {copy.placeholder}
-                </label>
-                <textarea
-                  id="repair-chat-input"
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                      event.preventDefault();
-                      void send(input);
-                    }
-                  }}
-                  rows={2}
-                  maxLength={1500}
-                  placeholder={copy.placeholder}
-                  className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-ink-200 bg-white px-4 py-3 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={pending || !input.trim()}
-                  className="self-end rounded-full bg-ink-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+          <div className="wa-chat-bg max-h-[32rem] space-y-2 overflow-y-auto px-3 py-4 sm:px-5" aria-live="polite">
+            {turns.map((turn, index) => (
+              <div key={index} className={turn.role === "user" ? "flex justify-end" : ""}>
+                {turn.role === "user" ? (
+                  <p className="wa-bubble wa-bubble-out max-w-[80%] whitespace-pre-wrap">
+                    {turn.text}
+                    <Meta at={turn.at} locale={locale} sent />
+                  </p>
+                ) : (
+                  <div className="max-w-[92%]">
+                    {turn.text && (
+                      <p className="wa-bubble wa-bubble-in whitespace-pre-wrap">
+                        {turn.text}
+                        <Meta at={turn.at} locale={locale} />
+                      </p>
+                    )}
+                    {turn.estimates.map((card) => (
+                      <EstimateView
+                        key={card.id}
+                        card={card}
+                        copy={copy}
+                        locale={locale}
+                        pagePath={pagePath}
+                        leadName={lead?.name ?? ""}
+                      />
+                    ))}
+                    {turn.booking && lead && (
+                      <RepairBooking copy={copy.booking} locale={locale} lead={lead} sessionId={sessionId} />
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            {capped && (
+              <div data-testid="capped-contact" className="flex flex-wrap gap-2">
+                <TrackedContactLink
+                  href={telLink}
+                  method="phone"
+                  intent="auto_repair"
+                  locale={locale}
+                  placement="chat"
+                  pagePath={pagePath}
+                  className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
                 >
-                  {copy.send}
-                </button>
-              </form>
+                  {copy.estimate.call} {company.phoneDisplay}
+                </TrackedContactLink>
+                <TrackedContactLink
+                  href={whatsappLink}
+                  method="whatsapp"
+                  intent="auto_repair"
+                  locale={locale}
+                  placement="chat"
+                  pagePath={pagePath}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-full bg-[#00a884] px-4 py-2 text-sm font-semibold text-white hover:bg-[#008069]"
+                >
+                  WhatsApp
+                </TrackedContactLink>
+              </div>
             )}
-            <div className="mt-3 flex items-center justify-between gap-4 text-xs text-ink-400">
-              <span>{copy.privacyNote}</span>
-              {!noQuestionYet && !pending && (
-                <button type="button" onClick={reset} className="shrink-0 underline hover:text-ink-600">
-                  {copy.reset}
-                </button>
-              )}
-            </div>
-          </>
+            {noQuestionYet && !capped && !pending && (
+              <div className="flex flex-wrap justify-end gap-2 pt-1">
+                {copy.starters.map((starter) => (
+                  <button
+                    key={starter}
+                    type="button"
+                    onClick={() => void send(starter)}
+                    className="rounded-full bg-white px-3.5 py-2 text-left text-sm text-[#008069] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] hover:bg-[#f5f6f6]"
+                  >
+                    {starter}
+                  </button>
+                ))}
+              </div>
+            )}
+            {awaitingLead && (
+              <div data-testid="lead-gate" className="rounded-xl bg-white p-4 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
+                <LeadGate copy={copy} onStart={unlock} />
+              </div>
+            )}
+            {pending && status && (
+              <div role="status" className="wa-bubble wa-bubble-in flex w-fit items-center gap-2 text-[#667781]">
+                <span aria-hidden className="wa-typing">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                {copy.status[status]}
+              </div>
+            )}
+            <div ref={endRef} />
+          </div>
+
+          {!capped && !awaitingLead && (
+            <form onSubmit={onSubmit} className="flex items-end gap-2 bg-[#f0f2f5] px-2.5 py-2">
+              <label htmlFor="repair-chat-input" className="sr-only">
+                {copy.placeholder}
+              </label>
+              <textarea
+                ref={inputRef}
+                id="repair-chat-input"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    void send(input);
+                  }
+                }}
+                rows={1}
+                maxLength={1500}
+                placeholder={copy.placeholder}
+                className="max-h-[120px] min-h-[2.75rem] flex-1 resize-none rounded-[1.4rem] border-0 bg-white px-4 py-[0.7rem] text-sm leading-5 text-[#111b21] placeholder:text-[#667781] focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+              />
+              <button
+                type="submit"
+                aria-label={copy.send}
+                disabled={pending || !input.trim()}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white transition-colors hover:bg-[#008069] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M3.4 20.4 21 12 3.4 3.6 3.4 10.1 15 12 3.4 13.9z" />
+                </svg>
+              </button>
+            </form>
+          )}
+          <div className="flex items-center justify-between gap-4 bg-[#f0f2f5] px-3 pb-2.5 text-xs text-[#667781]">
+            <span>{copy.privacyNote}</span>
+            {!noQuestionYet && !pending && (
+              <button type="button" onClick={reset} className="shrink-0 underline hover:text-ink-700">
+                {copy.reset}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mt-10">
           <p className="text-sm font-semibold text-ink-900">{copy.demo.label}</p>
           <p className="mt-1 text-sm text-ink-500">{copy.demo.caption}</p>
-          <SampleQuote card={DEMO_ESTIMATE} copy={copy} />
+          <QuoteSheet card={DEMO_ESTIMATE} copy={copy} sample />
         </div>
       </div>
     </section>

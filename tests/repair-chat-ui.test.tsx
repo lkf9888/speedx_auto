@@ -94,6 +94,20 @@ describe("RepairChat", () => {
     vi.unstubAllGlobals();
   });
 
+  it("looks like a messaging app: assistant header, icon send button, times on sent messages", async () => {
+    vi.stubGlobal("fetch", api(ndjson([{ type: "session", id: SESSION }, { type: "message", text: "Which car is it?" }, { type: "done" }])));
+    const { container } = render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
+    expect(screen.getByText(en.repairChat.assistantStatus)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: en.repairChat.send })).toBeDisabled();
+    // The greeting has no time (server and browser must render the same text).
+    expect(container.querySelectorAll(".wa-meta")).toHaveLength(0);
+
+    await ask("brake noise");
+    await screen.findByText("Which car is it?");
+    expect(container.querySelectorAll(".wa-bubble-out .wa-meta")).toHaveLength(1);
+    expect(container.querySelectorAll(".wa-bubble-in .wa-meta").length).toBeGreaterThan(0);
+  });
+
   it("opens the chat right away, without asking for name or phone", async () => {
     const fetchMock = api(ndjson([{ type: "session", id: SESSION }, { type: "message", text: "Which car is it?" }, { type: "done" }]));
     vi.stubGlobal("fetch", fetchMock);
@@ -136,8 +150,11 @@ describe("RepairChat", () => {
 
     expect(await screen.findByText("Front pads are about $291 before tax.")).toBeInTheDocument();
     const card = screen.getByTestId("estimate-card");
-    expect(card).toHaveTextContent("$291.05");
+    // Ranges only: parts span and the total widened 10% each way, no exact figures or part names.
+    expect(card).toHaveTextContent("$262 – $320");
+    expect(card).not.toHaveTextContent("$291.05");
     expect(card).not.toHaveTextContent("$264.65");
+    expect(card).toHaveTextContent(en.repairChat.demo.remarkRange);
     expect(screen.getByTestId("screenshot-tip")).toHaveTextContent("E-ABC123");
     const whatsapp = screen.getByRole("link", { name: en.repairChat.estimate.book });
     expect(decodeURIComponent(whatsapp.getAttribute("href")!)).toContain("this is Kevin");
@@ -283,7 +300,8 @@ describe("RepairChat", () => {
 
     const [flatCard, teamCard] = screen.getAllByTestId("estimate-card");
     expect(flatCard).toHaveTextContent(zhCN.repairChat.estimate.flatOptions);
-    expect(flatCard).toHaveTextContent("$95.00 – $120.00");
+    expect(flatCard).toHaveTextContent("$95 – $120");
+    expect(flatCard).not.toHaveTextContent(zhCN.repairChat.demo.remarkRange);
     expect(flatCard).toHaveTextContent("含机油和机油滤芯");
     expect(flatCard).not.toHaveTextContent(zhCN.repairChat.estimate.labor);
     expect(teamCard).toHaveTextContent(zhCN.repairChat.estimate.teamQuote);

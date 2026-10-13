@@ -104,10 +104,12 @@ export const zhCN: Dictionary = {
       failed: "暂时无法显示报价，请重试，或通过 WhatsApp 联系我们。",
     },
     greeting: "您好！为了给您更准确的报价，请告诉我车辆的年份、品牌和型号（或者直接提供 17 位 VIN 车架号，最精准），并描述一下问题：听到、感觉到或看到了什么，什么时候出现。",
+    assistantStatus: "AI 维修助手",
     demo: {
       label: "报价示例",
       caption: "以下是估价结果的样式，价格来自一次真实查询，仅作示例。",
       partsLine: "零件 · 共 {count} 种货品可选",
+      partsLineOne: "零件 · 1 种货品",
       remarksTitle: "备注",
       remarkReference: "仅供参考，不是正式报价。",
       remarkRange: "价格存在浮动空间（约上下 10%），具体实际价格以店铺员工报价为准。",

@@ -51,6 +51,32 @@ export interface EstimateCard {
 
 const money = (value: number) => Math.round(value * 100) / 100;
 
+/** Labor-based estimates are shown widened by this much each way: the shop's final price can differ. */
+export const ESTIMATE_SWING = 0.1;
+
+/** Whole-dollar ranges a customer sees on the card, and that the assistant may quote. */
+export interface EstimateRanges {
+  partsLow: number;
+  partsHigh: number;
+  totalLow: number;
+  totalHigh: number;
+}
+
+export function estimateRanges(card: EstimateCard): EstimateRanges {
+  const partsLow = Math.round(card.partsLow);
+  const partsHigh = Math.round(card.partsHigh);
+  // Flat prices are the shop's posted prices, so only labor-based totals get the allowance.
+  if (card.kind === "flat" || card.kind === "team_quote") {
+    return { partsLow, partsHigh, totalLow: Math.round(card.totalLow), totalHigh: Math.round(card.totalHigh) };
+  }
+  return {
+    partsLow,
+    partsHigh,
+    totalLow: Math.round(card.totalLow * (1 - ESTIMATE_SWING)),
+    totalHigh: Math.round(card.totalHigh * (1 + ESTIMATE_SWING)),
+  };
+}
+
 export function laborCost(hours: number, referral = false): number {
   const rate = referral ? WALK_IN_LABOR_RATE * REFERRAL_LABOR_MULTIPLIER : WALK_IN_LABOR_RATE;
   return money(hours * rate);
@@ -209,21 +235,15 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
     if (card.partsNote) lines.push(`Note shown on the card: ${card.partsNote}`);
     return lines.join("\n");
   }
+  const shown = estimateRanges(card);
   const lines = [
-    `Estimate ${card.id} shown to the customer as a card.`,
+    `Estimate ${card.id} shown to the customer as a paper-style quote card that shows ranges only.`,
     `Vehicle: ${card.vehicle}. Service: ${card.service}${card.position ? ` (${card.position})` : ""}.`,
-    `Labor: ${card.laborHours} h × $${card.laborRate}/h = $${card.laborWalkIn}.`,
+    `Labor on the card: $${card.laborWalkIn} (${card.laborHours} h of labor-guide time).`,
     card.partOptions.length
-      ? `${card.primaryPartName} options (list price → total with labor): ` +
-        card.partOptions
-          .map(
-            (p) =>
-              `${p.description}${p.quantity > 1 ? ` ×${p.quantity}` : ""} $${p.total} → total $${money(p.total + card.laborWalkIn)}`,
-          )
-          .join("; ") +
-        "."
+      ? `${card.primaryPartName}: ${card.partOptions.length} option${card.partOptions.length > 1 ? "s" : ""} at list price, shown on the card only as the span $${shown.partsLow}–$${shown.partsHigh}. The card does not list the individual parts, so do not name them or give their separate prices.`
       : card.partsNote || "No list-priced part found; the estimate covers labor only.",
-    `Total before tax: $${card.totalLow}–$${card.totalHigh}.`,
+    `Estimated total on the card (before tax, with a 10% allowance either way): $${shown.totalLow}–$${shown.totalHigh}. Quote only this range, never a single exact figure.`,
   ];
   if (card.laborNote) lines.push(`Labor guide note: ${card.laborNote}`);
   if (card.otherPartNames.length) {

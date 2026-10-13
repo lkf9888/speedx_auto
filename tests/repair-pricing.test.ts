@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEstimate, laborCost, summarizeEstimateForModel } from "@/lib/repair-chat/pricing";
+import { buildEstimate, estimateRanges, laborCost, summarizeEstimateForModel } from "@/lib/repair-chat/pricing";
 
 const quote = {
   status: "ok" as const,
@@ -48,11 +48,22 @@ describe("repair pricing", () => {
     expect([laborOnly.totalLow, laborOnly.totalHigh]).toEqual([132, 132]);
   });
 
-  it("gives the model the same numbers the card shows", () => {
+  it("widens labor-based totals by 10% each way and rounds to whole dollars", () => {
+    const card = buildEstimate("2019 Toyota Camry", quote, "E-9");
+    expect(estimateRanges(card)).toEqual({ partsLow: 159, partsHigh: 186, totalLow: 262, totalHigh: 350 });
+    const flat = { ...card, kind: "flat" as const, totalLow: 95, totalHigh: 120, partsLow: 95, partsHigh: 120 };
+    expect(estimateRanges(flat)).toMatchObject({ totalLow: 95, totalHigh: 120 });
+  });
+
+  it("gives the model the same ranges the card shows, without the part list or the hourly rate", () => {
     const summary = summarizeEstimateForModel(buildEstimate("2019 Toyota Camry", quote, "E-9"));
-    expect(summary).toContain("1.1 h × $120/h = $132");
-    expect(summary).toContain("$291.05–$317.84");
+    expect(summary).toContain("$262–$350");
+    expect(summary).toContain("$159–$186");
+    expect(summary).toContain("Labor on the card: $132");
     expect(summary).toContain("Brake Hydraulic System Bleed");
+    expect(summary).not.toContain("/h");
+    expect(summary).not.toContain("291.05");
+    expect(summary).not.toContain("317.84");
   });
 });
 

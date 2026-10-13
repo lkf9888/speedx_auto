@@ -104,10 +104,12 @@ export const zhTW: Dictionary = {
       failed: "暫時無法顯示報價，請重試，或透過 WhatsApp 聯絡我們。",
     },
     greeting: "您好！為了給您更準確的報價，請告訴我車輛的年份、品牌和型號（或者直接提供 17 碼 VIN 車身號碼，最精準），並描述一下問題：聽到、感覺到或看到了什麼，什麼時候出現。",
+    assistantStatus: "AI 維修助手",
     demo: {
       label: "報價範例",
       caption: "以下是估價結果的樣式，價格來自一次真實查詢，僅作範例。",
       partsLine: "零件 · 共 {count} 款貨品可選",
+      partsLineOne: "零件 · 1 款貨品",
       remarksTitle: "備註",
       remarkReference: "僅供參考，並非正式報價。",
       remarkRange: "價格存在浮動空間（約上下 10%），實際價格以店內員工報價為準。",

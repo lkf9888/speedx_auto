@@ -192,3 +192,108 @@
     font-size: 0.875rem;
   }
 }
+
+/* ---- WhatsApp-style chat (repair estimate assistant) ---- */
+.wa-chat-bg {
+  background-color: #efeae2;
+  background-image:
+    radial-gradient(rgba(11, 20, 26, 0.06) 1.1px, transparent 1.3px),
+    radial-gradient(rgba(11, 20, 26, 0.04) 1px, transparent 1.2px);
+  background-size: 26px 26px, 26px 26px;
+  background-position: 0 0, 13px 13px;
+}
+
+.wa-bubble {
+  position: relative;
+  display: flow-root;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.4rem 0.6rem 0.35rem;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #111b21;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+}
+
+@media (min-width: 640px) {
+  .wa-bubble {
+    font-size: 0.9rem;
+  }
+}
+
+.wa-bubble-in {
+  border-top-left-radius: 0;
+  margin-left: 0.5rem;
+}
+
+.wa-bubble-in::before,
+.wa-bubble-out::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 0.5rem;
+  height: 0.8rem;
+}
+
+.wa-bubble-in::before {
+  left: -0.5rem;
+  background: #fff;
+  clip-path: polygon(100% 0, 0 0, 100% 100%);
+}
+
+.wa-bubble-out {
+  border-top-right-radius: 0;
+  margin-right: 0.5rem;
+  background: #d9fdd3;
+}
+
+.wa-bubble-out::before {
+  right: -0.5rem;
+  background: #d9fdd3;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.wa-meta {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin: 0.55rem 0 -0.2rem 0.6rem;
+  font-size: 0.6875rem;
+  line-height: 1;
+  color: #667781;
+}
+
+.wa-typing {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.wa-typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #8696a0;
+  animation: waDot 1.2s infinite ease-in-out;
+}
+
+.wa-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.wa-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes waDot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}

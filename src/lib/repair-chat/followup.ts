@@ -9,7 +9,7 @@ import nodemailer from "nodemailer";
 import { company } from "@/lib/company";
 import type { MessagesClient } from "./agent";
 import { fallbackOptions, MODEL } from "./agent";
-import type { EstimateCard } from "./pricing";
+import { estimateRanges, type EstimateCard } from "./pricing";
 import { matchScript } from "./script";
 import type { ChatSession, FinishReason, FollowUpHandler } from "./session";
 
@@ -45,7 +45,8 @@ export function estimateLine(card: EstimateCard): string {
     return `${label} · 一口价：${options}（未含税）`;
   }
   const range = card.totalLow === card.totalHigh ? money(card.totalLow) : `${money(card.totalLow)}–${money(card.totalHigh)}`;
-  return `${card.id} · ${card.vehicle} · ${card.service}${card.position ? `（${card.position}）` : ""} · 工时 ${card.laborHours}h · 合计 ${range}（未含税）`;
+  const shown = estimateRanges(card);
+  return `${card.id} · ${card.vehicle} · ${card.service}${card.position ? `（${card.position}）` : ""} · 工时 ${card.laborHours}h · 合计 ${range}（未含税）· 客户看到的区间 $${shown.totalLow}–$${shown.totalHigh}`;
 }
 
 const WEEKDAY = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
