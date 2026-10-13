@@ -436,7 +436,8 @@ export function RepairChat({
             </div>
           </div>
 
-          <div className="wa-chat-bg max-h-[32rem] space-y-2 overflow-y-auto px-3 py-4 sm:px-5" aria-live="polite">
+          {/* min-h: the opening state is ~20% taller than its content; kept afterwards so it doesn't jump when the starter chips go away */}
+          <div className="wa-chat-bg max-h-[32rem] min-h-[16.5rem] space-y-2 overflow-y-auto px-3 py-4 sm:px-5" aria-live="polite">
             {turns.map((turn, index) => (
               <div key={index} className={turn.role === "user" ? "flex justify-end" : ""}>
                 {turn.role === "user" ? (
