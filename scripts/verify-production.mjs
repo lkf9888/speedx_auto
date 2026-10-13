@@ -26,7 +26,7 @@ const answerMarkers = {
   "/en/hosting": "SPEEDX AUTO provides Turo fleet management",
   "/zh-CN/hosting": "SPEEDX AUTO 为大温地区",
   "/zh-TW/hosting": "SPEEDX AUTO 為大溫地區",
-  "/en/auto-repair": "SPEEDX AUTO provides mechanical inspection",
+  "/en/auto-repair": "SPEEDX AUTO is an auto repair shop",
   "/zh-CN/auto-repair": "SPEEDX AUTO 在列治文",
   "/zh-TW/auto-repair": "SPEEDX AUTO 在列治文",
 };
