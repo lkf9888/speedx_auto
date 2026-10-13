@@ -3,6 +3,11 @@ import {
   zhCNRepairServices,
   zhTWRepairServices,
 } from "@/i18n/repair-service-copy";
+import {
+  enPriceGuide,
+  zhCNPriceGuide,
+  zhTWPriceGuide,
+} from "@/i18n/repair-price-guide-copy";
 import type { AutoRepairCopy } from "@/i18n/types";
 
 export const enAutoRepair: AutoRepairCopy = {
@@ -240,6 +245,7 @@ export const enAutoRepair: AutoRepairCopy = {
     "Send the vehicle details and the problem by WhatsApp or WeChat, or call SPEEDX AUTO to book an appointment.",
   lastUpdated: "Updated October 12, 2026",
   services: enRepairServices,
+  priceGuide: enPriceGuide,
 };
 
 export const zhCNAutoRepair: AutoRepairCopy = {
@@ -433,9 +439,10 @@ export const zhCNAutoRepair: AutoRepairCopy = {
   ctaBody: "通过 WhatsApp 或微信发送车辆资料和问题，或直接致电 SPEEDX AUTO 预约。",
   lastUpdated: "更新于 2026 年 10 月 12 日",
   services: zhCNRepairServices,
+  priceGuide: zhCNPriceGuide,
 };
 
-const zhTWHub: Omit<AutoRepairCopy, "services"> = {
+const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide"> = {
   metaTitle: "列治文車房 · 汽車維修與 Tesla 電動車維修",
   metaDescription:
     "列治文車房，近溫哥華機場：保養、煞車、故障診斷、避震轉向、Tesla 電動車維修。工時費按行業標準工時收費。粵語、普通話、英語服務。",
@@ -629,4 +636,5 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
 export const zhTWAutoRepair: AutoRepairCopy = {
   ...zhTWHub,
   services: zhTWRepairServices,
+  priceGuide: zhTWPriceGuide,
 };

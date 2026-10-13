@@ -5,12 +5,11 @@ import { Collapsible } from "@/components/Collapsible";
 import { ContactBar } from "@/components/ContactBar";
 import { RepairChat } from "@/components/RepairChat";
 import { Container } from "@/components/Container";
+import { FlatPriceTable } from "@/components/FlatPriceTable";
 import { StructuredData } from "@/components/StructuredData";
 import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
-import type { RepairFlatPriceLabels } from "@/i18n/types";
 import { company } from "@/lib/company";
-import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
 import { buildPageMetadata } from "@/lib/seo";
 import {
   absoluteRouteUrl,
@@ -18,31 +17,6 @@ import {
   repairServiceSlugs,
   routePath,
 } from "@/lib/site-routes";
-
-const usd = (amount: number) => `$${amount}`;
-
-/** The shop's posted flat prices, worded for the page. Amounts match the estimate assistant. */
-function flatPriceRows(labels: RepairFlatPriceLabels) {
-  const { oil, tirePerWheel, acRecharge } = FLAT_PRICES;
-  const pair = (a: string, aPrice: number, b: string, bPrice: number) =>
-    `${a} ${usd(aPrice)} · ${b} ${usd(bPrice)}`;
-  return [
-    { service: labels.oilCar, price: pair(labels.regularOil, oil.standard.regular, labels.premiumOil, oil.premium.regular) },
-    { service: labels.oilLarge, price: pair(labels.regularOil, oil.standard.large, labels.premiumOil, oil.premium.large) },
-    { service: labels.oilEuropean, price: `${labels.oemOil} ${usd(oil.european)}` },
-    { service: labels.oilDiesel, price: pair(labels.dieselCar, oil.diesel.car, labels.dieselSuv, oil.diesel.suv) },
-    {
-      service: labels.tire,
-      price: [
-        `${labels.tireUpTo18} ${usd(tirePerWheel.up_to_18)}`,
-        `${labels.tireOver18} ${usd(tirePerWheel.over_18)}`,
-        `${labels.tireRunFlat} ${usd(tirePerWheel.run_flat)}`,
-        `${labels.tireOffRoad} ${usd(tirePerWheel.off_road)}`,
-      ].join(" · "),
-    },
-    { service: labels.ac, price: pair(labels.r134a, acRecharge.r134a, labels.r1234yf, acRecharge.r1234yf) },
-  ];
-}
 
 export async function generateMetadata({
   params,
@@ -166,26 +140,14 @@ export default async function AutoRepairPage({
               </table>
             </div>
             <p className="mt-4 max-w-3xl text-xs leading-6 text-ink-400">{copy.pricing.footnote}</p>
+            <Link href={routePath(locale, "repairPrices")} className="mt-3 inline-flex text-sm font-semibold text-brand-600 hover:text-brand-700">
+              {copy.priceGuide.linkLabel} →
+            </Link>
           </Collapsible>
           <Collapsible title={copy.pricing.flat.title}>
             <p className="max-w-2xl text-sm leading-7 text-ink-600 sm:text-base">{copy.pricing.flat.intro}</p>
-            <div className="mt-5 overflow-x-auto rounded-2xl ring-1 ring-ink-100">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-ink-100 text-xs uppercase tracking-wider text-ink-400">
-                  <tr>
-                    <th scope="col" className="px-4 py-3 font-semibold sm:px-5">{copy.pricing.flat.columns.service}</th>
-                    <th scope="col" className="px-4 py-3 font-semibold sm:px-5">{copy.pricing.flat.columns.price}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-ink-100">
-                  {flatPriceRows(copy.pricing.flat).map((row) => (
-                    <tr key={row.service}>
-                      <th scope="row" className="px-4 py-4 align-top font-semibold text-ink-900 sm:px-5">{row.service}</th>
-                      <td className="px-4 py-4 tabular-nums leading-6 text-ink-600 sm:px-5">{row.price}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-5">
+              <FlatPriceTable labels={copy.pricing.flat} />
             </div>
             <p className="mt-4 max-w-3xl text-xs leading-6 text-ink-400">{copy.pricing.flat.note}</p>
           </Collapsible>

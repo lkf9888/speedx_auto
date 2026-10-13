@@ -1,3 +1,4 @@
+import type { PriceGuideJob, PriceGuideSystem } from "@/lib/repair-price-guide";
 import type { RepairServiceSlug } from "@/lib/site-routes";
 
 export interface LocalizedFaqItem {
@@ -74,6 +75,32 @@ export interface RepairFlatPriceLabels {
   note: string;
 }
 
+export interface PriceGuideCopy {
+  metaTitle: string;
+  metaDescription: string;
+  eyebrow: string;
+  title: string;
+  /** Short name for breadcrumbs and links. */
+  navLabel: string;
+  summary: string;
+  lastUpdated: string;
+  flatTitle: string;
+  flatIntro: string;
+  systemTitles: Record<PriceGuideSystem, string>;
+  jobNames: Record<PriceGuideJob, string>;
+  columns: { job: string; vehicle: string; laborTime: string; parts: string; total: string };
+  hoursUnit: string;
+  methodTitle: string;
+  methodItems: string[];
+  faqTitle: string;
+  faqs: LocalizedFaqItem[];
+  ctaTitle: string;
+  ctaBody: string;
+  estimateLabel: string;
+  /** Link text from the hub and service guides to this page. */
+  linkLabel: string;
+}
+
 export interface AutoRepairCopy {
   /** Shorter lead paragraph shown on the page; `summary` stays the fuller text for metadata and schema. */
   heroSummary?: string;
@@ -130,4 +157,5 @@ export interface AutoRepairCopy {
   ctaBody: string;
   lastUpdated: string;
   services: Record<RepairServiceSlug, RepairServiceCopy>;
+  priceGuide: PriceGuideCopy;
 }

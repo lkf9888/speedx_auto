@@ -118,6 +118,9 @@ export function RepairServicePage({
             </div>
           )}
           <p className="mt-4 max-w-3xl text-xs leading-6 text-ink-400">{copy.pricingFootnote}</p>
+          <Link href={routePath(locale, "repairPrices")} className="mt-3 inline-flex text-sm font-semibold text-brand-600 hover:text-brand-700">
+            {dict.autoRepair.priceGuide.linkLabel} →
+          </Link>
         </Container>
       </section>
 

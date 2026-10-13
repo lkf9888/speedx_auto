@@ -25,6 +25,7 @@ export const routePaths = {
   repairDiagnostics: "/auto-repair/diagnostics",
   repairSuspension: "/auto-repair/suspension",
   repairTeslaEv: "/auto-repair/tesla-ev",
+  repairPrices: "/auto-repair/prices",
   services: "/services",
   about: "/about",
   contact: "/contact",
@@ -49,6 +50,7 @@ export const routeLastModified: Partial<Record<RouteKey, string>> = {
   repairDiagnostics: "2026-10-12",
   repairSuspension: "2026-10-12",
   repairTeslaEv: "2026-10-12",
+  repairPrices: "2026-10-13",
 };
 
 const hreflangByLocale: Record<Locale, string> = {

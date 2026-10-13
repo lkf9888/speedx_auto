@@ -17,6 +17,7 @@ const routeSuffixes = [
   "/auto-repair/diagnostics",
   "/auto-repair/suspension",
   "/auto-repair/tesla-ev",
+  "/auto-repair/prices",
   "/services",
   "/about",
   "/contact",
@@ -31,6 +32,9 @@ const answerMarkers = {
   "/zh-CN/auto-repair": "SPEEDX AUTO 速驰汽车是位于列治文",
   "/zh-TW/auto-repair": "SPEEDX AUTO 速馳汽車是位於列治文",
   "/en/auto-repair/tesla-ev": "SPEEDX AUTO repairs electric vehicles, mainly Tesla",
+  "/en/auto-repair/prices": "These are real repair prices from SPEEDX AUTO",
+  "/zh-CN/auto-repair/prices": "以下是列治文 SPEEDX AUTO 的真实维修价格",
+  "/zh-TW/auto-repair/prices": "以下是列治文 SPEEDX AUTO 的真實維修價錢",
   "/zh-CN/auto-repair/tesla-ev": "SPEEDX AUTO 在列治文 2980 Number 3 Road",
   "/zh-TW/auto-repair/tesla-ev": "SPEEDX AUTO 在列治文 2980 Number 3 Road",
 };

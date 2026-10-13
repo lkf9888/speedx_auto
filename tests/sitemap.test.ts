@@ -6,8 +6,8 @@ describe("sitemap", () => {
     const entries = sitemap();
     const urls = entries.map((entry) => entry.url);
 
-    expect(entries).toHaveLength(36);
-    expect(new Set(urls).size).toBe(36);
+    expect(entries).toHaveLength(39);
+    expect(new Set(urls).size).toBe(39);
     expect(urls).toContain(
       "https://speedxrental.com/zh-TW/auto-repair/suspension",
     );
@@ -34,10 +34,14 @@ describe("sitemap", () => {
   });
 
   it("dates the auto repair pages by their own last content change", () => {
-    const repairPages = sitemap().filter((entry) => entry.url.includes("/auto-repair"));
+    const repairPages = sitemap().filter(
+      (entry) => entry.url.includes("/auto-repair") && !entry.url.endsWith("/prices"),
+    );
+    const priceGuides = sitemap().filter((entry) => entry.url.endsWith("/auto-repair/prices"));
 
     expect(repairPages).toHaveLength(18);
     expect(repairPages.every((entry) => entry.lastModified === "2026-10-12")).toBe(true);
+    expect(priceGuides.map((entry) => entry.lastModified)).toEqual(["2026-10-13", "2026-10-13", "2026-10-13"]);
     expect(sitemap().find((entry) => entry.url.endsWith("/en/hosting"))?.lastModified).toBe("2026-08-11");
   });
 });
