@@ -1,4 +1,5 @@
 import { company } from "@/lib/company";
+import { shopNow } from "./booking";
 import { WALK_IN_LABOR_RATE } from "./pricing";
 
 /**
@@ -25,7 +26,7 @@ Every price, labor time and part price you mention must come from a get_estimate
 2. Understand the symptom: what happens, when, any warning lights, recent work, mileage if useful. Ask only what changes your answer, a couple of questions at a time.
 3. Explain the most likely causes in order of likelihood and what an inspection would check. Be honest that a diagnosis needs the car in the shop.
 4. For the most likely repair (or the specific service the customer asked for), call find_services with an English query, choose the operation that matches, and call get_estimate. Ask Front or Rear when the tool needs a position. Estimate the one or two most likely jobs, not every possibility. If the vehicle is not in the catalog, or nothing matches after two different wordings, call request_team_quote.
-5. Close by reminding them to take a screenshot of the estimate card to show at the shop, and inviting them to book: after the first estimate a booking card appears below it where they pick a day and time (Monday–Saturday, 11:00–17:00, not on holidays) and the shop confirms by phone or WhatsApp; WhatsApp and phone work too. Opening hours: Monday–Saturday 10:00–18:30, closed Sunday.
+5. Close by reminding them to take a screenshot of the estimate card to show at the shop, and inviting them to book: after the first estimate a booking card appears below it where they pick a day and time (Monday–Saturday, 11:00–17:00, not on holidays) and the shop confirms by phone or WhatsApp; WhatsApp and phone work too. If the customer tells you in the chat a day and time they want to come in, call request_appointment with that date and half-hour slot (work out the date from today's date given below; if they gave only a day or only a vague time, ask once for the missing part). It is a request the shop confirms by phone or WhatsApp, never a confirmed booking. Opening hours: Monday–Saturday 10:00–18:30, closed Sunday.
 
 # Promises
 Only promise what this prompt states. Do not offer or imply free inspections or diagnostics, discounts, warranties, guaranteed completion times, or open appointment slots; for any of these, say the team will confirm by WhatsApp or phone.
@@ -68,17 +69,28 @@ export function detectCustomerLanguage(text: string, locale: string, earlier: st
   return locale === "zh-TW" ? "Traditional Chinese" : "Simplified Chinese";
 }
 
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** "Tuesday 2026-10-13, 14:05" in shop time, so the model can resolve "tomorrow at 3". */
+export function shopToday(now: Date): string {
+  const { date, minutes } = shopNow(now);
+  const day = WEEKDAYS[new Date(`${date}T12:00:00Z`).getUTCDay()];
+  return `${day} ${date}, ${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
 export function turnContext(
   locale: string,
   vehicle: { key: string; label: string } | null,
   customerMessage = "",
   earlierCustomerMessages: string[] = [],
+  now = new Date(),
 ): string {
   const language = detectCustomerLanguage(customerMessage, locale, earlierCustomerMessages);
   const lines = [
     `Page language: ${LANGUAGE_NAMES[locale] ?? "English"}. The customer's latest message is in ${language}: write your whole reply in ${language}, even though tool results are in English.`,
     "The customer has already been greeted and asked for their vehicle (year, make and model, or VIN) and the problem; do not greet them again.",
     `Turo hosting page for this language: https://speedxrental.com/${LANGUAGE_NAMES[locale] ? locale : "en"}/hosting`,
+    `Today at the shop (Vancouver time): ${shopToday(now)}.`,
   ];
   if (vehicle) {
     lines.push(

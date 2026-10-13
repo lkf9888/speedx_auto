@@ -42,8 +42,10 @@ export interface ChatSession {
   opensToday: number;
   /** Over the daily limit: the visitor gets the "please call us" reply, never the AI. */
   capped: boolean;
-  /** Appointment the visitor requested from the booking card, shop time. */
+  /** Appointment the visitor requested (booking card or chat), shop time. */
   booking?: { date: string; time: string };
+  /** A chat appointment request whose email waits for name and phone. */
+  bookingNeedsContact?: boolean;
   pending?: PendingReply;
 }
 
@@ -136,10 +138,11 @@ export class SessionStore {
     return pending;
   }
 
-  recordBooking(id: string, booking: { date: string; time: string }): void {
+  recordBooking(id: string, booking: { date: string; time: string }, needsContact = false): void {
     const entry = this.entries.get(id);
     if (!entry) return;
     entry.session.booking = booking;
+    entry.session.bookingNeedsContact = needsContact;
     this.touch(id);
   }
 

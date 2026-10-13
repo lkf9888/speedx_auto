@@ -15,7 +15,7 @@ import {
 import { isBookable, bookableDays, parseClosedDates, SLOT_TIMES } from "@/lib/repair-chat/booking";
 import { composeBookingEmail, createFollowUpHandler, createMailer, type Mailer } from "@/lib/repair-chat/followup";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
-import { SessionStore } from "@/lib/repair-chat/session";
+import { SessionStore, type ChatSession } from "@/lib/repair-chat/session";
 import { registerShutdownFlush } from "@/lib/repair-chat/shutdown";
 import {
   DAILY_OPEN_LIMIT,
@@ -36,8 +36,8 @@ const ALLOWED_ORIGINS = [/^https:\/\/(www\.)?speedxrental\.com$/, /^http:\/\/loc
 export type StreamEvent =
   | ChatEvent
   | { type: "message"; text: string }
-  /** The reply has estimates: the browser must collect name and phone to see it. */
-  | { type: "lead_required" }
+  /** The reply is held until the browser collects name and phone (for an estimate or an appointment). */
+  | { type: "lead_required"; reason: "estimate" | "appointment" }
   /** Over today's limit: the reply is the fixed "please call us" text. */
   | { type: "capped" }
   | { type: "session"; id: string }
@@ -210,7 +210,7 @@ function foreignOrigin(request: Request): boolean {
  */
 export async function handleLead(
   request: Request,
-  deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "opens" | "allowlist"> & { limiter: RateLimiter },
+  deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "opens" | "allowlist" | "mailer"> & { limiter: RateLimiter },
 ): Promise<Response> {
   if (foreignOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
   if (!deps.configured()) return Response.json({ error: "unavailable" }, { status: 503 });
@@ -236,6 +236,10 @@ export async function handleLead(
   if (firstTime) {
     await deps.notify({ type: "lead_started", lead, locale, at });
     await Promise.all(session.estimates.map((card) => deps.notify(estimateLeadEvent(lead, locale, card))));
+  }
+  if (session.booking && session.bookingNeedsContact) {
+    deps.sessions.recordBooking(session.id, session.booking);
+    await sendBooking(deps, lead, locale, session.booking, session, "chat");
   }
   const pending = deps.sessions.takeReply(session.id) ?? null;
   return Response.json({ ok: true, sessionId: session.id, pending });
@@ -267,6 +271,7 @@ export function handleDefaultLead(request: Request): Promise<Response> {
     sessions: defaultDeps.sessions,
     opens: defaultDeps.opens,
     allowlist: defaultDeps.allowlist,
+    mailer: defaultDeps.mailer,
     limiter: leadLimiter,
   });
 }
@@ -316,7 +321,20 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
       const pendingNotices: Array<Promise<void>> = [];
       // Without name and phone, estimates (and the reply quoting them) stay on the server.
       const held: EstimateCard[] = [];
+      let appointmentHeld = false;
       const send = (event: StreamEvent) => {
+        if (event.type === "appointment") {
+          // Never streamed: the shop gets an email now, or once name and phone are given.
+          if (evaluation) return;
+          const booking = { date: event.date, time: event.time };
+          sessions.recordBooking(session.id, booking, !session.lead);
+          if (session.lead) {
+            pendingNotices.push(sendBooking(deps, session.lead, request_.locale, booking, session, "chat"));
+          } else {
+            appointmentHeld = true;
+          }
+          return;
+        }
         if (event.type === "estimate") {
           sessions.recordEstimate(session.id, event.estimate);
           if (!session.lead) {
@@ -346,9 +364,9 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
         sessions.record(session.id, { role: "assistant", text: result.text });
         if (evaluation) await sessions.finish(session.id, "idle"); // drop the throwaway session's timer
         if (capped) send({ type: "capped" });
-        if (held.length > 0) {
+        if (held.length > 0 || appointmentHeld) {
           sessions.holdReply(session.id, { text: result.text, estimates: held });
-          send({ type: "lead_required" });
+          send({ type: "lead_required", reason: held.length > 0 ? "estimate" : "appointment" });
         } else {
           send({ type: "message", text: result.text });
         }
@@ -383,6 +401,26 @@ export function handleDefaultChat(request: Request): Promise<Response> {
 }
 
 // ------------------------------------------------------------------ booking
+
+/** Email the shop an appointment request and tell the webhook. Never throws. */
+async function sendBooking(
+  deps: Pick<RouteDeps, "mailer" | "notify">,
+  lead: Lead,
+  locale: string,
+  booking: { date: string; time: string },
+  session: ChatSession | undefined,
+  source: "card" | "chat",
+  now = new Date(),
+): Promise<void> {
+  const email = composeBookingEmail(lead, locale, booking, session, source);
+  try {
+    await (deps.mailer ?? createMailer())(email);
+  } catch (error) {
+    // Never lose the booking: keep the full email in the log if sending fails.
+    console.error("repair-booking email failed", (error as Error).message, JSON.stringify(email));
+  }
+  await deps.notify({ type: "booking_requested", lead, locale, at: now.toISOString(), ...booking });
+}
 
 function closedDates() {
   return parseClosedDates(process.env.REPAIR_BOOKING_CLOSED_DATES);
@@ -424,14 +462,7 @@ export async function handleBooking(
   const sessionId = typeof raw?.sessionId === "string" && /^[a-f0-9]{32}$/.test(raw.sessionId) ? raw.sessionId : null;
   const session = deps.sessions.get(sessionId);
   if (session) deps.sessions.recordBooking(session.id, { date, time });
-  const email = composeBookingEmail(lead, locale, { date, time }, session);
-  try {
-    await (deps.mailer ?? createMailer())(email);
-  } catch (error) {
-    // Never lose the booking: keep the full email in the log if sending fails.
-    console.error("repair-booking email failed", (error as Error).message, JSON.stringify(email));
-  }
-  await deps.notify({ type: "booking_requested", lead, locale, at: now.toISOString(), date, time });
+  await sendBooking(deps, lead, locale, { date, time }, session, "card", now);
   return Response.json({ ok: true });
 }
 

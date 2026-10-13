@@ -319,6 +319,31 @@ describe("RepairChat", () => {
     expect(screen.getByTestId("capped-contact")).toBeInTheDocument();
   });
 
+  it("asks for contact details with appointment wording when the chat booked a time", async () => {
+    let released = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/repair-lead") {
+          released = true;
+          return Response.json({ ok: true, sessionId: SESSION, pending: { text: "已把周三 15:00 的预约请求发给店里。", estimates: [] } });
+        }
+        return ndjson([{ type: "session", id: SESSION }, { type: "lead_required", reason: "appointment" }, { type: "done" }]);
+      }),
+    );
+    render(<RepairChat locale="zh-CN" dict={zhCN} pagePath="/zh-CN/auto-repair" />);
+    await ask("明天下午3点过来", zhCN);
+    const gate = await screen.findByTestId("lead-gate");
+    expect(gate).toHaveTextContent(zhCN.repairChat.gate.appointmentTitle);
+    expect(gate).not.toHaveTextContent(zhCN.repairChat.gate.title);
+    await userEvent.type(screen.getByLabelText(zhCN.repairChat.gate.name), lead.name);
+    await userEvent.type(screen.getByLabelText(zhCN.repairChat.gate.phone), lead.phone);
+    await userEvent.click(screen.getByRole("button", { name: zhCN.repairChat.gate.appointmentSubmit }));
+    expect(await screen.findByText("已把周三 15:00 的预约请求发给店里。")).toBeInTheDocument();
+    expect(released).toBe(true);
+    expect(screen.queryByTestId("booking-card")).not.toBeInTheDocument();
+  });
+
   it("has complete copy in every locale", () => {
     for (const dict of [en, zhCN, zhTW]) {
       expect(dict.repairChat.starters).toHaveLength(3);

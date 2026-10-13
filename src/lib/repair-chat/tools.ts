@@ -14,6 +14,7 @@ import {
   type VehicleLookup,
   type VehicleRef,
 } from "@/lib/worldpac/catalog";
+import { bookableDays, isBookable, parseClosedDates, SLOT_TIMES } from "./booking";
 import {
   cylinderCount,
   FLAT_SERVICES,
@@ -36,10 +37,12 @@ import {
   type EstimateCard,
 } from "./pricing";
 
-export type StatusKey = "vehicle" | "services" | "estimate";
+export type StatusKey = "thinking" | "vehicle" | "services" | "estimate";
 
 export type ChatEvent =
   | { type: "status"; status: StatusKey }
+  /** The customer asked in the chat for this appointment slot (shop time). */
+  | { type: "appointment"; date: string; time: string }
   | { type: "estimate"; estimate: EstimateCard }
   | { type: "vehicle"; vehicle: { key: string; label: string } };
 
@@ -170,6 +173,21 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
         "refrigerant",
         "new_price_over_120k",
       ],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "request_appointment",
+    description:
+      "Send the shop an appointment request for the day and time the customer named in the chat. Slots are every half hour from 11:00 to 16:30, Monday to Saturday, shop time, not on holidays. The shop confirms by phone or WhatsApp. If the slot isn't open, the result lists open times to offer instead.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        date: { type: "string", description: "YYYY-MM-DD, worked out from today's date" },
+        time: { type: "string", enum: [...SLOT_TIMES], description: "Half-hour slot, 24-hour clock" },
+      },
+      required: ["date", "time"],
       additionalProperties: false,
     },
   },
@@ -406,6 +424,31 @@ export async function runTool(
         [{ type: "estimate", estimate: card }],
       );
     }
+    case "request_appointment": {
+      const date = typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : "";
+      const time = typeof input.time === "string" ? input.time : "";
+      const closed = parseClosedDates(process.env.REPAIR_BOOKING_CLOSED_DATES);
+      const now = new Date();
+      if (!date || !isBookable(date, time, now, closed)) {
+        const open = bookableDays(now, closed);
+        const sameDay = open.find((d) => d.date === date);
+        return ok({
+          status: "not_available",
+          reason: sameDay
+            ? "That time is not an open slot on that day."
+            : "The shop takes appointments Monday to Saturday (not holidays), up to 30 days ahead, with 2 hours' notice.",
+          open_slots_that_day: sameDay?.slots ?? [],
+          next_open_days: open.slice(0, 3).map((d) => ({ date: d.date, first: d.slots[0], last: d.slots[d.slots.length - 1] })),
+        });
+      }
+      return ok(
+        {
+          status: "requested",
+          summary: `Appointment request for ${date} at ${time} sent to the shop. Tell the customer the shop will call or WhatsApp to confirm it; it is not confirmed yet.`,
+        },
+        [{ type: "appointment", date, time }],
+      );
+    }
     case "request_team_quote": {
       const known = readVehicle(input);
       const vehicle = known ? describeVehicle(known) : cardText(input.vehicle_description, 80);
@@ -421,5 +464,6 @@ export async function runTool(
 export function statusForTool(name: string): StatusKey {
   if (name === "find_services") return "services";
   if (name === "get_estimate" || name === "get_flat_price" || name === "request_team_quote") return "estimate";
+  if (name === "request_appointment") return "thinking";
   return "vehicle";
 }

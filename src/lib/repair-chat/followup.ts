@@ -184,6 +184,7 @@ export function composeBookingEmail(
   locale: string,
   booking: { date: string; time: string },
   session: ChatSession | undefined,
+  source: "card" | "chat" = "card",
 ): OutgoingEmail {
   const estimates = session?.estimates ?? [];
   const vehicle = estimates[0]?.vehicle ?? "";
@@ -196,6 +197,7 @@ export function composeBookingEmail(
       `客户电话：${lead.phone}`,
       `使用语言：${LANGUAGE_LABEL[locale] ?? locale}`,
       `希望到店：${bookingLabel(booking)}`,
+      `来源：${source === "chat" ? "客户在聊天中向 AI 助手提出" : "客户在预约卡片上选择"}`,
       "",
       "—— 已给出的估价 ——",
       ...(estimates.length ? estimates.map(estimateLine) : ["（没有记录到估价）"]),

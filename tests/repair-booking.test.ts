@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   bookableDays,
   isBookable,
@@ -8,7 +8,9 @@ import {
   SLOT_TIMES,
 } from "@/lib/repair-chat/booking";
 import { composeFollowUpEmail, type OutgoingEmail } from "@/lib/repair-chat/followup";
-import { handleBooking, handleBookingSlots } from "@/lib/repair-chat/http";
+import { handleBooking, handleBookingSlots, handleChat, handleLead, type RouteDeps } from "@/lib/repair-chat/http";
+import { turnContext } from "@/lib/repair-chat/prompt";
+import { runTool } from "@/lib/repair-chat/tools";
 import type { LeadEvent } from "@/lib/repair-chat/lead";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 import { SessionStore } from "@/lib/repair-chat/session";
@@ -117,5 +119,113 @@ describe("booking requests", () => {
     ).toBe(403);
     expect(sent).toHaveLength(0);
     expect(isBookable("2026-10-14", "11:30", now)).toBe(true);
+  });
+});
+
+// ------------------------------------------------------- appointments in the chat
+
+describe("appointments asked for in the chat", () => {
+  const tuesday = new Date("2026-10-13T20:10:00Z"); // 13:10 Tuesday in Vancouver
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("gives the model today's shop date so it can work out 'tomorrow'", () => {
+    expect(turnContext("zh-CN", null, "明天下午3点可以吗", [], tuesday)).toContain(
+      "Today at the shop (Vancouver time): Tuesday 2026-10-13, 13:10.",
+    );
+  });
+
+  it("accepts an open slot and offers open times for a closed one", async () => {
+    vi.useFakeTimers({ now: tuesday, toFake: ["Date"] });
+    const api = { get: async () => ({}) as never, post: async () => ({}) as never };
+    const okOut = await runTool(api, "request_appointment", { date: "2026-10-14", time: "15:00" }, () => "E");
+    expect(JSON.parse(okOut.content).status).toBe("requested");
+    expect(okOut.events).toEqual([{ type: "appointment", date: "2026-10-14", time: "15:00" }]);
+
+    const sunday = await runTool(api, "request_appointment", { date: "2026-10-18", time: "15:00" }, () => "E");
+    expect(sunday.events).toEqual([]);
+    expect(JSON.parse(sunday.content)).toMatchObject({
+      status: "not_available",
+      next_open_days: [{ date: "2026-10-13", first: "15:30" }, { date: "2026-10-14" }, { date: "2026-10-15" }],
+    });
+    const tooSoon = await runTool(api, "request_appointment", { date: "2026-10-13", time: "14:00" }, () => "E");
+    expect(JSON.parse(tooSoon.content)).toMatchObject({ status: "not_available", open_slots_that_day: ["15:30", "16:00", "16:30"] });
+  });
+
+  function chatSetup(withLead: boolean) {
+    vi.useFakeTimers({ now: tuesday, toFake: ["Date"] });
+    const sent: OutgoingEmail[] = [];
+    const sessions = new SessionStore(async () => {});
+    const responses = [
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t", name: "request_appointment", input: { date: "2026-10-14", time: "15:00" } }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "已帮您把周三 15:00 的预约请求发给店里，店里会打电话跟您确认。" }] },
+    ];
+    const deps: RouteDeps = {
+      configured: () => true,
+      limiter: new RateLimiter(),
+      notify: async () => {},
+      sessions,
+      mailer: async (email) => void sent.push(email),
+      catalog: () => ({ get: async () => ({}) as never, post: async () => ({}) as never }),
+      client: () => ({ beta: { messages: { create: async () => responses.shift() as never } } }),
+    };
+    const chat = async () => {
+      const response = await handleChat(
+        new Request("https://speedxrental.com/api/repair-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", origin: "https://speedxrental.com" },
+          body: JSON.stringify({
+            locale: "zh-CN",
+            history: [],
+            message: "明天下午3点过来可以吗",
+            vehicleKey: null,
+            lead: withLead ? lead : null,
+            sessionId: null,
+          }),
+        }),
+        deps,
+      );
+      return (await response.text()).trim().split("\n").map((l) => JSON.parse(l));
+    };
+    return { sent, sessions, deps, chat };
+  }
+
+  it("emails the shop right away when the visitor already left name and phone", async () => {
+    const { sent, chat } = chatSetup(true);
+    const lines = await chat();
+    expect(lines.map((l) => l.type)).toContain("message");
+    expect(lines.some((l) => l.type === "appointment")).toBe(false);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject).toContain("【网站预约请求】Kevin Liu 604-555-0182 · 2026-10-14（周三）15:00");
+    expect(sent[0].text).toContain("来源：客户在聊天中向 AI 助手提出");
+  });
+
+  it("asks for name and phone first, then emails once", async () => {
+    const { sent, sessions, deps, chat } = chatSetup(false);
+    const lines = await chat();
+    expect(lines.find((l) => l.type === "lead_required")).toEqual({ type: "lead_required", reason: "appointment" });
+    expect(lines.some((l) => l.type === "message")).toBe(false);
+    expect(sent).toHaveLength(0);
+
+    const sessionId = lines.find((l) => l.type === "session").id as string;
+    const unlock = () =>
+      handleLead(
+        new Request("https://speedxrental.com/api/repair-lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", origin: "https://speedxrental.com" },
+          body: JSON.stringify({ locale: "zh-CN", lead, sessionId }),
+        }),
+        { ...deps, limiter: new RateLimiter() },
+      ).then((r) => r.json() as Promise<{ pending: { text: string } | null }>);
+    const released = await unlock();
+    expect(released.pending?.text).toContain("周三 15:00");
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toContain("希望到店：2026-10-14（周三）15:00");
+    expect(sessions.get(sessionId)?.booking).toEqual({ date: "2026-10-14", time: "15:00" });
+
+    await unlock();
+    expect(sent).toHaveLength(1);
   });
 });

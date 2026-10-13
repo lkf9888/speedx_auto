@@ -158,10 +158,14 @@ function EstimateView({
 function LeadGate({
   copy,
   onStart,
+  reason = "estimate",
 }: {
   copy: ChatCopy;
   onStart: (lead: Lead) => Promise<boolean>;
+  /** Why we're asking: to show a ready estimate, or to pass an appointment request on. */
+  reason?: "estimate" | "appointment";
 }) {
+  const appointment = reason === "appointment";
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -186,9 +190,9 @@ function LeadGate({
     <form onSubmit={submit} noValidate className="space-y-4" aria-labelledby="repair-gate-title">
       <div>
         <h3 id="repair-gate-title" className="text-lg font-semibold text-ink-900">
-          {copy.gate.title}
+          {appointment ? copy.gate.appointmentTitle : copy.gate.title}
         </h3>
-        <p className="mt-1 text-sm leading-6 text-ink-600">{copy.gate.intro}</p>
+        <p className="mt-1 text-sm leading-6 text-ink-600">{appointment ? copy.gate.appointmentIntro : copy.gate.intro}</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm font-medium text-ink-700">
@@ -226,7 +230,7 @@ function LeadGate({
           disabled={submitting}
           className="shrink-0 rounded-full bg-ink-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-40"
         >
-          {copy.gate.submit}
+          {appointment ? copy.gate.appointmentSubmit : copy.gate.submit}
         </button>
       </div>
     </form>
@@ -254,7 +258,7 @@ export function RepairChat({
   /** Over today's limit: show "please call us" instead of the chat. */
   const [capped, setCapped] = useState(false);
   /** The server is holding a reply with an estimate until name and phone are given. */
-  const [awaitingLead, setAwaitingLead] = useState(false);
+  const [awaitingLead, setAwaitingLead] = useState<false | "estimate" | "appointment">(false);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -342,6 +346,7 @@ export function RepairChat({
     let failure: keyof ChatCopy["errors"] | null = null;
     let nextVehicle = vehicle;
     let needsLead = false;
+    let gateReason: "estimate" | "appointment" = "estimate";
 
     try {
       const response = await fetch("/api/repair-chat", {
@@ -370,7 +375,7 @@ export function RepairChat({
               | { type: "estimate"; estimate: EstimateCard }
               | { type: "message"; text: string }
               | { type: "session"; id: string }
-              | { type: "lead_required" }
+              | { type: "lead_required"; reason?: "estimate" | "appointment" }
               | { type: "capped" }
               | { type: "error"; code: "busy" | "unavailable" | "invalid" }
               | { type: "done" };
@@ -379,7 +384,10 @@ export function RepairChat({
             else if (event.type === "estimate") estimates.push(event.estimate);
             else if (event.type === "message") reply = event.text;
             else if (event.type === "session") setSessionId(event.id);
-            else if (event.type === "lead_required") needsLead = true;
+            else if (event.type === "lead_required") {
+              needsLead = true;
+              gateReason = event.reason ?? "estimate";
+            }
             else if (event.type === "capped") setCapped(true);
             else if (event.type === "error") failure = event.code === "busy" ? "busy" : "unavailable";
           }
@@ -393,7 +401,7 @@ export function RepairChat({
     if (!failure && !needsLead && !reply && estimates.length === 0) failure = "empty";
     setVehicle(nextVehicle);
     if (failure) appendReply(copy.errors[failure], estimates, true);
-    else if (needsLead) setAwaitingLead(true);
+    else if (needsLead) setAwaitingLead(gateReason);
     else appendReply(reply, estimates);
     setPending(false);
     setStatus(null);
@@ -513,7 +521,7 @@ export function RepairChat({
             )}
             {awaitingLead && (
               <div data-testid="lead-gate" className="rounded-xl bg-white p-4 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
-                <LeadGate copy={copy} onStart={unlock} />
+                <LeadGate copy={copy} onStart={unlock} reason={awaitingLead || "estimate"} />
               </div>
             )}
             {pending && status && (
