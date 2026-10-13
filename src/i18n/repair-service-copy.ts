@@ -87,12 +87,12 @@ const enSeeds: ServiceSeeds = {
   maintenance: {
     metaTitle: "Oil Change & Car Maintenance in Richmond, BC",
     metaDescription:
-      "Oil changes from $95 with oil and filter, tire changes, A/C recharge, belts, filters, and scheduled maintenance in Richmond near YVR. $120/hr labor by labor-guide times.",
+      "Oil changes from $95 with oil and filter, tire changes, A/C recharge, belts, filters, and scheduled maintenance in Richmond near YVR. Labor by labor-guide times.",
     eyebrow: "Maintenance",
     title: "Oil Change and Scheduled Maintenance",
     serviceType: "Vehicle maintenance",
     summary:
-      "SPEEDX AUTO handles oil changes, tire changes, A/C recharges, filters, belts, coolant, and scheduled maintenance at our Richmond shop near YVR. Oil changes start at $95 with oil and filter included. Other work is billed at $120 per hour using industry-standard labor-guide times, with WorldPac parts at list price. Bring the mileage and any service history so we can recommend what is actually due.",
+      "SPEEDX AUTO handles oil changes, tire changes, A/C recharges, filters, belts, coolant, and scheduled maintenance at our Richmond shop near YVR. Oil changes start at $95 with oil and filter included. Other work is billed using industry-standard labor-guide times, with WorldPac parts at list price. Bring the mileage and any service history so we can recommend what is actually due.",
     symptoms: [
       "An oil change or a dashboard maintenance reminder is due",
       "Seasonal tire change, or tires that look worn or uneven",
@@ -112,7 +112,7 @@ const enSeeds: ServiceSeeds = {
       "Review what we find and approve only the work you choose",
     ],
     pricingBody:
-      "Oil changes, tire changes, and A/C recharges are flat prices from the shop's price list. Everything else is $120 per hour times the labor-guide time, plus parts.",
+      "Oil changes, tire changes, and A/C recharges are flat prices from the shop's price list. Everything else is billed by the labor-guide time, plus parts.",
     pricingRows: [
       {
         job: "Oil change, car or small SUV",
@@ -197,12 +197,12 @@ const enSeeds: ServiceSeeds = {
   brakes: {
     metaTitle: "Brake Repair in Richmond, BC: Pads, Rotors, Fluid",
     metaDescription:
-      "Brake pads, rotors, calipers, and brake fluid in Richmond near YVR. Front pads on most 2015–2020 cars: $205–$405 including parts. $120/hr by labor-guide times.",
+      "Brake pads, rotors, calipers, and brake fluid in Richmond near YVR. Front pads on most 2015–2020 cars: $205–$405 including parts. Priced by labor-guide times.",
     eyebrow: "Brakes",
     title: "Brake Inspection and Repair",
     serviceType: "Brake repair",
     summary:
-      "SPEEDX AUTO inspects and repairs brakes at our Richmond shop near YVR: pads, rotors, calipers, brake fluid, and warning lights. Front brake pads on most 2015–2020 cars cost $205–$405 including parts. Labor is $120 per hour using industry-standard labor-guide times. If braking feels unsafe or changes suddenly, stop driving when safe and arrange a tow.",
+      "SPEEDX AUTO inspects and repairs brakes at our Richmond shop near YVR: pads, rotors, calipers, brake fluid, and warning lights. Front brake pads on most 2015–2020 cars cost $205–$405 including parts. Labor is billed using industry-standard labor-guide times. If braking feels unsafe or changes suddenly, stop driving when safe and arrange a tow.",
     symptoms: [
       "Squealing, grinding, or scraping when you brake",
       "Steering-wheel or pedal vibration while braking",
@@ -222,7 +222,7 @@ const enSeeds: ServiceSeeds = {
       "Review measurements, options, and the quote before approving work",
     ],
     pricingBody:
-      "Brake labor is $120 per hour times the labor-guide time for your vehicle, plus parts at WorldPac list price. Most quotes show two or three pad or rotor options at different prices.",
+      "Brake labor is billed by the labor-guide time for your vehicle, plus parts at WorldPac list price. Most quotes show two or three pad or rotor options at different prices.",
     pricingRows: [
       {
         job: "Front brake pads",
@@ -284,7 +284,7 @@ const enSeeds: ServiceSeeds = {
       {
         question: "How is brake labor charged?",
         answer:
-          "At $120 per hour times the labor-guide time for your vehicle. Front pads on a 2019 Toyota Camry LE are rated at 1.1 hours, so labor is $132.",
+          "By the labor-guide time for your vehicle. Front pads on a 2019 Toyota Camry LE are rated at 1.1 hours.",
       },
       {
         question: "Do you quote brake work before replacing parts?",
@@ -296,12 +296,12 @@ const enSeeds: ServiceSeeds = {
   diagnostics: {
     metaTitle: "Check Engine Light & Car Electrical Repair in Richmond",
     metaDescription:
-      "Check-engine light, battery, alternator, starter, and sensor diagnosis in Richmond near YVR. Real price examples; $120/hr labor by labor-guide times.",
+      "Check-engine light, battery, alternator, starter, and sensor diagnosis in Richmond near YVR. Real price examples; Labor by labor-guide times.",
     eyebrow: "Diagnostics and electrical",
     title: "Check-Engine Light, Battery, and Electrical Diagnosis",
     serviceType: "Vehicle diagnostics",
     summary:
-      "SPEEDX AUTO diagnoses check-engine lights, warning indicators, rough running, no-start problems, and battery or charging faults at our Richmond shop near YVR. A fault code points to a system, not automatically to a failed part, so we test before replacing anything. Repairs are billed at $120 per hour using labor-guide times, with WorldPac parts at list price.",
+      "SPEEDX AUTO diagnoses check-engine lights, warning indicators, rough running, no-start problems, and battery or charging faults at our Richmond shop near YVR. A fault code points to a system, not automatically to a failed part, so we test before replacing anything. Repairs are billed using labor-guide times, with WorldPac parts at list price.",
     symptoms: [
       "Check-engine or another warning light stays on or keeps coming back",
       "Slow cranking, a dead battery, or a battery light while driving",
@@ -321,7 +321,7 @@ const enSeeds: ServiceSeeds = {
       "Review findings, any further testing, and repair options before approving",
     ],
     pricingBody:
-      "Once the cause is found, the repair is $120 per hour times the labor-guide time, plus parts. These are common electrical and engine repairs from real quotes.",
+      "Once the cause is found, the repair is billed by the labor-guide time, plus parts. These are common electrical and engine repairs from real quotes.",
     pricingRows: [
       {
         job: "12-volt battery",
@@ -390,12 +390,12 @@ const enSeeds: ServiceSeeds = {
   suspension: {
     metaTitle: "Suspension & Steering Repair in Richmond, BC",
     metaDescription:
-      "Struts, shocks, sway bar links, wheel bearings, and CV axles in Richmond near YVR. Real price examples; $120/hr labor by labor-guide times.",
+      "Struts, shocks, sway bar links, wheel bearings, and CV axles in Richmond near YVR. Real price examples; Labor by labor-guide times.",
     eyebrow: "Suspension and steering",
     title: "Suspension and Steering Repair",
     serviceType: "Suspension and steering repair",
     summary:
-      "SPEEDX AUTO inspects and repairs clunks, looseness, pulling, vibration, and uneven tire wear at our Richmond shop near YVR, including struts, shocks, sway bar links, wheel bearings, and CV axles. Similar symptoms can come from several parts, so we inspect first. Labor is $120 per hour using industry-standard labor-guide times, with WorldPac parts at list price.",
+      "SPEEDX AUTO inspects and repairs clunks, looseness, pulling, vibration, and uneven tire wear at our Richmond shop near YVR, including struts, shocks, sway bar links, wheel bearings, and CV axles. Similar symptoms can come from several parts, so we inspect first. Labor is billed using industry-standard labor-guide times, with WorldPac parts at list price.",
     symptoms: [
       "Clunks, knocks, or squeaks over bumps",
       "Pulling, wandering, or constant steering correction",
@@ -415,7 +415,7 @@ const enSeeds: ServiceSeeds = {
       "Review findings and approve the work after you see the quote",
     ],
     pricingBody:
-      "Suspension labor is $120 per hour times the labor-guide time for your vehicle, plus parts at WorldPac list price.",
+      "Suspension labor is billed by the labor-guide time for your vehicle, plus parts at WorldPac list price.",
     pricingRows: [
       {
         job: "Front strut assemblies",
@@ -489,12 +489,12 @@ const enSeeds: ServiceSeeds = {
   "tesla-ev": {
     metaTitle: "Tesla & EV Repair in Richmond, BC",
     metaDescription:
-      "Independent Tesla and EV repair in Richmond near YVR: high-voltage battery checks, drive motor repair, fault-code diagnosis, brakes, suspension, and tires. $120/hr.",
+      "Independent Tesla and EV repair in Richmond near YVR: high-voltage battery checks, drive motor repair, fault-code diagnosis, brakes, suspension, and tires.",
     eyebrow: "Tesla and electric vehicles",
     title: "Tesla and Electric Vehicle Repair",
     serviceType: "Electric vehicle repair",
     summary:
-      "SPEEDX AUTO repairs electric vehicles, mainly Tesla, at our shop at 2980 Number 3 Road in Richmond near YVR. We check high-voltage batteries, repair drive motors, read and diagnose fault codes, and handle EV brakes, suspension, tires, and maintenance. Labor is $120 per hour, billed by industry-standard labor-guide times. Appointments are required, and we speak English, Cantonese, and Mandarin.",
+      "SPEEDX AUTO repairs electric vehicles, mainly Tesla, at our shop at 2980 Number 3 Road in Richmond near YVR. We check high-voltage batteries, repair drive motors, read and diagnose fault codes, and handle EV brakes, suspension, tires, and maintenance. Labor is billed by industry-standard labor-guide times. Appointments are required, and we speak English, Cantonese, and Mandarin.",
     symptoms: [
       "Battery or drive-system alerts on the screen, or alerts that return after a restart",
       "Range or power that drops for no clear reason",
@@ -515,12 +515,12 @@ const enSeeds: ServiceSeeds = {
       "Review the diagnosis, options, and quote before approving work",
     ],
     pricingBody:
-      "Repairs and diagnosis on EVs are billed at the same $120 per hour, using labor-guide times, with parts quoted before work starts. Tire changes and A/C recharges use the shop's flat prices.",
+      "Repairs and diagnosis on EVs are billed the same way, using labor-guide times, with parts quoted before work starts. Tire changes and A/C recharges use the shop's flat prices.",
     pricingRows: [
       {
         job: "Repairs and diagnosis",
         laborTime: "Labor-guide time",
-        total: "$120 per hour + parts",
+        total: "Labor-guide time + parts",
         examples: "Quoted before work starts",
       },
       {
@@ -556,7 +556,7 @@ const enSeeds: ServiceSeeds = {
       {
         question: "How much does Tesla repair cost?",
         answer:
-          "Labor is $120 per hour times the labor-guide time, plus parts, and you get the quote before work starts. Tire changes start at $25 per tire and A/C recharges are $150 or $230.",
+          "Labor is billed by the labor-guide time, plus parts, and you get the quote before work starts. Tire changes start at $25 per tire and A/C recharges are $150 or $230.",
       },
       {
         question: "Do you work on other EV brands?",
@@ -602,12 +602,12 @@ const zhCNSeeds: ServiceSeeds = {
   maintenance: {
     metaTitle: "列治文换机油与汽车保养",
     metaDescription:
-      "列治文换机油 $95 起（含机油机滤），换胎、空调加冷媒、皮带、滤芯、定期保养。工时费每小时 $120，按标准工时计费。",
+      "列治文换机油 $95 起（含机油机滤），换胎、空调加冷媒、皮带、滤芯、定期保养。工时费按标准工时计费。",
     eyebrow: "保养",
     title: "换机油与定期保养",
     serviceType: "汽车保养",
     summary:
-      "SPEEDX AUTO 在列治文靠近 YVR 的车间提供换机油、换胎、空调加冷媒、更换滤芯和皮带、冷却液保养等定期保养项目。换机油 95 加元起，含机油和机滤。其他项目按每小时 120 加元、行业标准工时计费，配件来自 WorldPac，按标价报价。来之前请准备好里程和保养记录，我们会告诉您哪些项目确实到期。",
+      "SPEEDX AUTO 在列治文靠近 YVR 的车间提供换机油、换胎、空调加冷媒、更换滤芯和皮带、冷却液保养等定期保养项目。换机油 95 加元起，含机油和机滤。其他项目按行业标准工时计费，配件来自 WorldPac，按标价报价。来之前请准备好里程和保养记录，我们会告诉您哪些项目确实到期。",
     symptoms: [
       "到了换机油时间，或仪表盘出现保养提醒",
       "换季换胎，或轮胎磨损明显、不均匀",
@@ -625,7 +625,7 @@ const zhCNSeeds: ServiceSeeds = {
       "和列治文车间约好时间",
       "看过检查结果后，只批准您要做的项目",
     ],
-    pricingBody: "换机油、换胎和空调加冷媒按店里价目表一口价，其他项目按每小时 120 加元 × 标准工时，再加配件费。",
+    pricingBody: "换机油、换胎和空调加冷媒按店里价目表一口价，其他项目按标准工时计费，再加配件费。",
     pricingRows: [
       {
         job: "换机油：普通轿车 / 小 SUV",
@@ -708,12 +708,12 @@ const zhCNSeeds: ServiceSeeds = {
   brakes: {
     metaTitle: "列治文刹车维修：刹车片、刹车盘、刹车油",
     metaDescription:
-      "列治文刹车片、刹车盘、卡钳、刹车油维修，靠近 YVR。多数 2015–2020 年车型换前刹车片含配件 $205–$405。工时费每小时 $120，按标准工时计费。",
+      "列治文刹车片、刹车盘、卡钳、刹车油维修，靠近 YVR。多数 2015–2020 年车型换前刹车片含配件 $205–$405。工时费按标准工时计费。",
     eyebrow: "刹车",
     title: "刹车检查与维修",
     serviceType: "刹车维修",
     summary:
-      "SPEEDX AUTO 在列治文靠近 YVR 的车间检查和维修刹车：刹车片、刹车盘、卡钳、刹车油和刹车故障灯。多数 2015–2020 年车型换前刹车片，含配件 205–405 加元。工时费每小时 120 加元，按行业标准工时计费。如果刹车感觉不安全或突然变化，请在安全时停车并安排拖车。",
+      "SPEEDX AUTO 在列治文靠近 YVR 的车间检查和维修刹车：刹车片、刹车盘、卡钳、刹车油和刹车故障灯。多数 2015–2020 年车型换前刹车片，含配件 205–405 加元。工时费按行业标准工时计费。如果刹车感觉不安全或突然变化，请在安全时停车并安排拖车。",
     symptoms: [
       "刹车时尖叫、摩擦或刮擦声",
       "刹车时方向盘或踏板抖动",
@@ -731,7 +731,7 @@ const zhCNSeeds: ServiceSeeds = {
       "开车或拖车到店做刹车检查",
       "看过测量结果、可选方案和报价后再批准维修",
     ],
-    pricingBody: "刹车工时按每小时 120 加元 × 您这款车的标准工时，配件按 WorldPac 标价。多数报价会列出两到三种不同价位的刹车片或刹车盘供您选择。",
+    pricingBody: "刹车工时按您这款车的标准工时计费，配件按 WorldPac 标价。多数报价会列出两到三种不同价位的刹车片或刹车盘供您选择。",
     pricingRows: [
       {
         job: "换前刹车片",
@@ -790,7 +790,7 @@ const zhCNSeeds: ServiceSeeds = {
       },
       {
         question: "刹车工时怎么算？",
-        answer: "每小时 120 加元 × 您这款车的标准工时。例如 2019 丰田凯美瑞 LE 换前刹车片标准工时 1.1 小时，工时费 132 加元。",
+        answer: "按您这款车的标准工时计费。例如 2019 丰田凯美瑞 LE 换前刹车片标准工时 1.1 小时。",
       },
       {
         question: "换配件前会先报价吗？",
@@ -802,12 +802,12 @@ const zhCNSeeds: ServiceSeeds = {
   diagnostics: {
     metaTitle: "列治文发动机故障灯检测与汽车电路维修",
     metaDescription:
-      "列治文发动机故障灯、电瓶、发电机、启动马达、传感器检测与维修，靠近 YVR。附真实报价实例；工时费每小时 $120，按标准工时计费。",
+      "列治文发动机故障灯、电瓶、发电机、启动马达、传感器检测与维修，靠近 YVR。附真实报价实例；工时费按标准工时计费。",
     eyebrow: "故障诊断与电路",
     title: "发动机故障灯、电瓶与电路诊断",
     serviceType: "汽车故障诊断",
     summary:
-      "SPEEDX AUTO 在列治文靠近 YVR 的车间诊断发动机故障灯、各种警示灯、怠速不稳、无法启动以及电瓶和充电系统问题。故障码只指向某个系统，不等于某个零件坏了，所以我们会先测试再换件。维修按每小时 120 加元、标准工时计费，配件来自 WorldPac，按标价报价。",
+      "SPEEDX AUTO 在列治文靠近 YVR 的车间诊断发动机故障灯、各种警示灯、怠速不稳、无法启动以及电瓶和充电系统问题。故障码只指向某个系统，不等于某个零件坏了，所以我们会先测试再换件。维修按标准工时计费，配件来自 WorldPac，按标价报价。",
     symptoms: [
       "发动机故障灯或其他警示灯常亮或反复出现",
       "启动无力、电瓶没电，或行驶中电瓶灯亮",
@@ -825,7 +825,7 @@ const zhCNSeeds: ServiceSeeds = {
       "扫描并测试相关系统，不只凭故障码换件",
       "看过诊断结果、是否需要进一步测试和维修方案后再批准",
     ],
-    pricingBody: "找到原因后，维修按每小时 120 加元 × 标准工时，加配件费。以下是常见电路和发动机维修的真实报价。",
+    pricingBody: "找到原因后，维修按标准工时计费，加配件费。以下是常见电路和发动机维修的真实报价。",
     pricingRows: [
       {
         job: "换 12V 电瓶",
@@ -889,12 +889,12 @@ const zhCNSeeds: ServiceSeeds = {
   suspension: {
     metaTitle: "列治文悬挂与转向维修",
     metaDescription:
-      "列治文减震器、平衡杆连杆、轮毂轴承、半轴维修，靠近 YVR。附真实报价实例；工时费每小时 $120，按标准工时计费。",
+      "列治文减震器、平衡杆连杆、轮毂轴承、半轴维修，靠近 YVR。附真实报价实例；工时费按标准工时计费。",
     eyebrow: "悬挂与转向",
     title: "悬挂与转向维修",
     serviceType: "悬挂与转向维修",
     summary:
-      "SPEEDX AUTO 在列治文靠近 YVR 的车间检查和维修过坎异响、松旷、跑偏、抖动和轮胎偏磨，包括减震器、平衡杆连杆、轮毂轴承和半轴。相似的症状可能来自不同零件，所以我们先检查。工时费每小时 120 加元，按行业标准工时计费，配件来自 WorldPac，按标价报价。",
+      "SPEEDX AUTO 在列治文靠近 YVR 的车间检查和维修过坎异响、松旷、跑偏、抖动和轮胎偏磨，包括减震器、平衡杆连杆、轮毂轴承和半轴。相似的症状可能来自不同零件，所以我们先检查。工时费按行业标准工时计费，配件来自 WorldPac，按标价报价。",
     symptoms: [
       "过减速带或坑洼时咯噔、咚咚或吱吱响",
       "车辆跑偏、发飘，需要不停修正方向",
@@ -912,7 +912,7 @@ const zhCNSeeds: ServiceSeeds = {
       "检查轮胎、转向、悬挂和传动部件",
       "看过检查结果和报价后再批准维修",
     ],
-    pricingBody: "悬挂工时按每小时 120 加元 × 您这款车的标准工时，配件按 WorldPac 标价。",
+    pricingBody: "悬挂工时按您这款车的标准工时计费，配件按 WorldPac 标价。",
     pricingRows: [
       {
         job: "换前减震器总成",
@@ -982,12 +982,12 @@ const zhCNSeeds: ServiceSeeds = {
   "tesla-ev": {
     metaTitle: "列治文特斯拉维修 · 电动车维修",
     metaDescription:
-      "列治文独立特斯拉和电动车维修，靠近 YVR：高压电池检测、驱动电机维修、故障码诊断、刹车、悬挂、轮胎。工时费每小时 $120。普通话、粤语、英语服务。",
+      "列治文独立特斯拉和电动车维修，靠近 YVR：高压电池检测、驱动电机维修、故障码诊断、刹车、悬挂、轮胎。工时费按标准工时计费。普通话、粤语、英语服务。",
     eyebrow: "特斯拉与电动车",
     title: "特斯拉与电动车维修",
     serviceType: "电动车维修",
     summary:
-      "SPEEDX AUTO 在列治文 2980 Number 3 Road、靠近 YVR 的车间维修电动车，以特斯拉为主。我们做高压电池检测、驱动电机维修、故障码读取与诊断，以及电动车的刹车、悬挂、轮胎和保养。工时费每小时 120 加元，按行业标准工时计费。需要预约，店里讲普通话、粤语和英语。",
+      "SPEEDX AUTO 在列治文 2980 Number 3 Road、靠近 YVR 的车间维修电动车，以特斯拉为主。我们做高压电池检测、驱动电机维修、故障码读取与诊断，以及电动车的刹车、悬挂、轮胎和保养。工时费按行业标准工时计费。需要预约，店里讲普通话、粤语和英语。",
     symptoms: [
       "屏幕出现电池或驱动系统警告，或重启后警告仍然出现",
       "续航或动力无故下降",
@@ -1002,12 +1002,12 @@ const zhCNSeeds: ServiceSeeds = {
       "约好时间，把车开到列治文车间",
       "看过诊断结果、方案和报价后再批准维修",
     ],
-    pricingBody: "电动车的维修和诊断同样按每小时 120 加元、标准工时计费，配件开工前报价。换胎和空调加冷媒按店里的一口价。",
+    pricingBody: "电动车的维修和诊断同样按标准工时计费，配件开工前报价。换胎和空调加冷媒按店里的一口价。",
     pricingRows: [
       {
         job: "维修与诊断",
         laborTime: "标准工时",
-        total: "每小时 $120 + 配件",
+        total: "标准工时 + 配件",
         examples: "开工前报价",
       },
       {
@@ -1040,7 +1040,7 @@ const zhCNSeeds: ServiceSeeds = {
       },
       {
         question: "修特斯拉大概多少钱？",
-        answer: "工时费每小时 120 加元 × 标准工时，加配件费，开工前给您报价。换胎每条 25 加元起，空调加冷媒 150 或 230 加元。",
+        answer: "工时费按标准工时计算，加配件费，开工前给您报价。换胎每条 25 加元起，空调加冷媒 150 或 230 加元。",
       },
       {
         question: "其他品牌的电动车能修吗？",
@@ -1086,12 +1086,12 @@ const zhTWSeeds: ServiceSeeds = {
   maintenance: {
     metaTitle: "列治文換機油及汽車保養",
     metaDescription:
-      "列治文車房換機油 $95 起（已包機油及機油格），換胎、冷氣加雪種、皮帶、濾網、定期保養。工時費每小時 $120，按標準工時收費。",
+      "列治文車房換機油 $95 起（已包機油及機油格），換胎、冷氣加雪種、皮帶、濾網、定期保養。工時費按標準工時收費。",
     eyebrow: "保養",
     title: "換機油及定期保養",
     serviceType: "汽車保養",
     summary:
-      "SPEEDX AUTO 在列治文鄰近 YVR 的車房提供換機油、換胎、冷氣加雪種、更換濾網和皮帶、冷卻液保養等定期保養。換機油 95 加元起，已包機油及機油格。其他項目按每小時 120 加元、行業標準工時收費，零件來自 WorldPac，按標價報價。來之前請準備里程和保養紀錄，我們會告訴您哪些項目真正到期。",
+      "SPEEDX AUTO 在列治文鄰近 YVR 的車房提供換機油、換胎、冷氣加雪種、更換濾網和皮帶、冷卻液保養等定期保養。換機油 95 加元起，已包機油及機油格。其他項目按行業標準工時收費，零件來自 WorldPac，按標價報價。來之前請準備里程和保養紀錄，我們會告訴您哪些項目真正到期。",
     symptoms: [
       "到了換機油時間，或儀錶板出現保養提示",
       "換季換胎，或輪胎明顯磨損、磨損不均",
@@ -1109,7 +1109,7 @@ const zhTWSeeds: ServiceSeeds = {
       "與列治文車房約好時間",
       "看過檢查結果後，只批准您要做的項目",
     ],
-    pricingBody: "換機油、換胎和冷氣加雪種按車房價目表一口價，其他項目按每小時 120 加元 × 標準工時，另加零件費。",
+    pricingBody: "換機油、換胎和冷氣加雪種按車房價目表一口價，其他項目按標準工時收費，另加零件費。",
     pricingRows: [
       {
         job: "換機油：一般轎車 / 小型 SUV",
@@ -1192,12 +1192,12 @@ const zhTWSeeds: ServiceSeeds = {
   brakes: {
     metaTitle: "列治文煞車維修：煞車片、煞車碟、煞車油",
     metaDescription:
-      "列治文車房煞車片、煞車碟、卡鉗、煞車油維修，鄰近 YVR。大部分 2015–2020 年車款換前煞車片連零件 $205–$405。工時費每小時 $120，按標準工時收費。",
+      "列治文車房煞車片、煞車碟、卡鉗、煞車油維修，鄰近 YVR。大部分 2015–2020 年車款換前煞車片連零件 $205–$405。工時費按標準工時收費。",
     eyebrow: "煞車",
     title: "煞車檢查及維修",
     serviceType: "煞車維修",
     summary:
-      "SPEEDX AUTO 在列治文鄰近 YVR 的車房檢查及維修煞車：煞車片、煞車碟、卡鉗、煞車油和煞車警示燈。大部分 2015–2020 年車款更換前煞車片，連零件 205–405 加元。工時費每小時 120 加元，按行業標準工時收費。如煞車感覺不安全或突然有變，請在安全時停車並安排拖車。",
+      "SPEEDX AUTO 在列治文鄰近 YVR 的車房檢查及維修煞車：煞車片、煞車碟、卡鉗、煞車油和煞車警示燈。大部分 2015–2020 年車款更換前煞車片，連零件 205–405 加元。工時費按行業標準工時收費。如煞車感覺不安全或突然有變，請在安全時停車並安排拖車。",
     symptoms: [
       "踩煞車時有尖叫、磨擦或刮擦聲",
       "煞車時方向盤或腳踏震動",
@@ -1215,7 +1215,7 @@ const zhTWSeeds: ServiceSeeds = {
       "駕車或拖車到車房做煞車檢查",
       "看過量度結果、可選方案和報價後再批准維修",
     ],
-    pricingBody: "煞車工時按每小時 120 加元 × 您車款的標準工時，零件按 WorldPac 標價。大部分報價會列出兩至三款不同價位的煞車片或煞車碟供您選擇。",
+    pricingBody: "煞車工時按您車款的標準工時收費，零件按 WorldPac 標價。大部分報價會列出兩至三款不同價位的煞車片或煞車碟供您選擇。",
     pricingRows: [
       {
         job: "更換前煞車片",
@@ -1274,7 +1274,7 @@ const zhTWSeeds: ServiceSeeds = {
       },
       {
         question: "煞車工時怎樣計算？",
-        answer: "每小時 120 加元 × 您車款的標準工時。例如 2019 Toyota Camry LE 換前煞車片標準工時 1.1 小時，工時費 132 加元。",
+        answer: "按您車款的標準工時收費。例如 2019 Toyota Camry LE 換前煞車片標準工時 1.1 小時。",
       },
       {
         question: "換零件前會先報價嗎？",
@@ -1286,12 +1286,12 @@ const zhTWSeeds: ServiceSeeds = {
   diagnostics: {
     metaTitle: "列治文引擎故障燈檢查及汽車電路維修",
     metaDescription:
-      "列治文車房引擎故障燈、電池、發電機、摩打、感應器檢查及維修，鄰近 YVR。附真實報價實例；工時費每小時 $120，按標準工時收費。",
+      "列治文車房引擎故障燈、電池、發電機、摩打、感應器檢查及維修，鄰近 YVR。附真實報價實例；工時費按標準工時收費。",
     eyebrow: "故障診斷及電路",
     title: "引擎故障燈、電池及電路診斷",
     serviceType: "汽車故障診斷",
     summary:
-      "SPEEDX AUTO 在列治文鄰近 YVR 的車房診斷引擎故障燈、各種警示燈、怠速不穩、無法啟動，以及電池和充電系統問題。故障碼只指向某個系統，不等於某個零件壞了，所以我們會先測試才換件。維修按每小時 120 加元、標準工時收費，零件來自 WorldPac，按標價報價。",
+      "SPEEDX AUTO 在列治文鄰近 YVR 的車房診斷引擎故障燈、各種警示燈、怠速不穩、無法啟動，以及電池和充電系統問題。故障碼只指向某個系統，不等於某個零件壞了，所以我們會先測試才換件。維修按標準工時收費，零件來自 WorldPac，按標價報價。",
     symptoms: [
       "引擎故障燈或其他警示燈長亮或反覆出現",
       "啟動乏力、電池無電，或行車時電池燈亮",
@@ -1309,7 +1309,7 @@ const zhTWSeeds: ServiceSeeds = {
       "掃描及測試相關系統，不只憑故障碼換件",
       "看過診斷結果、是否需要進一步測試和維修方案後再批准",
     ],
-    pricingBody: "找到原因後，維修按每小時 120 加元 × 標準工時，另加零件費。以下是常見電路及引擎維修的真實報價。",
+    pricingBody: "找到原因後，維修按標準工時收費，另加零件費。以下是常見電路及引擎維修的真實報價。",
     pricingRows: [
       {
         job: "更換 12V 電池",
@@ -1373,12 +1373,12 @@ const zhTWSeeds: ServiceSeeds = {
   suspension: {
     metaTitle: "列治文避震及轉向維修",
     metaDescription:
-      "列治文車房避震器、平衡桿連桿、輪軸承、半軸維修，鄰近 YVR。附真實報價實例；工時費每小時 $120，按標準工時收費。",
+      "列治文車房避震器、平衡桿連桿、輪軸承、半軸維修，鄰近 YVR。附真實報價實例；工時費按標準工時收費。",
     eyebrow: "避震及轉向",
     title: "避震及轉向維修",
     serviceType: "避震及轉向維修",
     summary:
-      "SPEEDX AUTO 在列治文鄰近 YVR 的車房檢查及維修過坑異響、鬆動、走偏、震動和輪胎偏磨，包括避震器、平衡桿連桿、輪軸承和半軸。相似症狀可能來自不同零件，所以我們先檢查。工時費每小時 120 加元，按行業標準工時收費，零件來自 WorldPac，按標價報價。",
+      "SPEEDX AUTO 在列治文鄰近 YVR 的車房檢查及維修過坑異響、鬆動、走偏、震動和輪胎偏磨，包括避震器、平衡桿連桿、輪軸承和半軸。相似症狀可能來自不同零件，所以我們先檢查。工時費按行業標準工時收費，零件來自 WorldPac，按標價報價。",
     symptoms: [
       "過減速壆或坑窿時有咯咯、咚咚或吱吱聲",
       "車輛走偏、發飄，需要不停修正方向",
@@ -1396,7 +1396,7 @@ const zhTWSeeds: ServiceSeeds = {
       "檢查輪胎、轉向、避震和傳動部件",
       "看過檢查結果和報價後再批准維修",
     ],
-    pricingBody: "避震工時按每小時 120 加元 × 您車款的標準工時，零件按 WorldPac 標價。",
+    pricingBody: "避震工時按您車款的標準工時收費，零件按 WorldPac 標價。",
     pricingRows: [
       {
         job: "更換前避震器總成",
@@ -1466,12 +1466,12 @@ const zhTWSeeds: ServiceSeeds = {
   "tesla-ev": {
     metaTitle: "列治文 Tesla 維修 · 電動車維修",
     metaDescription:
-      "列治文獨立 Tesla 及電動車維修，鄰近 YVR：高壓電池檢測、電動馬達維修、故障碼診斷、煞車、避震、輪胎。工時費每小時 $120。粵語、普通話、英語服務。",
+      "列治文獨立 Tesla 及電動車維修，鄰近 YVR：高壓電池檢測、電動馬達維修、故障碼診斷、煞車、避震、輪胎。工時費按標準工時收費。粵語、普通話、英語服務。",
     eyebrow: "Tesla 及電動車",
     title: "Tesla 及電動車維修",
     serviceType: "電動車維修",
     summary:
-      "SPEEDX AUTO 在列治文 2980 Number 3 Road、鄰近 YVR 的車房維修電動車，以 Tesla 為主。我們提供高壓電池檢測、電動馬達維修、故障碼讀取及診斷，以及電動車的煞車、避震、輪胎和保養。工時費每小時 120 加元，按行業標準工時收費。須預約，店內可說粵語、普通話及英語。",
+      "SPEEDX AUTO 在列治文 2980 Number 3 Road、鄰近 YVR 的車房維修電動車，以 Tesla 為主。我們提供高壓電池檢測、電動馬達維修、故障碼讀取及診斷，以及電動車的煞車、避震、輪胎和保養。工時費按行業標準工時收費。須預約，店內可說粵語、普通話及英語。",
     symptoms: [
       "屏幕出現電池或驅動系統警告，或重新啟動後警告仍在",
       "續航或動力無故下降",
@@ -1486,12 +1486,12 @@ const zhTWSeeds: ServiceSeeds = {
       "約好時間，把車駛到列治文車房",
       "看過診斷結果、方案和報價後再批准維修",
     ],
-    pricingBody: "電動車的維修和診斷同樣按每小時 120 加元、標準工時收費，零件於開工前報價。換胎和冷氣加雪種按車房一口價。",
+    pricingBody: "電動車的維修和診斷同樣按標準工時收費，零件於開工前報價。換胎和冷氣加雪種按車房一口價。",
     pricingRows: [
       {
         job: "維修及診斷",
         laborTime: "標準工時",
-        total: "每小時 $120 + 零件",
+        total: "標準工時 + 零件",
         examples: "開工前報價",
       },
       {
@@ -1524,7 +1524,7 @@ const zhTWSeeds: ServiceSeeds = {
       },
       {
         question: "維修 Tesla 大概要多少錢？",
-        answer: "工時費每小時 120 加元 × 標準工時，另加零件費，開工前給您報價。換胎每條 25 加元起，冷氣加雪種 150 或 230 加元。",
+        answer: "工時費按標準工時計算，另加零件費，開工前給您報價。換胎每條 25 加元起，冷氣加雪種 150 或 230 加元。",
       },
       {
         question: "其他品牌的電動車可以維修嗎？",

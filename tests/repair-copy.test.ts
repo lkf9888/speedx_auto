@@ -114,7 +114,8 @@ describe("localized auto repair copy", () => {
       const service = dict.autoRepair.services[slug];
       expect(service.faqs.length).toBeGreaterThanOrEqual(6);
       expect(service.pricingRows.length).toBeGreaterThanOrEqual(slug === "tesla-ev" ? 2 : 4);
-      expect(service.pricingBody).toContain(String(WALK_IN_LABOR_RATE));
+      // The shop keeps the hourly rate off the public pages; the estimate assistant still bills it.
+      expect(service.pricingBody).not.toContain(String(WALK_IN_LABOR_RATE));
       expect(service.serviceType.length).toBeGreaterThan(1);
     }
   });
