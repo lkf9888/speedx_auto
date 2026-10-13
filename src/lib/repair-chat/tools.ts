@@ -29,8 +29,10 @@ import {
   type TireType,
   type VehicleSize,
 } from "./flat-price";
+import { findTires, loadTireList, seasonsForSize, sizeKey, type TireSeason } from "./tires";
 import {
   buildEstimate,
+  buildTireEstimate,
   buildFlatEstimate,
   buildTeamQuoteCard,
   summarizeEstimateForModel,
@@ -173,6 +175,29 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
         "refrigerant",
         "new_price_over_120k",
       ],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "find_tires",
+    description:
+      "Price NEW tires the shop sells (good-value brands), installed. Needs the tire size from the sidewall, e.g. 225/65R17, LT245/75R16 or 33x12.50R18. Shows the customer a card with up to three options; the price per tire already includes mounting and fees. For mounting tires the customer already has, use get_flat_price (tire_change) instead.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        size: { type: "string", description: "Tire size as the customer gave it" },
+        season: {
+          type: "string",
+          enum: ["all_season", "all_weather", "winter", "off_road", "any"],
+          description:
+            "all_season (no snowflake), all_weather (on-road, snowflake), winter (snow tires), off_road (A/T, M/T, R/T), or any if the customer hasn't said",
+        },
+        count: { anyOf: [{ type: "integer" }, { type: "null" }], description: "How many tires; null means 4" },
+        vehicle_key: { anyOf: [{ type: "string" }, { type: "null" }], description: "When the vehicle was identified" },
+        new_price_over_120k: { type: "boolean", description: "True if this vehicle sold new for more than CAD $120,000." },
+      },
+      required: ["size", "season", "count", "vehicle_key", "new_price_over_120k"],
       additionalProperties: false,
     },
   },
@@ -357,7 +382,7 @@ export async function runTool(
       if (FLAT_QUERY.test(query)) {
         return ok({
           services: [],
-          note: "Oil changes, tire changes and A/C refrigerant recharges have shop flat prices: use get_flat_price.",
+          note: "Oil changes, mounting the customer's own tires and A/C refrigerant recharges have shop flat prices: use get_flat_price. For buying new tires use find_tires.",
         });
       }
       const services = await findServices(api, vehicle, query);
@@ -424,6 +449,39 @@ export async function runTool(
         [{ type: "estimate", estimate: card }],
       );
     }
+    case "find_tires": {
+      const size = typeof input.size === "string" ? input.size.slice(0, 40) : "";
+      if (!sizeKey(size)) {
+        return fail("Could not read a tire size. Ask for the numbers on the tire sidewall, e.g. 225/65R17.");
+      }
+      const season = pick<TireSeason | "any">(input.season, ["all_season", "all_weather", "winter", "off_road", "any"]) ?? "any";
+      const countRaw = Number(input.count);
+      const count = Number.isInteger(countRaw) && countRaw >= 1 && countRaw <= 6 ? countRaw : 4;
+      const decoded = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;
+      const vehicle = decoded ? describeVehicle(decoded) : "—";
+      const serviceName = `${flatWord(locale, "tires_new")} · ${size.toUpperCase().replace(/\s+/g, " ").trim()}`;
+      // Same rule as the shop's other posted prices: V8+ and premium vehicles are quoted by the team.
+      if (decoded) {
+        const facts = vehicleFacts(decoded);
+        if ((facts.cylinders ?? 0) >= 8 || facts.premium || input.new_price_over_120k === true) {
+          return teamQuote(vehicle, serviceName, "8+ cylinders or premium vehicle: no posted tire price.", newEstimateId);
+        }
+      } else if (input.new_price_over_120k === true) {
+        return teamQuote(vehicle, serviceName, "Premium vehicle: no posted tire price.", newEstimateId);
+      }
+      const listings = loadTireList();
+      if (!listings) return teamQuote(vehicle, serviceName, "Tire price list not loaded.", newEstimateId);
+      const options = findTires(listings, size, season, count);
+      if (options.length === 0) {
+        const available = seasonsForSize(listings, size);
+        if (available.length > 0 && season !== "any") {
+          return ok({ status: "not_in_this_season", available_seasons: available });
+        }
+        return teamQuote(vehicle, serviceName, "Size not on the tire price list.", newEstimateId);
+      }
+      const card = buildTireEstimate(vehicle, serviceName, options, flatWord(locale, "tires_note"), newEstimateId());
+      return ok({ status: "ok", summary: summarizeEstimateForModel(card) }, [{ type: "estimate", estimate: card }]);
+    }
     case "request_appointment": {
       const date = typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : "";
       const time = typeof input.time === "string" ? input.time : "";
@@ -463,7 +521,7 @@ export async function runTool(
 
 export function statusForTool(name: string): StatusKey {
   if (name === "find_services") return "services";
-  if (name === "get_estimate" || name === "get_flat_price" || name === "request_team_quote") return "estimate";
+  if (name === "get_estimate" || name === "get_flat_price" || name === "find_tires" || name === "request_team_quote") return "estimate";
   if (name === "request_appointment") return "thinking";
   return "vehicle";
 }

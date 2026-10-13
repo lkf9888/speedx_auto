@@ -40,9 +40,9 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 export function estimateLine(card: EstimateCard): string {
   const label = `${card.id} · ${card.vehicle} · ${card.service}${card.position ? `（${card.position}）` : ""}`;
   if (card.kind === "team_quote") return `${label} · 未给价格，请回电给客户报价（${card.partsNote}）`;
-  if (card.kind === "flat") {
+  if (card.kind === "flat" || card.kind === "tires") {
     const options = card.partOptions.map((p) => `${p.description}${p.quantity > 1 ? ` ×${p.quantity}` : ""} ${money(p.total)}`).join("；");
-    return `${label} · 一口价：${options}（未含税）`;
+    return `${label} · ${card.kind === "tires" ? "轮胎（每条含环保费和安装）" : "一口价"}：${options}（未含税）`;
   }
   const range = card.totalLow === card.totalHigh ? money(card.totalLow) : `${money(card.totalLow)}–${money(card.totalHigh)}`;
   const shown = estimateRanges(card);

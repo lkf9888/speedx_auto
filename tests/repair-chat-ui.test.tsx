@@ -309,6 +309,37 @@ describe("RepairChat", () => {
     expect(screen.getAllByTestId("screenshot-tip")).toHaveLength(1);
   });
 
+  it("renders a tire card with one installed price per tire", async () => {
+    const tires = {
+      ...estimate,
+      id: "E-TIRE",
+      kind: "tires",
+      service: "新轮胎（含安装） · 225/65R17",
+      position: "",
+      laborHours: 0,
+      laborWalkIn: 0,
+      partOptions: [
+        { description: "BrandA AS1 225/65R17 102H", series: "all_season", unitListPrice: 132, quantity: 4, total: 528, inStockLocally: false, note: "" },
+        { description: "BrandF W1 225/65R17 102H", series: "winter", unitListPrice: 157, quantity: 4, total: 628, inStockLocally: false, note: "" },
+      ],
+      totalLow: 528,
+      totalHigh: 628,
+      laborNote: "",
+      partsNote: "每条价格已含安装。库存和到货时间以店里确认为准。",
+    };
+    vi.stubGlobal("fetch", api(held("两款可选。", tires)));
+    render(<RepairChat locale="zh-CN" dict={zhCN} pagePath="/zh-CN/auto-repair" />);
+    await ask("225/65R17 四条多少钱", zhCN);
+    await giveContact(zhCN);
+    await screen.findByText("两款可选。");
+    const card = screen.getByTestId("estimate-card");
+    expect(card).toHaveTextContent(zhCN.repairChat.estimate.tireOptions);
+    expect(card).toHaveTextContent("BrandA AS1 225/65R17 102H · $132 × 4");
+    expect(card).toHaveTextContent("$528 – $628");
+    expect(card).toHaveTextContent("库存和到货时间以店里确认为准");
+    expect(card).not.toHaveTextContent(/环保|eco/i);
+  });
+
   it("shows the call-us message and closes the input when over today's limit", async () => {
     const text = zhTW.repairChat.capped.replaceAll("{phone}", "+1 (778) 917-0710");
     vi.stubGlobal("fetch", api(ndjson([{ type: "session", id: SESSION }, { type: "capped" }, { type: "message", text }, { type: "done" }])));

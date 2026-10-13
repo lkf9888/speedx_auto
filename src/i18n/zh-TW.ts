@@ -153,6 +153,7 @@ export const zhTW: Dictionary = {
       book: "WhatsApp 預約",
       call: "打電話",
       flatOptions: "一口價選項",
+      tireOptions: "輪胎選項（含安裝，每條 × 條數）",
       teamQuoteTitle: "需人工報價",
       teamQuote: "這項需要由店裡單獨報價。請透過 WhatsApp 或電話聯絡我們，我們會盡快回覆價格。",
     },

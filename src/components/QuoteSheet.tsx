@@ -83,13 +83,17 @@ export function QuoteSheet({
         ) : (
           <dl className="mt-5 space-y-3 border-t border-dashed border-ink-300 pt-4 text-sm">
             {kind === "labor" && <Row label={e.labor} value={dollars(card.laborWalkIn)} />}
-            {kind === "flat" ? (
+            {kind === "flat" || kind === "tires" ? (
               <>
-                <p className="text-xs text-ink-500">{e.flatOptions}</p>
+                <p className="text-xs text-ink-500">{kind === "tires" ? e.tireOptions : e.flatOptions}</p>
                 {card.partOptions.map((part) => (
                   <Row
                     key={`${part.description}-${part.total}`}
-                    label={`${part.description}${part.quantity > 1 ? ` ×${part.quantity}` : ""}`}
+                    label={
+                      kind === "tires"
+                        ? `${part.description} · ${dollars(part.unitListPrice)} × ${part.quantity}`
+                        : `${part.description}${part.quantity > 1 ? ` ×${part.quantity}` : ""}`
+                    }
                     value={dollars(part.total)}
                   />
                 ))}
@@ -122,7 +126,7 @@ export function QuoteSheet({
         <div className="mt-6 text-xs leading-5 text-ink-600">
           <p className="font-bold text-ink-700">{d.remarksTitle}</p>
           <ol className="mt-1 list-decimal space-y-1 pl-4">
-            {kind === "flat" ? (
+            {kind === "flat" || kind === "tires" ? (
               <>
                 {card.partsNote ? <li>{card.partsNote}</li> : null}
                 <li>{e.disclaimer}</li>

@@ -152,6 +152,7 @@ export const en = {
       book: "Book on WhatsApp",
       call: "Call",
       flatOptions: "Flat-rate options",
+      tireOptions: "Tire options (installed, per tire × qty)",
       teamQuoteTitle: "Quote from our team",
       teamQuote: "This job needs a price from our team. Message us on WhatsApp or call, and we'll get back to you with a quote.",
     },

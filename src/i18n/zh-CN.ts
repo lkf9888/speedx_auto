@@ -153,6 +153,7 @@ export const zhCN: Dictionary = {
       book: "WhatsApp 预约",
       call: "打电话",
       flatOptions: "一口价选项",
+      tireOptions: "轮胎选项（含安装，每条 × 条数）",
       teamQuoteTitle: "需人工报价",
       teamQuote: "这项需要由店里单独报价。请通过 WhatsApp 或电话联系我们，我们会尽快回复价格。",
     },

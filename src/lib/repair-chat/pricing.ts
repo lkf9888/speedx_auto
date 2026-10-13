@@ -1,5 +1,6 @@
 import type { PartOption, ServiceQuote } from "@/lib/worldpac/catalog";
 import { flatWord, flatWordEn, type FlatQuote } from "./flat-price";
+import type { TireOption } from "./tires";
 
 /** Posted shop labor rate for walk-in customers, CAD per hour. */
 export const WALK_IN_LABOR_RATE = 120;
@@ -21,7 +22,7 @@ export interface EstimatePartOption {
  * flat: the shop's posted flat price (oil change, tires, A/C recharge).
  * team_quote: no price; the customer is asked to contact the team.
  */
-export type EstimateKind = "labor" | "flat" | "team_quote";
+export type EstimateKind = "labor" | "flat" | "tires" | "team_quote";
 
 /** Everything the UI renders. Built only from server-side lookups. */
 export interface EstimateCard {
@@ -66,7 +67,7 @@ export function estimateRanges(card: EstimateCard): EstimateRanges {
   const partsLow = Math.round(card.partsLow);
   const partsHigh = Math.round(card.partsHigh);
   // Flat prices are the shop's posted prices, so only labor-based totals get the allowance.
-  if (card.kind === "flat" || card.kind === "team_quote") {
+  if (card.kind === "flat" || card.kind === "tires" || card.kind === "team_quote") {
     return { partsLow, partsHigh, totalLow: Math.round(card.totalLow), totalHigh: Math.round(card.totalHigh) };
   }
   return {
@@ -177,6 +178,47 @@ export function buildFlatEstimate(
   };
 }
 
+/** Card for new tires: one all-in price per tire (tire, fees, mounting) × count. */
+export function buildTireEstimate(
+  vehicle: string,
+  service: string,
+  options: TireOption[],
+  note: string,
+  id: string,
+  now = new Date(),
+): EstimateCard {
+  const partOptions: EstimatePartOption[] = options.map((o) => ({
+    description: [o.brand, o.pattern, o.size, o.load].filter(Boolean).join(" "),
+    series: o.season,
+    unitListPrice: o.perTire,
+    quantity: o.count,
+    total: o.total,
+    inStockLocally: false,
+    note: "",
+  }));
+  const totals = partOptions.map((p) => p.total);
+  const low = Math.min(...totals);
+  const high = Math.max(...totals);
+  return {
+    id,
+    kind: "tires",
+    vehicle,
+    service,
+    position: "",
+    ...emptyPrices,
+    primaryPartName: "",
+    partOptions,
+    partsLow: low,
+    partsHigh: high,
+    totalLow: low,
+    totalHigh: high,
+    referralTotalLow: low,
+    referralTotalHigh: high,
+    partsNote: note,
+    createdAt: now.toISOString(),
+  };
+}
+
 /** Card with no price that asks the customer to contact the team for a quote. */
 export function buildTeamQuoteCard(
   vehicle: string,
@@ -216,6 +258,18 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
       `Card ${card.id} shown to the customer: "${card.service}" for ${card.vehicle} has no online price and needs a quote from the team.`,
       `Reason (internal): ${card.partsNote}`,
       "Tell the customer briefly that the team will confirm the price by WhatsApp or phone (buttons on the card). Do not give or guess any price for this job.",
+    ].join("\n");
+  }
+  if (card.kind === "tires") {
+    return [
+      `Tire estimate ${card.id} shown to the customer as a card.`,
+      `Vehicle: ${card.vehicle}. ${card.service}.`,
+      "Options (price per tire includes the tire, fees and mounting; before tax): " +
+        card.partOptions
+          .map((p) => `${p.description} (${p.series.replace("_", " ")}): $${p.unitListPrice} per tire × ${p.quantity} = $${p.total}`)
+          .join("; ") +
+        ".",
+      "Quote only these per-tire and total figures; do not split them into tire, fee and labor. These are good-value brands. Stock and delivery time are confirmed by the shop.",
     ].join("\n");
   }
   if (card.kind === "flat") {
