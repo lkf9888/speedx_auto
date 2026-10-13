@@ -96,6 +96,7 @@ export default async function AutoRepairPage({
         ]}
         faqs={copy.faqs}
       />
+      <div className="page-compact">
       <section className="bg-hero-gradient">
         <Container className="py-10 sm:py-24 lg:py-28">
           <div className="max-w-3xl">
@@ -105,8 +106,8 @@ export default async function AutoRepairPage({
             <h1 className="mt-4 text-[1.65rem] font-bold leading-tight tracking-tight text-ink-900 sm:text-5xl lg:text-6xl">
               {copy.title}
             </h1>
-            <p data-testid="answer-summary" className="mt-5 text-base leading-7 text-ink-600 sm:mt-6 sm:text-lg sm:leading-8">
-              {copy.summary}
+            <p data-testid="answer-summary" className="mt-5 leading-7 text-ink-600 sm:mt-6 sm:text-lg sm:leading-8">
+              {copy.heroSummary ?? copy.summary}
             </p>
             <div className="mt-8">
               <ContactBar dict={dict} locale={locale} intent="auto_repair" placement="hero" pagePath={pagePath} quoteHref={quoteHref} />
@@ -116,8 +117,12 @@ export default async function AutoRepairPage({
         </Container>
       </section>
 
-      <section className="border-y border-ink-100 bg-ink-50 py-4 sm:py-6">
-        <Container>
+      {chatEnabled && (
+        <RepairChat locale={locale} dict={dict} pagePath={pagePath} />
+      )}
+
+      <section id="pricing" className="bg-ink-50 py-6 sm:py-10">
+        <Container className="space-y-3">
           <Collapsible title={copy.facts.title}>
             <dl className="grid gap-x-10 gap-y-4 md:grid-cols-2">
               {[
@@ -132,15 +137,6 @@ export default async function AutoRepairPage({
               ))}
             </dl>
           </Collapsible>
-        </Container>
-      </section>
-
-      {chatEnabled && (
-        <RepairChat locale={locale} dict={dict} pagePath={pagePath} />
-      )}
-
-      <section id="pricing" className="bg-ink-50 py-6 sm:py-10">
-        <Container className="space-y-3">
           <Collapsible title={copy.pricing.title}>
             <p className="max-w-2xl text-sm leading-7 text-ink-600 sm:text-base">{copy.pricing.intro}</p>
             <div className="mt-5 max-w-3xl rounded-2xl bg-ink-50 p-5 ring-1 ring-ink-100">
@@ -305,6 +301,7 @@ export default async function AutoRepairPage({
           </div>
         </Container>
       </section>
+      </div>
       <ContactBar
         dict={dict}
         locale={locale}

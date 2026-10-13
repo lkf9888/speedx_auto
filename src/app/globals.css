@@ -114,3 +114,81 @@
     transform: translateY(0);
   }
 }
+
+/* ---- Paper quote (sample estimate on the repair page) ---- */
+.paper-quote-shadow {
+  filter: drop-shadow(0 10px 14px rgba(60, 45, 20, 0.22)) drop-shadow(0 1px 1px rgba(60, 45, 20, 0.3));
+  transform: rotate(-0.7deg);
+}
+
+.paper-quote {
+  background-color: #fbf7ea;
+  background-image:
+    /* creases: a dark line with a light edge beside it */
+    linear-gradient(112deg, transparent 31%, rgba(70, 55, 20, 0.12) 31.3%, rgba(255, 255, 255, 0.4) 31.9%, transparent 33.5%),
+    linear-gradient(64deg, transparent 58%, rgba(70, 55, 20, 0.09) 58.3%, rgba(255, 255, 255, 0.4) 58.8%, transparent 60.5%),
+    linear-gradient(176deg, transparent 47%, rgba(70, 55, 20, 0.07) 47.3%, rgba(255, 255, 255, 0.35) 47.8%, transparent 49.5%),
+    linear-gradient(142deg, transparent 12%, rgba(70, 55, 20, 0.06) 12.3%, rgba(255, 255, 255, 0.35) 12.7%, transparent 14%),
+    /* worn corners and edges */
+    radial-gradient(130% 70% at 0% 0%, rgba(120, 90, 30, 0.12), transparent 55%),
+    radial-gradient(120% 70% at 100% 100%, rgba(120, 90, 30, 0.14), transparent 55%),
+    /* paper grain */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.35  0 0 0 0 0.28  0 0 0 0 0.12  0 0 0 0.16 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  /* torn, sawtooth bottom edge */
+  -webkit-mask: conic-gradient(from -45deg at bottom, transparent, #000 1deg 89deg, transparent 90deg) 50% / 14px 100%;
+  mask: conic-gradient(from -45deg at bottom, transparent, #000 1deg 89deg, transparent 90deg) 50% / 14px 100%;
+  border-radius: 3px 3px 0 0;
+}
+
+.paper-quote .paper-ink {
+  color: #1f2f73;
+}
+
+.paper-leader {
+  flex: 1 1 auto;
+  min-width: 0.75rem;
+  align-self: flex-end;
+  margin-bottom: 0.3em;
+  border-bottom: 1.5px dotted rgba(75, 75, 94, 0.45);
+}
+
+.paper-stamp {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  transform: rotate(9deg);
+  border: 2px solid rgba(190, 40, 40, 0.55);
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: rgba(190, 40, 40, 0.6);
+}
+
+/* ---- Phones: body copy 30% smaller on the repair pages; headings keep their size ---- */
+@layer base {
+  @media (max-width: 639px) {
+    .page-compact :is(h3, h4) {
+      font-size: 1rem;
+    }
+  }
+}
+
+@media (max-width: 639px) {
+  .page-compact {
+    /* 16px * 0.7 for unclassed text; the 14px/12px steps are floored at 10px to stay legible. */
+    font-size: 0.7rem;
+    --text-sm: 0.625rem;
+    --text-xs: 0.625rem;
+  }
+
+  .page-compact :is(p, li, dd, dt, td, th, label) {
+    line-height: 1.65;
+  }
+
+  /* iOS Safari zooms into fields smaller than 16px, so typed text keeps its size. */
+  .page-compact :is(input, textarea) {
+    font-size: 0.875rem;
+  }
+}

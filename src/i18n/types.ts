@@ -75,6 +75,8 @@ export interface RepairFlatPriceLabels {
 }
 
 export interface AutoRepairCopy {
+  /** Shorter lead paragraph shown on the page; `summary` stays the fuller text for metadata and schema. */
+  heroSummary?: string;
   metaTitle: string;
   metaDescription: string;
   eyebrow: string;

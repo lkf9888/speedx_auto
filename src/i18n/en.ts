@@ -106,6 +106,11 @@ export const en = {
     demo: {
       label: "Sample estimate",
       caption: "This is what an estimate looks like. Prices shown are an example from a real lookup.",
+      partsLine: "Parts · {count} options available",
+      remarksTitle: "Notes",
+      remarkReference: "For reference only. This is not a formal quote.",
+      remarkRange: "Prices can vary by about 10% either way. The actual price is quoted by our shop staff.",
+      stamp: "SAMPLE",
     },
     eyebrow: "Instant estimate",
     title: "Describe the problem, get a ballpark price",

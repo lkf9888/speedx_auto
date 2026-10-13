@@ -247,7 +247,9 @@ export const zhCNAutoRepair: AutoRepairCopy = {
   metaDescription:
     "列治文修车厂，靠近温哥华机场：保养、刹车、故障诊断、悬挂转向、特斯拉电动车维修。工时费按行业标准工时计费。普通话、粤语、英语服务。",
   eyebrow: "汽车维修 · 列治文",
-  title: "列治文汽车维修与电动车维修",
+  title: "汽车与电动车机械维修",
+  heroSummary:
+    "SPEEDX AUTO 做汽车常规保养、刹车、故障诊断、悬挂转向，也修电动车，以特斯拉为主。店里讲普通话、粤语和英语，需提前预约。",
   summary:
     "SPEEDX AUTO 速驰汽车是位于列治文 2980 Number 3 Road 的修车厂，靠近温哥华国际机场（YVR）。我们做常规保养、刹车、故障诊断、悬挂转向，也修电动车，以特斯拉为主。工时费按行业标准工时计费；配件来自 WorldPac，按标价报价。店里讲普通话、粤语和英语，需提前预约。",
   serviceName: "汽车维修与保养",
@@ -438,7 +440,9 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
   metaDescription:
     "列治文車房，近溫哥華機場：保養、煞車、故障診斷、避震轉向、Tesla 電動車維修。工時費按行業標準工時收費。粵語、普通話、英語服務。",
   eyebrow: "汽車維修 · 列治文",
-  title: "列治文汽車維修與電動車維修",
+  title: "汽車與電動車機械維修",
+  heroSummary:
+    "SPEEDX AUTO 提供汽車定期保養、煞車、故障診斷、避震及轉向維修，亦維修電動車，以 Tesla 為主。店內可說粵語、普通話及英語，須預先預約。",
   summary:
     "SPEEDX AUTO 速馳汽車是位於列治文 2980 Number 3 Road 的車房，鄰近溫哥華國際機場（YVR）。我們提供定期保養、煞車、故障診斷、避震及轉向維修，亦維修電動車，以 Tesla 為主。工時費按行業標準工時收費；零件來自 WorldPac，按標價報價。店內可說粵語、普通話及英語，須預先預約。",
   serviceName: "汽車維修與保養",

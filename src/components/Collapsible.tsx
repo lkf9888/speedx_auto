@@ -17,7 +17,7 @@ export function Collapsible({
   return (
     <details className="group rounded-2xl bg-white ring-1 ring-ink-100">
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-5 py-3 [&::-webkit-details-marker]:hidden">
-        <h2 className="text-lg font-bold text-ink-900 sm:text-xl">{title}</h2>
+        <h2 className="text-[1.125rem] font-bold text-ink-900 sm:text-xl">{title}</h2>
         <svg
           width="20"
           height="20"

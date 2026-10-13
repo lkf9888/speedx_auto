@@ -28,6 +28,7 @@ export function RepairServicePage({
 
   return (
     <>
+      <div className="page-compact">
       <section className="bg-hero-gradient">
         <Container className="py-10 sm:py-20 lg:py-24">
           <nav aria-label="Breadcrumb" className="text-sm text-ink-500">
@@ -51,7 +52,7 @@ export function RepairServicePage({
             </h1>
             <p
               data-testid="answer-summary"
-              className="mt-5 text-base leading-7 text-ink-600 sm:mt-6 sm:text-lg sm:leading-8"
+              className="mt-5 leading-7 text-ink-600 sm:mt-6 sm:text-lg sm:leading-8"
             >
               {copy.summary}
             </p>
@@ -179,6 +180,7 @@ export function RepairServicePage({
           </nav>
         </Container>
       </section>
+      </div>
       <ContactBar
         dict={dict}
         locale={locale}

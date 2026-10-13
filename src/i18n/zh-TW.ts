@@ -107,6 +107,11 @@ export const zhTW: Dictionary = {
     demo: {
       label: "報價範例",
       caption: "以下是估價結果的樣式，價格來自一次真實查詢，僅作範例。",
+      partsLine: "零件 · 共 {count} 款貨品可選",
+      remarksTitle: "備註",
+      remarkReference: "僅供參考，並非正式報價。",
+      remarkRange: "價格存在浮動空間（約上下 10%），實際價格以店內員工報價為準。",
+      stamp: "範例",
     },
     eyebrow: "線上估價",
     title: "描述車輛問題，馬上得到參考價",

@@ -107,6 +107,11 @@ export const zhCN: Dictionary = {
     demo: {
       label: "报价示例",
       caption: "以下是估价结果的样式，价格来自一次真实查询，仅作示例。",
+      partsLine: "零件 · 共 {count} 种货品可选",
+      remarksTitle: "备注",
+      remarkReference: "仅供参考，不是正式报价。",
+      remarkRange: "价格存在浮动空间（约上下 10%），具体实际价格以店铺员工报价为准。",
+      stamp: "示例",
     },
     eyebrow: "在线估价",
     title: "描述车辆问题，马上得到参考价",

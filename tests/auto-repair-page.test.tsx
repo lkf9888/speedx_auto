@@ -38,6 +38,32 @@ describe("auto repair hub page", () => {
     expect(view.container.querySelectorAll("table")).toHaveLength(2);
   });
 
+  it("keeps the Chinese hero short while metadata and schema keep the full summary", async () => {
+    for (const [locale, dict] of [["zh-CN", zhCN], ["zh-TW", zhTW]] as const) {
+      const { graph } = await renderPage(locale);
+      const service = graph.find((node) => node["@type"] === "Service");
+
+      expect(screen.getByTestId("answer-summary")).toHaveTextContent(dict.autoRepair.heroSummary ?? "");
+      expect(screen.getByTestId("answer-summary")).not.toHaveTextContent("2980");
+      expect(service?.description).toBe(dict.autoRepair.summary);
+      cleanup();
+    }
+    await renderPage("zh-CN");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("汽车与电动车机械维修");
+  });
+
+  it("lists the facts directly above the price sections", async () => {
+    const { view } = await renderPage("en");
+    const titles = [...view.container.querySelectorAll("details > summary h2")].map((h) => h.textContent);
+    const facts = titles.indexOf(en.autoRepair.facts.title);
+
+    expect(titles.slice(facts, facts + 3)).toEqual([
+      en.autoRepair.facts.title,
+      en.autoRepair.pricing.title,
+      en.autoRepair.pricing.flat.title,
+    ]);
+  });
+
   it("offers a quote button that jumps to the assistant only when the assistant is on the page", async () => {
     await renderPage("en");
     expect(screen.queryByRole("link", { name: en.cta.aiQuote })).not.toBeInTheDocument();

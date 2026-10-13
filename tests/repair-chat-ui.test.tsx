@@ -208,8 +208,16 @@ describe("RepairChat", () => {
   it("always shows the sample estimate without the referral price or booking buttons", () => {
     render(<RepairChat locale="zh-TW" dict={zhTW} pagePath="/zh-TW/auto-repair" />);
     const demo = screen.getByTestId("demo-estimate-card");
-    expect(demo).toHaveTextContent(zhTW.repairChat.demo.label);
-    expect(demo).toHaveTextContent("$291.05 – $317.84");
+    expect(screen.getByText(zhTW.repairChat.demo.label)).toBeInTheDocument();
+    expect(demo).toHaveTextContent(zhTW.repairChat.demo.stamp);
+    // Ranges only: parts span $159–$186 (3 options), total widened 10% each way, no itemised part list.
+    expect(demo).toHaveTextContent("$159 – $186");
+    expect(demo).toHaveTextContent("$262 – $350");
+    expect(demo).toHaveTextContent(zhTW.repairChat.demo.partsLine.replace("{count}", "3"));
+    expect(demo).toHaveTextContent(zhTW.repairChat.demo.remarkReference);
+    expect(demo).toHaveTextContent(zhTW.repairChat.demo.remarkRange);
+    expect(demo).not.toHaveTextContent("PRO-ACT");
+    expect(demo).not.toHaveTextContent("$185.84");
     expect(demo).not.toHaveTextContent("$264.65");
     expect(screen.queryByRole("link", { name: zhTW.repairChat.estimate.book })).not.toBeInTheDocument();
     expect(screen.queryByTestId("screenshot-tip")).not.toBeInTheDocument();

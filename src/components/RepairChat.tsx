@@ -6,6 +6,7 @@ import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import { company, telLink, whatsappLink } from "@/lib/company";
 import type { Locale } from "@/lib/site-routes";
 import { RepairBooking } from "./RepairBooking";
+import { SampleQuote } from "./SampleQuote";
 import { TrackedContactLink } from "./TrackedContactLink";
 
 type ChatCopy = Dictionary["repairChat"];
@@ -617,14 +618,7 @@ export function RepairChat({
         <div className="mt-10">
           <p className="text-sm font-semibold text-ink-900">{copy.demo.label}</p>
           <p className="mt-1 text-sm text-ink-500">{copy.demo.caption}</p>
-          <EstimateView
-            card={DEMO_ESTIMATE}
-            copy={copy}
-            locale={locale}
-            pagePath={pagePath}
-            leadName=""
-            demo
-          />
+          <SampleQuote card={DEMO_ESTIMATE} copy={copy} />
         </div>
       </div>
     </section>
