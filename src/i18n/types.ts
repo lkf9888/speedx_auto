@@ -40,6 +40,31 @@ export interface RepairPriceRow {
   examples: string;
 }
 
+/** Labels for the shop's posted flat prices; the amounts come from FLAT_PRICES. */
+export interface RepairFlatPriceLabels {
+  title: string;
+  intro: string;
+  columns: { service: string; price: string };
+  oilCar: string;
+  oilLarge: string;
+  oilEuropean: string;
+  oilDiesel: string;
+  tire: string;
+  ac: string;
+  regularOil: string;
+  premiumOil: string;
+  oemOil: string;
+  dieselCar: string;
+  dieselSuv: string;
+  tireUpTo18: string;
+  tireOver18: string;
+  tireRunFlat: string;
+  tireOffRoad: string;
+  r134a: string;
+  r1234yf: string;
+  note: string;
+}
+
 export interface AutoRepairCopy {
   metaTitle: string;
   metaDescription: string;
@@ -64,6 +89,7 @@ export interface AutoRepairCopy {
     columns: RepairPriceRow;
     rows: RepairPriceRow[];
     footnote: string;
+    flat: RepairFlatPriceLabels;
   };
   scope: {
     title: string;

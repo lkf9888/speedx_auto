@@ -7,7 +7,9 @@ import { Container } from "@/components/Container";
 import { StructuredData } from "@/components/StructuredData";
 import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
+import type { RepairFlatPriceLabels } from "@/i18n/types";
 import { company } from "@/lib/company";
+import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
 import { WALK_IN_LABOR_RATE } from "@/lib/repair-chat/pricing";
 import { buildPageMetadata } from "@/lib/seo";
 import {
@@ -24,6 +26,31 @@ const routeKeyByService: Record<RepairServiceSlug, RouteKey> = {
   diagnostics: "repairDiagnostics",
   suspension: "repairSuspension",
 };
+
+const usd = (amount: number) => `$${amount}`;
+
+/** The shop's posted flat prices, worded for the page. Amounts match the estimate assistant. */
+function flatPriceRows(labels: RepairFlatPriceLabels) {
+  const { oil, tirePerWheel, acRecharge } = FLAT_PRICES;
+  const pair = (a: string, aPrice: number, b: string, bPrice: number) =>
+    `${a} ${usd(aPrice)} · ${b} ${usd(bPrice)}`;
+  return [
+    { service: labels.oilCar, price: pair(labels.regularOil, oil.standard.regular, labels.premiumOil, oil.premium.regular) },
+    { service: labels.oilLarge, price: pair(labels.regularOil, oil.standard.large, labels.premiumOil, oil.premium.large) },
+    { service: labels.oilEuropean, price: `${labels.oemOil} ${usd(oil.european)}` },
+    { service: labels.oilDiesel, price: pair(labels.dieselCar, oil.diesel.car, labels.dieselSuv, oil.diesel.suv) },
+    {
+      service: labels.tire,
+      price: [
+        `${labels.tireUpTo18} ${usd(tirePerWheel.up_to_18)}`,
+        `${labels.tireOver18} ${usd(tirePerWheel.over_18)}`,
+        `${labels.tireRunFlat} ${usd(tirePerWheel.run_flat)}`,
+        `${labels.tireOffRoad} ${usd(tirePerWheel.off_road)}`,
+      ].join(" · "),
+    },
+    { service: labels.ac, price: pair(labels.r134a, acRecharge.r134a, labels.r1234yf, acRecharge.r1234yf) },
+  ];
+}
 
 export async function generateMetadata({
   params,
@@ -153,6 +180,27 @@ export default async function AutoRepairPage({
             </table>
           </div>
           <p className="mt-4 max-w-3xl text-xs leading-6 text-ink-400">{copy.pricing.footnote}</p>
+          <h3 className="mt-12 text-2xl font-bold text-ink-900">{copy.pricing.flat.title}</h3>
+          <p className="mt-3 max-w-2xl leading-7 text-ink-600">{copy.pricing.flat.intro}</p>
+          <div className="mt-6 overflow-x-auto rounded-2xl bg-white ring-1 ring-ink-100">
+            <table className="w-full min-w-[36rem] text-left text-sm">
+              <thead className="border-b border-ink-100 text-xs uppercase tracking-wider text-ink-400">
+                <tr>
+                  <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.flat.columns.service}</th>
+                  <th scope="col" className="px-5 py-3 font-semibold">{copy.pricing.flat.columns.price}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {flatPriceRows(copy.pricing.flat).map((row) => (
+                  <tr key={row.service}>
+                    <th scope="row" className="px-5 py-4 font-semibold text-ink-900">{row.service}</th>
+                    <td className="px-5 py-4 tabular-nums text-ink-600">{row.price}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-4 max-w-3xl text-xs leading-6 text-ink-400">{copy.pricing.flat.note}</p>
         </Container>
       </section>
 

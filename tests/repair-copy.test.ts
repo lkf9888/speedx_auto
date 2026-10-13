@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { en } from "@/i18n/en";
 import { zhCN } from "@/i18n/zh-CN";
 import { zhTW } from "@/i18n/zh-TW";
+import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
 import { WALK_IN_LABOR_RATE } from "@/lib/repair-chat/pricing";
 import { repairServiceSlugs } from "@/lib/site-routes";
 
@@ -88,5 +89,23 @@ describe("localized auto repair copy", () => {
     expect(en.autoRepair.scope.notOfferedBody).toMatch(/transmission/i);
     expect(zhCN.autoRepair.scope.notOfferedBody).toMatch(/变速箱/);
     expect(zhTW.autoRepair.scope.notOfferedBody).toMatch(/變速箱/);
+  });
+
+  it.each(dictionaries)("quotes the posted oil change prices in the %s FAQ", (_, dict) => {
+    const faqText = JSON.stringify(dict.autoRepair.faqs);
+    const { oil } = FLAT_PRICES;
+
+    const posted = [
+      oil.standard.regular,
+      oil.premium.regular,
+      oil.standard.large,
+      oil.premium.large,
+      oil.european,
+      oil.diesel.car,
+      oil.diesel.suv,
+    ];
+    for (const price of posted) {
+      expect(faqText).toContain(String(price));
+    }
   });
 });

@@ -17,6 +17,7 @@ Auto repair facts (details and price examples on the auto repair page):
 
 - Labor: $120 CAD per hour before tax, billed by industry-standard labor-guide times (ALLDATA)
 - Parts: WorldPac, quoted at list price
+- Flat prices before tax: oil change from $95 (oil and filter included), tire change from $25 per tire, A/C recharge $150 (R-134a) or $230 (R-1234yf)
 - Electric vehicles: mainly Tesla; high-voltage battery checks, drive motor repair, fault-code diagnosis
 - Body work and paint: quoted case by case; transmission repair is not offered
 - Languages: English, Cantonese, Mandarin

@@ -63,6 +63,7 @@ export const enAutoRepair: AutoRepairCopy = {
       { label: "Labor rate", value: "$120 per hour, before tax" },
       { label: "Labor time", value: "Industry-standard labor-guide times (ALLDATA), not a stopwatch" },
       { label: "Parts", value: "WorldPac parts, quoted at list price" },
+      { label: "Oil change", value: "From $95, oil and filter included" },
       { label: "Electric vehicles", value: "Mainly Tesla: battery checks, drive motor repair, fault codes" },
       { label: "Languages", value: "English, Cantonese, Mandarin" },
       { label: "Payment", value: "Cash, credit card, WeChat Pay" },
@@ -124,12 +125,6 @@ export const enAutoRepair: AutoRepairCopy = {
         examples: "2018 Toyota Camry: $239–$305 · 2016 Toyota Highlander: $336–$355",
       },
       {
-        job: "Oil and filter change",
-        laborTime: "0.5 h",
-        total: "$60 labor + oil and filter",
-        examples: "Oil is priced by the litre for your engine",
-      },
-      {
         job: "Cabin air filter",
         laborTime: "0.3 h",
         total: "About $85",
@@ -138,6 +133,29 @@ export const enAutoRepair: AutoRepairCopy = {
     ],
     footnote:
       "Totals are parts plus labor, before tax. They come from real estimates our estimate assistant produced on October 11–12, 2026, using WorldPac list prices and labor-guide times for 2015–2020 Toyota, Honda, Mazda, Nissan, Subaru, Volkswagen, and Mercedes-Benz models. Your price depends on the exact vehicle and the parts you choose, and inspection may find other work. We confirm the quote with you before starting.",
+    flat: {
+      title: "Flat-price services",
+      intro: "Oil changes, tire changes, and A/C recharges are charged from the shop's posted price list, not by labor time.",
+      columns: { service: "Service", price: "Price" },
+      oilCar: "Oil change, car or small SUV",
+      oilLarge: "Oil change, large SUV or pickup",
+      oilEuropean: "Oil change, European vehicle",
+      oilDiesel: "Oil change, diesel",
+      tire: "Tire change, per tire",
+      ac: "A/C refrigerant recharge",
+      regularOil: "Regular 0W-20",
+      premiumOil: "Premium 0W-30",
+      oemOil: "OEM oil",
+      dieselCar: "Car",
+      dieselSuv: "SUV or truck",
+      tireUpTo18: "Up to 18 in.",
+      tireOver18: "Over 18 in.",
+      tireRunFlat: "Run-flat",
+      tireOffRoad: "AT / RT / MT",
+      r134a: "R-134a (older systems)",
+      r1234yf: "R-1234yf (newer systems)",
+      note: "Before tax. Oil change prices include oil and filter; tire change prices cover the work, and tires are extra. Vehicles with V8 or larger engines, or that sold new above $120,000, are quoted by the team.",
+    },
   },
   scope: {
     title: "What we work on",
@@ -149,6 +167,7 @@ export const enAutoRepair: AutoRepairCopy = {
       "Suspension and steering",
       "Batteries, alternators, and starters",
       "Cooling system and thermostats",
+      "Tire changes and A/C refrigerant recharge",
       "Tesla and EV battery checks, drive motor repair, and fault codes",
     ],
     quoteTitle: "Body work and paint: quoted case by case",
@@ -201,6 +220,11 @@ export const enAutoRepair: AutoRepairCopy = {
       question: "How much does a repair cost at SPEEDX AUTO?",
       answer:
         "Labor is $120 per hour times the labor-guide time for the job, plus parts at WorldPac list price. Front brake pads on most 2015–2020 cars came to $205–$405 including parts. You get the full quote before any work starts.",
+    },
+    {
+      question: "How much is an oil change?",
+      answer:
+        "For a car or small SUV, $95 with regular 0W-20 oil or $120 with premium 0W-30, oil and filter included. A large SUV or pickup is $150 or $180, a European vehicle is $220 with OEM oil, and diesels are $280–$320. V8 engines are quoted by the team.",
     },
     {
       question: "How do you decide how many labor hours to charge?",
@@ -457,6 +481,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
       { label: "工时费", value: "每小时 $120（税前）" },
       { label: "工时标准", value: "按行业标准工时手册（ALLDATA）计时，不按实际干活时间随意计算" },
       { label: "配件", value: "WorldPac 配件，按标价报价" },
+      { label: "换机油", value: "$95 起，含机油和机滤" },
       { label: "电动车", value: "以特斯拉为主：电池检测、电机维修、故障码检测" },
       { label: "服务语言", value: "普通话、粤语、英语" },
       { label: "付款方式", value: "现金、信用卡、微信支付" },
@@ -517,12 +542,6 @@ export const zhCNAutoRepair: AutoRepairCopy = {
         examples: "2018 丰田凯美瑞：$239–$305 · 2016 丰田汉兰达：$336–$355",
       },
       {
-        job: "换机油机滤",
-        laborTime: "0.5 小时",
-        total: "工时 $60 + 机油和滤芯",
-        examples: "机油按发动机所需升数计价",
-      },
-      {
         job: "换空调滤芯",
         laborTime: "0.3 小时",
         total: "约 $85",
@@ -531,6 +550,29 @@ export const zhCNAutoRepair: AutoRepairCopy = {
     ],
     footnote:
       "以上为配件加工时的税前总价，取自 2026 年 10 月 11–12 日估价助手生成的真实报价，基于 WorldPac 标价和标准工时，车型为 2015–2020 年的丰田、本田、马自达、日产、斯巴鲁、大众和奔驰。实际价格取决于具体车型和所选配件，检查时也可能发现其他需要处理的问题。开工前我们会先和您确认报价。",
+    flat: {
+      title: "一口价项目",
+      intro: "换机油、换胎和空调加冷媒按店里的价目表一口价收费，不按工时计算。",
+      columns: { service: "项目", price: "价格" },
+      oilCar: "换机油：普通轿车 / 小 SUV",
+      oilLarge: "换机油：大型 SUV / 皮卡",
+      oilEuropean: "换机油：欧洲车",
+      oilDiesel: "换机油：柴油车",
+      tire: "换胎（每条）",
+      ac: "空调加冷媒（雪种）",
+      regularOil: "普通机油 0W-20",
+      premiumOil: "高级机油 0W-30",
+      oemOil: "原厂机油",
+      dieselCar: "轿车",
+      dieselSuv: "SUV / 皮卡",
+      tireUpTo18: "18 寸及以下",
+      tireOver18: "18 寸以上",
+      tireRunFlat: "防爆胎",
+      tireOffRoad: "AT / RT / MT 越野胎",
+      r134a: "R-134a（旧系统）",
+      r1234yf: "R-1234yf（新系统）",
+      note: "以上为税前价格。换机油含机油和机滤；换胎价格只含工钱，轮胎另计。V8 及以上发动机、或新车价超过 12 万加元的车辆，由团队单独报价。",
+    },
   },
   scope: {
     title: "维修范围",
@@ -542,6 +584,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
       "悬挂与转向",
       "电瓶、发电机、启动马达",
       "冷却系统与节温器",
+      "换胎、空调加冷媒",
       "特斯拉等电动车的电池检测、电机维修、故障码检测",
     ],
     quoteTitle: "钣金喷漆：单独报价",
@@ -574,6 +617,11 @@ export const zhCNAutoRepair: AutoRepairCopy = {
       question: "在 SPEEDX AUTO 修车大概多少钱？",
       answer:
         "工时费为每小时 120 加元乘以该项目的标准工时，再加上按 WorldPac 标价计算的配件费。大多数 2015–2020 年车型换前刹车片，含配件约 205–405 加元。开工前会给您完整报价。",
+    },
+    {
+      question: "换机油多少钱？",
+      answer:
+        "普通轿车或小 SUV：普通机油 0W-20 为 95 加元，高级机油 0W-30 为 120 加元，含机油和机滤。大型 SUV 或皮卡 150 / 180 加元，欧洲车原厂机油 220 加元，柴油车 280–320 加元。V8 发动机由团队单独报价。",
     },
     {
       question: "工时是怎么定的？",
@@ -856,6 +904,7 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
       { label: "工時費", value: "每小時 $120（未連稅）" },
       { label: "工時標準", value: "按行業標準工時手冊（ALLDATA）計算，並非隨意計時" },
       { label: "零件", value: "WorldPac 零件，按標價報價" },
+      { label: "換機油", value: "$95 起，已包機油及機油格" },
       { label: "電動車", value: "以 Tesla 為主：電池檢測、電動馬達維修、故障碼檢測" },
       { label: "服務語言", value: "粵語、普通話、英語" },
       { label: "付款方式", value: "現金、信用卡、微信支付" },
@@ -916,12 +965,6 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
         examples: "2018 Toyota Camry：$239–$305 · 2016 Toyota Highlander：$336–$355",
       },
       {
-        job: "更換機油及機油格",
-        laborTime: "0.5 小時",
-        total: "工時 $60 + 機油及機油格",
-        examples: "機油按引擎所需公升數計價",
-      },
-      {
         job: "更換冷氣濾網",
         laborTime: "0.3 小時",
         total: "約 $85",
@@ -930,6 +973,29 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
     ],
     footnote:
       "以上為零件加工時的未連稅總價，取自 2026 年 10 月 11–12 日估價助手產生的真實報價，根據 WorldPac 標價及標準工時，車款為 2015–2020 年的 Toyota、Honda、Mazda、Nissan、Subaru、Volkswagen 及 Mercedes-Benz。實際價格視乎具體車款和所選零件，檢查時亦可能發現其他需要處理的問題。開工前我們會先與您確認報價。",
+    flat: {
+      title: "一口價項目",
+      intro: "換機油、換胎和冷氣加雪種按車房價目表一口價收費，不按工時計算。",
+      columns: { service: "項目", price: "價錢" },
+      oilCar: "換機油：一般轎車 / 小型 SUV",
+      oilLarge: "換機油：大型 SUV / 皮卡",
+      oilEuropean: "換機油：歐洲車",
+      oilDiesel: "換機油：柴油車",
+      tire: "換胎（每條）",
+      ac: "冷氣加雪種（冷媒）",
+      regularOil: "普通機油 0W-20",
+      premiumOil: "高級機油 0W-30",
+      oemOil: "原廠機油",
+      dieselCar: "轎車",
+      dieselSuv: "SUV / 皮卡",
+      tireUpTo18: "18 吋或以下",
+      tireOver18: "18 吋以上",
+      tireRunFlat: "防爆胎",
+      tireOffRoad: "AT / RT / MT 越野胎",
+      r134a: "R-134a（舊系統）",
+      r1234yf: "R-1234yf（新系統）",
+      note: "以上為未連稅價錢。換機油已包機油及機油格；換胎價錢只計工錢，輪胎另計。V8 或以上引擎、或新車價超過 12 萬加元的車輛，由團隊另行報價。",
+    },
   },
   scope: {
     title: "維修範圍",
@@ -941,6 +1007,7 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
       "避震及轉向",
       "電池、發電機、摩打（啟動馬達）",
       "冷卻系統及節溫器",
+      "換胎、冷氣加雪種",
       "Tesla 等電動車的電池檢測、電動馬達維修、故障碼檢測",
     ],
     quoteTitle: "鈑金噴油：另行報價",
@@ -972,6 +1039,11 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
       question: "在 SPEEDX AUTO 維修大概要多少錢？",
       answer:
         "工時費為每小時 120 加元乘以該項目的標準工時，再加上按 WorldPac 標價計算的零件費。大部分 2015–2020 年車款更換前煞車片，連零件約 205–405 加元。開工前會給您完整報價。",
+    },
+    {
+      question: "換機油要多少錢？",
+      answer:
+        "一般轎車或小型 SUV：普通機油 0W-20 為 95 加元，高級機油 0W-30 為 120 加元，已包機油及機油格。大型 SUV 或皮卡 150 / 180 加元，歐洲車原廠機油 220 加元，柴油車 280–320 加元。V8 引擎由團隊另行報價。",
     },
     {
       question: "工時是怎樣定的？",

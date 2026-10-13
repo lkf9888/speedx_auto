@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import AutoRepairPage from "@/app/[locale]/auto-repair/page";
 import { en } from "@/i18n/en";
@@ -35,7 +35,10 @@ describe("auto repair hub page", () => {
     await renderPage("en");
 
     expect(screen.getByRole("heading", { name: "What repairs cost" })).toBeInTheDocument();
-    expect(screen.getAllByRole("row")).toHaveLength(en.autoRepair.pricing.rows.length + 1);
+    const [laborTable, flatTable] = screen.getAllByRole("table");
+    expect(within(laborTable).getAllByRole("row")).toHaveLength(en.autoRepair.pricing.rows.length + 1);
+    expect(within(flatTable).getByText("Regular 0W-20 $95 · Premium 0W-30 $120")).toBeInTheDocument();
+    expect(within(flatTable).getByText("R-134a (older systems) $150 · R-1234yf (newer systems) $230")).toBeInTheDocument();
     expect(screen.getByText("$120 per hour, before tax")).toBeInTheDocument();
     expect(screen.getByText("2980 Number 3 Rd, Richmond, BC V6X 2B3")).toBeInTheDocument();
     expect(screen.getByText("Mon–Sat · 10:00 AM – 6:30 PM")).toBeInTheDocument();
