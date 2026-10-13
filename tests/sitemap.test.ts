@@ -32,4 +32,11 @@ describe("sitemap", () => {
       },
     });
   });
+
+  it("dates the auto repair hub by its own last content change", () => {
+    const hub = sitemap().filter((entry) => entry.url.endsWith("/auto-repair"));
+
+    expect(hub).toHaveLength(3);
+    expect(hub.every((entry) => entry.lastModified === "2026-10-12")).toBe(true);
+  });
 });

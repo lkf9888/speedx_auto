@@ -4,6 +4,7 @@ import {
   absoluteRouteUrl,
   localizedAlternates,
   locales,
+  routeLastModified,
   routePaths,
   type RouteKey,
 } from "@/lib/site-routes";
@@ -17,7 +18,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
       return {
         url: absoluteRouteUrl(locale, route),
-        lastModified: CONTENT_LAST_MODIFIED,
+        lastModified: routeLastModified[route] ?? CONTENT_LAST_MODIFIED,
         changeFrequency: "monthly",
         priority: route === "home" ? 1 : isPrimaryPage ? 0.9 : 0.8,
         alternates: {

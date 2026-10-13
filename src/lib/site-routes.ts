@@ -31,6 +31,11 @@ export const routePaths = {
 
 export type RouteKey = keyof typeof routePaths;
 
+/** Routes whose content changed after CONTENT_LAST_MODIFIED. */
+export const routeLastModified: Partial<Record<RouteKey, string>> = {
+  autoRepair: "2026-10-12",
+};
+
 const hreflangByLocale: Record<Locale, string> = {
   en: "en",
   "zh-CN": "zh-Hans",

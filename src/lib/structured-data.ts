@@ -19,6 +19,12 @@ export interface StructuredDataInput {
     name: string;
     description: string;
     areaServed: string[];
+    /** Defaults to the service name. */
+    serviceType?: string;
+    /** Hourly labor rate published on the page. */
+    hourlyRate?: { price: number; currency: string; description: string };
+    /** Services listed on the page, published as an OfferCatalog. */
+    catalog?: { name: string; items: string[] };
   };
   breadcrumbs?: Array<{ name: string; url: string }>;
   faqs?: FaqItem[];
@@ -107,15 +113,44 @@ export function buildStructuredData(
   const graph: JsonLdNode[] = [business, website, webPage];
 
   if (input.service) {
+    const { hourlyRate, catalog } = input.service;
     graph.push({
       "@id": serviceId,
       "@type": "Service",
       name: input.service.name,
-      serviceType: input.service.name,
+      serviceType: input.service.serviceType ?? input.service.name,
       description: input.service.description,
       areaServed: input.service.areaServed,
       provider: { "@id": BUSINESS_ID },
       mainEntityOfPage: { "@id": webPageId },
+      ...(hourlyRate
+        ? {
+            offers: {
+              "@type": "Offer",
+              description: hourlyRate.description,
+              priceSpecification: {
+                "@type": "UnitPriceSpecification",
+                price: hourlyRate.price,
+                priceCurrency: hourlyRate.currency,
+                unitCode: "HUR",
+                unitText: "hour",
+                valueAddedTaxIncluded: false,
+              },
+            },
+          }
+        : {}),
+      ...(catalog?.items.length
+        ? {
+            hasOfferCatalog: {
+              "@type": "OfferCatalog",
+              name: catalog.name,
+              itemListElement: catalog.items.map((item) => ({
+                "@type": "Offer",
+                itemOffered: { "@type": "Service", name: item },
+              })),
+            },
+          }
+        : {}),
     });
   }
 
