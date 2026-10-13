@@ -8,6 +8,7 @@ import { ESTIMATE_SWING, WALK_IN_LABOR_RATE } from "@/lib/repair-chat/pricing";
 import {
   displayedTotal,
   fillPriceGuide,
+  formatRange,
   jobRange,
   priceGuideJobs,
   priceGuideQuotes,
@@ -85,3 +86,25 @@ describe("repair price guide page", () => {
     expect(screen.getByTestId("answer-summary").textContent).toContain("$185–$444");
   });
 });
+
+describe("published price ranges", () => {
+  it.each(locales)("match the price guide data on the %s hub and service guides", (_, dict) => {
+    const range = (job: Parameters<typeof jobRange>[0], include?: Parameters<typeof jobRange>[1]) => {
+      const r = jobRange(job, include);
+      return formatRange(r.low, r.high);
+    };
+    const gasoline = (q: { vehicle: string }) => !q.vehicle.includes("auxiliary");
+    const hubTotals = dict.autoRepair.pricing.rows.map((row) => row.total);
+    const brakeTotals = dict.autoRepair.services.brakes.pricingRows.map((row) => row.total);
+    const diagnosticTotals = dict.autoRepair.services.diagnostics.pricingRows.map((row) => row.total);
+
+    expect(hubTotals).toContain(range("frontPads"));
+    expect(hubTotals).toContain(range("rearPads"));
+    expect(hubTotals).toContain(range("battery", gasoline));
+    expect(hubTotals).toContain(range("frontStruts"));
+    expect(hubTotals).toContain(range("alternator"));
+    expect(brakeTotals).toContain(range("frontPads"));
+    expect(diagnosticTotals).toContain(range("battery", gasoline));
+  });
+});
+

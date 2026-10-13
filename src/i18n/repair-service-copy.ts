@@ -79,7 +79,7 @@ const enLabels: ServiceLabels = {
     examples: "Examples",
   },
   pricingFootnote:
-    "Totals are parts plus labor, before tax, from real quotes our estimate assistant produced on October 11–12, 2026 with WorldPac list prices and labor-guide times. Your price depends on the exact vehicle and parts, and inspection may find other work. We confirm the quote before starting.",
+    "Totals are parts plus labor, before tax, from real quotes our estimate assistant produced on October 11–12, 2026 with WorldPac list prices and labor-guide times, widened by 10% each way like the estimate assistant's ranges. Your price depends on the exact vehicle and parts, and inspection may find other work. We confirm the quote before starting.",
   relatedTitle: "Other repair guides",
 };
 
@@ -141,25 +141,25 @@ const enSeeds: ServiceSeeds = {
       {
         job: "Cabin air filter",
         laborTime: "0.3 h",
-        total: "About $85",
-        examples: "2017 Honda CR-V: $85–$86",
+        total: "$77–$95",
+        examples: "2017 Honda CR-V: $77–$95",
       },
       {
         job: "Drive belt",
         laborTime: "0.4–0.6 h",
-        total: "$95–$145",
-        examples: "2015 Honda Accord: $98 · 2018 Toyota Corolla: $112–$145",
+        total: "$88–$160",
+        examples: "2015 Honda Accord: $88–$108 · 2018 Toyota Corolla: $101–$160",
       },
       {
         job: "Timing belt",
         laborTime: "3.5 h",
-        total: "About $580",
-        examples: "2012 Honda Odyssey: $577",
+        total: "$519–$635",
+        examples: "2012 Honda Odyssey: $519–$635",
       },
       {
         job: "Coolant drain and refill",
         laborTime: "1.2 h",
-        total: "$144 labor + coolant",
+        total: "$130–$158 labor + coolant",
         examples: "2016 Toyota Highlander",
       },
     ],
@@ -197,12 +197,12 @@ const enSeeds: ServiceSeeds = {
   brakes: {
     metaTitle: "Brake Repair in Richmond, BC: Pads, Rotors, Fluid",
     metaDescription:
-      "Brake pads, rotors, calipers, and brake fluid in Richmond near YVR. Front pads on most 2015–2020 cars: $205–$405 including parts. Priced by labor-guide times.",
+      "Brake pads, rotors, calipers, and brake fluid in Richmond near YVR. Front pads on most 2015–2020 cars: $185–$444 including parts. Priced by labor-guide times.",
     eyebrow: "Brakes",
     title: "Brake Inspection and Repair",
     serviceType: "Brake repair",
     summary:
-      "SPEEDX AUTO inspects and repairs brakes at our Richmond shop near YVR: pads, rotors, calipers, brake fluid, and warning lights. Front brake pads on most 2015–2020 cars cost $205–$405 including parts. Labor is billed using industry-standard labor-guide times. If braking feels unsafe or changes suddenly, stop driving when safe and arrange a tow.",
+      "SPEEDX AUTO inspects and repairs brakes at our Richmond shop near YVR: pads, rotors, calipers, brake fluid, and warning lights. Front brake pads on most 2015–2020 cars cost $185–$444 including parts. Labor is billed using industry-standard labor-guide times. If braking feels unsafe or changes suddenly, stop driving when safe and arrange a tow.",
     symptoms: [
       "Squealing, grinding, or scraping when you brake",
       "Steering-wheel or pedal vibration while braking",
@@ -227,45 +227,45 @@ const enSeeds: ServiceSeeds = {
       {
         job: "Front brake pads",
         laborTime: "0.8–1.1 h",
-        total: "$205–$405",
-        examples: "2018 Toyota Corolla: $206 · 2018 Honda Civic: $240–$283 · 2019 Toyota Camry: $291–$318",
+        total: "$185–$444",
+        examples: "2018 Toyota Corolla: $185–$227 · 2018 Honda Civic: $216–$311 · 2019 Toyota Camry: $262–$350",
       },
       {
         job: "Rear brake pads",
         laborTime: "0.9–1.1 h",
-        total: "$225–$325",
-        examples: "2019 Toyota Camry: $227–$264 · 2018 Mercedes-Benz C300: $324",
+        total: "$204–$356",
+        examples: "2019 Toyota Camry: $204–$290 · 2018 Mercedes-Benz C300: $292–$356",
       },
       {
         job: "Front brake rotors",
         laborTime: "0.7 h",
-        total: "About $365",
-        examples: "2020 Toyota RAV4 LE: $366",
+        total: "$329–$403",
+        examples: "2020 Toyota RAV4 LE: $329–$403",
       },
       {
         job: "Rear brake rotors",
         laborTime: "0.8 h",
-        total: "About $440",
-        examples: "2020 Toyota RAV4 LE: $442",
+        total: "$398–$486",
+        examples: "2020 Toyota RAV4 LE: $398–$486",
       },
       {
         job: "Brake fluid bleed",
         laborTime: "0.9 h",
-        total: "$118–$195",
-        examples: "2017 Honda CR-V: $118–$195",
+        total: "$106–$215",
+        examples: "2017 Honda CR-V: $106–$215",
       },
       {
         job: "Brake master cylinder",
         laborTime: "1.6 h",
-        total: "About $1,070",
-        examples: "2017 Honda CR-V: $1,069",
+        total: "$962–$1,176",
+        examples: "2017 Honda CR-V: $962–$1,176",
       },
     ],
     faqs: [
       {
         question: "How much do front brake pads cost?",
         answer:
-          "On most 2015–2020 cars, $205–$405 including parts and labor. For example, $206 on a 2018 Toyota Corolla and $291–$318 on a 2019 Toyota Camry. The quote for your vehicle shows the exact pad options.",
+          "On most 2015–2020 cars, $185–$444 including parts and labor. For example, $185–$227 on a 2018 Toyota Corolla and $262–$350 on a 2019 Toyota Camry. The quote for your vehicle shows the exact pad options.",
       },
       {
         question: "Do I need new rotors every time I replace pads?",
@@ -326,32 +326,32 @@ const enSeeds: ServiceSeeds = {
       {
         job: "12-volt battery",
         laborTime: "0.3–0.7 h",
-        total: "$270–$580",
-        examples: "2016 Mazda3: $287–$424 · 2017 Honda CR-V: $371–$391 · 2019 Toyota Camry: $295–$576",
+        total: "$244–$634",
+        examples: "2016 Mazda3: $258–$466 · 2017 Honda CR-V: $334–$430 · 2019 Toyota Camry: $266–$634",
       },
       {
         job: "Alternator",
         laborTime: "0.8–3.6 h",
-        total: "$750–$1,700",
-        examples: "2020 Toyota RAV4: $750–$898 · 2016 Toyota Highlander: $786–$911",
+        total: "$675–$1,866",
+        examples: "2020 Toyota RAV4: $675–$988 · 2016 Toyota Highlander: $707–$1,002",
       },
       {
         job: "Starter motor",
         laborTime: "1.4 h",
-        total: "$760–$820",
-        examples: "2015 Nissan Altima: $759–$819",
+        total: "$683–$901",
+        examples: "2015 Nissan Altima: $683–$901",
       },
       {
         job: "Oxygen sensor",
         laborTime: "0.5–1.0 h",
-        total: "$450–$570",
-        examples: "2016 Honda Civic: $450–$555 · 2018 Toyota Camry (upstream): $569",
+        total: "$405–$626",
+        examples: "2016 Honda Civic: $405–$611 · 2018 Toyota Camry (upstream): $512–$626",
       },
       {
         job: "Engine thermostat",
         laborTime: "1.6–2.4 h",
-        total: "$235–$355",
-        examples: "2018 Toyota Camry: $239–$305 · 2016 Toyota Highlander: $336–$355",
+        total: "$215–$391",
+        examples: "2018 Toyota Camry: $215–$336 · 2016 Toyota Highlander: $302–$391",
       },
     ],
     faqs: [
@@ -362,7 +362,7 @@ const enSeeds: ServiceSeeds = {
       {
         question: "How much does a car battery replacement cost?",
         answer:
-          "On the vehicles we have quoted, $270–$580 including the battery and installation, depending on the battery size and type your vehicle needs.",
+          "On the vehicles we have quoted, $244–$634 including the battery and installation, depending on the battery size and type your vehicle needs.",
       },
       {
         question: "How do I know if it's the battery or the alternator?",
@@ -420,37 +420,37 @@ const enSeeds: ServiceSeeds = {
       {
         job: "Front strut assemblies",
         laborTime: "1.9–2.4 h",
-        total: "$495–$795",
-        examples: "2019 Subaru Outback: $496–$667 · 2015 Honda Accord: $555–$794",
+        total: "$446–$873",
+        examples: "2019 Subaru Outback: $446–$734 · 2015 Honda Accord: $500–$873",
       },
       {
         job: "Rear shock or strut assemblies",
         laborTime: "1.6 h",
-        total: "$520–$585",
-        examples: "2015 Honda Accord: $519–$583",
+        total: "$467–$641",
+        examples: "2015 Honda Accord: $467–$641",
       },
       {
         job: "Front strut mount",
         laborTime: "3.4 h",
-        total: "About $650",
-        examples: "2015 Honda Accord: $647",
+        total: "$582–$712",
+        examples: "2015 Honda Accord: $582–$712",
       },
       {
         job: "Front sway bar links",
         laborTime: "0.4 h",
-        total: "$205–$235",
-        examples: "2015 Honda Accord: $208–$234",
+        total: "$187–$257",
+        examples: "2015 Honda Accord: $187–$257",
       },
       {
         job: "Front CV axle",
         laborTime: "2.2 h",
-        total: "$960–$1,685",
-        examples: "2016 Toyota RAV4: $959–$1,683",
+        total: "$863–$1,851",
+        examples: "2016 Toyota RAV4: $863–$1,851",
       },
       {
         job: "Front wheel hub and bearing",
         laborTime: "1.2 h",
-        total: "$144 labor + part",
+        total: "$130–$158 labor + part",
         examples: "2020 Kia Sorento",
       },
     ],
@@ -458,12 +458,12 @@ const enSeeds: ServiceSeeds = {
       {
         question: "How much does it cost to replace front struts?",
         answer:
-          "On the vehicles we have quoted, $495–$795 including parts and labor: for example $496–$667 on a 2019 Subaru Outback and $555–$794 on a 2015 Honda Accord.",
+          "On the vehicles we have quoted, $446–$873 including parts and labor: for example $446–$734 on a 2019 Subaru Outback and $500–$873 on a 2015 Honda Accord.",
       },
       {
         question: "What is the clunk over bumps?",
         answer:
-          "Common causes are sway bar links, strut mounts, worn bushings, or struts. Sway bar links are among the cheaper fixes, about $205–$235 on a 2015 Honda Accord.",
+          "Common causes are sway bar links, strut mounts, worn bushings, or struts. Sway bar links are among the cheaper fixes, about $187–$257 on a 2015 Honda Accord.",
       },
       {
         question: "Does pulling always mean the vehicle needs an alignment?",
@@ -594,7 +594,7 @@ const zhCNLabels: ServiceLabels = {
     examples: "实例",
   },
   pricingFootnote:
-    "以上为配件加工时的税前总价，取自 2026 年 10 月 11–12 日估价助手生成的真实报价，基于 WorldPac 标价和标准工时。实际价格取决于具体车型和所选配件，检查时也可能发现其他问题。开工前我们会先和您确认报价。",
+    "以上为配件加工时的税前总价，取自 2026 年 10 月 11–12 日估价助手生成的真实报价，基于 WorldPac 标价和标准工时，并和估价助手一样上下各放宽 10%。实际价格取决于具体车型和所选配件，检查时也可能发现其他问题。开工前我们会先和您确认报价。",
   relatedTitle: "其他维修项目",
 };
 
@@ -654,25 +654,25 @@ const zhCNSeeds: ServiceSeeds = {
       {
         job: "换空调滤芯",
         laborTime: "0.3 小时",
-        total: "约 $85",
-        examples: "2017 本田 CR-V：$85–$86",
+        total: "$77–$95",
+        examples: "2017 本田 CR-V：$77–$95",
       },
       {
         job: "换发动机皮带",
         laborTime: "0.4–0.6 小时",
-        total: "$95–$145",
-        examples: "2015 本田雅阁：$98 · 2018 丰田卡罗拉：$112–$145",
+        total: "$88–$160",
+        examples: "2015 本田雅阁：$88–$108 · 2018 丰田卡罗拉：$101–$160",
       },
       {
         job: "换正时皮带",
         laborTime: "3.5 小时",
-        total: "约 $580",
-        examples: "2012 本田奥德赛：$577",
+        total: "$519–$635",
+        examples: "2012 本田奥德赛：$519–$635",
       },
       {
         job: "更换冷却液",
         laborTime: "1.2 小时",
-        total: "工时 $144 + 冷却液",
+        total: "工时 $130–$158 + 冷却液",
         examples: "2016 丰田汉兰达",
       },
     ],
@@ -708,12 +708,12 @@ const zhCNSeeds: ServiceSeeds = {
   brakes: {
     metaTitle: "列治文刹车维修：刹车片、刹车盘、刹车油",
     metaDescription:
-      "列治文刹车片、刹车盘、卡钳、刹车油维修，靠近 YVR。多数 2015–2020 年车型换前刹车片含配件 $205–$405。工时费按标准工时计费。",
+      "列治文刹车片、刹车盘、卡钳、刹车油维修，靠近 YVR。多数 2015–2020 年车型换前刹车片含配件 $185–$444。工时费按标准工时计费。",
     eyebrow: "刹车",
     title: "刹车检查与维修",
     serviceType: "刹车维修",
     summary:
-      "SPEEDX AUTO 在列治文靠近 YVR 的车间检查和维修刹车：刹车片、刹车盘、卡钳、刹车油和刹车故障灯。多数 2015–2020 年车型换前刹车片，含配件 205–405 加元。工时费按行业标准工时计费。如果刹车感觉不安全或突然变化，请在安全时停车并安排拖车。",
+      "SPEEDX AUTO 在列治文靠近 YVR 的车间检查和维修刹车：刹车片、刹车盘、卡钳、刹车油和刹车故障灯。多数 2015–2020 年车型换前刹车片，含配件 185–444 加元。工时费按行业标准工时计费。如果刹车感觉不安全或突然变化，请在安全时停车并安排拖车。",
     symptoms: [
       "刹车时尖叫、摩擦或刮擦声",
       "刹车时方向盘或踏板抖动",
@@ -736,45 +736,45 @@ const zhCNSeeds: ServiceSeeds = {
       {
         job: "换前刹车片",
         laborTime: "0.8–1.1 小时",
-        total: "$205–$405",
-        examples: "2018 丰田卡罗拉：$206 · 2018 本田思域：$240–$283 · 2019 丰田凯美瑞：$291–$318",
+        total: "$185–$444",
+        examples: "2018 丰田卡罗拉：$185–$227 · 2018 本田思域：$216–$311 · 2019 丰田凯美瑞：$262–$350",
       },
       {
         job: "换后刹车片",
         laborTime: "0.9–1.1 小时",
-        total: "$225–$325",
-        examples: "2019 丰田凯美瑞：$227–$264 · 2018 奔驰 C300：$324",
+        total: "$204–$356",
+        examples: "2019 丰田凯美瑞：$204–$290 · 2018 奔驰 C300：$292–$356",
       },
       {
         job: "换前刹车盘",
         laborTime: "0.7 小时",
-        total: "约 $365",
-        examples: "2020 丰田 RAV4 LE：$366",
+        total: "$329–$403",
+        examples: "2020 丰田 RAV4 LE：$329–$403",
       },
       {
         job: "换后刹车盘",
         laborTime: "0.8 小时",
-        total: "约 $440",
-        examples: "2020 丰田 RAV4 LE：$442",
+        total: "$398–$486",
+        examples: "2020 丰田 RAV4 LE：$398–$486",
       },
       {
         job: "刹车油排气 / 更换",
         laborTime: "0.9 小时",
-        total: "$118–$195",
-        examples: "2017 本田 CR-V：$118–$195",
+        total: "$106–$215",
+        examples: "2017 本田 CR-V：$106–$215",
       },
       {
         job: "换刹车总泵",
         laborTime: "1.6 小时",
-        total: "约 $1,070",
-        examples: "2017 本田 CR-V：$1,069",
+        total: "$962–$1,176",
+        examples: "2017 本田 CR-V：$962–$1,176",
       },
     ],
     faqs: [
       {
         question: "换前刹车片多少钱？",
         answer:
-          "多数 2015–2020 年车型含配件和工时 205–405 加元。例如 2018 丰田卡罗拉 206 加元，2019 丰田凯美瑞 291–318 加元。您这辆车的报价会列出具体的刹车片选项。",
+          "多数 2015–2020 年车型含配件和工时 185–444 加元。例如 2018 丰田卡罗拉 185–227 加元，2019 丰田凯美瑞 262–350 加元。您这辆车的报价会列出具体的刹车片选项。",
       },
       {
         question: "换刹车片一定要换刹车盘吗？",
@@ -830,32 +830,32 @@ const zhCNSeeds: ServiceSeeds = {
       {
         job: "换 12V 电瓶",
         laborTime: "0.3–0.7 小时",
-        total: "$270–$580",
-        examples: "2016 马自达 3：$287–$424 · 2017 本田 CR-V：$371–$391 · 2019 丰田凯美瑞：$295–$576",
+        total: "$244–$634",
+        examples: "2016 马自达 3：$258–$466 · 2017 本田 CR-V：$334–$430 · 2019 丰田凯美瑞：$266–$634",
       },
       {
         job: "换发电机",
         laborTime: "0.8–3.6 小时",
-        total: "$750–$1,700",
-        examples: "2020 丰田 RAV4：$750–$898 · 2016 丰田汉兰达：$786–$911",
+        total: "$675–$1,866",
+        examples: "2020 丰田 RAV4：$675–$988 · 2016 丰田汉兰达：$707–$1,002",
       },
       {
         job: "换启动马达",
         laborTime: "1.4 小时",
-        total: "$760–$820",
-        examples: "2015 日产天籁：$759–$819",
+        total: "$683–$901",
+        examples: "2015 日产天籁：$683–$901",
       },
       {
         job: "换氧传感器",
         laborTime: "0.5–1.0 小时",
-        total: "$450–$570",
-        examples: "2016 本田思域：$450–$555 · 2018 丰田凯美瑞（前氧）：$569",
+        total: "$405–$626",
+        examples: "2016 本田思域：$405–$611 · 2018 丰田凯美瑞（前氧）：$512–$626",
       },
       {
         job: "换节温器",
         laborTime: "1.6–2.4 小时",
-        total: "$235–$355",
-        examples: "2018 丰田凯美瑞：$239–$305 · 2016 丰田汉兰达：$336–$355",
+        total: "$215–$391",
+        examples: "2018 丰田凯美瑞：$215–$336 · 2016 丰田汉兰达：$302–$391",
       },
     ],
     faqs: [
@@ -865,7 +865,7 @@ const zhCNSeeds: ServiceSeeds = {
       },
       {
         question: "换汽车电瓶多少钱？",
-        answer: "按我们报过价的车型，含电瓶和安装 270–580 加元，取决于您的车需要的电瓶规格和类型。",
+        answer: "按我们报过价的车型，含电瓶和安装 244–634 加元，取决于您的车需要的电瓶规格和类型。",
       },
       {
         question: "怎么知道是电瓶坏了还是发电机坏了？",
@@ -917,48 +917,48 @@ const zhCNSeeds: ServiceSeeds = {
       {
         job: "换前减震器总成",
         laborTime: "1.9–2.4 小时",
-        total: "$495–$795",
-        examples: "2019 斯巴鲁傲虎：$496–$667 · 2015 本田雅阁：$555–$794",
+        total: "$446–$873",
+        examples: "2019 斯巴鲁傲虎：$446–$734 · 2015 本田雅阁：$500–$873",
       },
       {
         job: "换后减震器总成",
         laborTime: "1.6 小时",
-        total: "$520–$585",
-        examples: "2015 本田雅阁：$519–$583",
+        total: "$467–$641",
+        examples: "2015 本田雅阁：$467–$641",
       },
       {
         job: "换前减震顶胶",
         laborTime: "3.4 小时",
-        total: "约 $650",
-        examples: "2015 本田雅阁：$647",
+        total: "$582–$712",
+        examples: "2015 本田雅阁：$582–$712",
       },
       {
         job: "换前平衡杆连杆",
         laborTime: "0.4 小时",
-        total: "$205–$235",
-        examples: "2015 本田雅阁：$208–$234",
+        total: "$187–$257",
+        examples: "2015 本田雅阁：$187–$257",
       },
       {
         job: "换前半轴",
         laborTime: "2.2 小时",
-        total: "$960–$1,685",
-        examples: "2016 丰田 RAV4：$959–$1,683",
+        total: "$863–$1,851",
+        examples: "2016 丰田 RAV4：$863–$1,851",
       },
       {
         job: "换前轮毂轴承",
         laborTime: "1.2 小时",
-        total: "工时 $144 + 配件",
+        total: "工时 $130–$158 + 配件",
         examples: "2020 起亚索兰托",
       },
     ],
     faqs: [
       {
         question: "换前减震器多少钱？",
-        answer: "按我们报过价的车型，含配件和工时 495–795 加元，例如 2019 斯巴鲁傲虎 496–667 加元，2015 本田雅阁 555–794 加元。",
+        answer: "按我们报过价的车型，含配件和工时 446–873 加元，例如 2019 斯巴鲁傲虎 446–734 加元，2015 本田雅阁 500–873 加元。",
       },
       {
         question: "过坎咯噔响是什么问题？",
-        answer: "常见原因有平衡杆连杆、减震顶胶、衬套老化或减震器损坏。平衡杆连杆是比较便宜的一种，2015 本田雅阁约 205–235 加元。",
+        answer: "常见原因有平衡杆连杆、减震顶胶、衬套老化或减震器损坏。平衡杆连杆是比较便宜的一种，2015 本田雅阁约 187–257 加元。",
       },
       {
         question: "跑偏一定是要做四轮定位吗？",
@@ -1078,7 +1078,7 @@ const zhTWLabels: ServiceLabels = {
     examples: "實例",
   },
   pricingFootnote:
-    "以上為零件加工時的未連稅總價，取自 2026 年 10 月 11–12 日估價助手產生的真實報價，根據 WorldPac 標價及標準工時。實際價錢視乎具體車款和所選零件，檢查時亦可能發現其他問題。開工前我們會先與您確認報價。",
+    "以上為零件加工時的未連稅總價，取自 2026 年 10 月 11–12 日估價助手產生的真實報價，根據 WorldPac 標價及標準工時，並與估價助手一樣上下各放寬 10%。實際價錢視乎具體車款和所選零件，檢查時亦可能發現其他問題。開工前我們會先與您確認報價。",
   relatedTitle: "其他維修項目",
 };
 
@@ -1138,25 +1138,25 @@ const zhTWSeeds: ServiceSeeds = {
       {
         job: "更換冷氣濾網",
         laborTime: "0.3 小時",
-        total: "約 $85",
-        examples: "2017 Honda CR-V：$85–$86",
+        total: "$77–$95",
+        examples: "2017 Honda CR-V：$77–$95",
       },
       {
         job: "更換引擎皮帶",
         laborTime: "0.4–0.6 小時",
-        total: "$95–$145",
-        examples: "2015 Honda Accord：$98 · 2018 Toyota Corolla：$112–$145",
+        total: "$88–$160",
+        examples: "2015 Honda Accord：$88–$108 · 2018 Toyota Corolla：$101–$160",
       },
       {
         job: "更換正時皮帶（坑帶）",
         laborTime: "3.5 小時",
-        total: "約 $580",
-        examples: "2012 Honda Odyssey：$577",
+        total: "$519–$635",
+        examples: "2012 Honda Odyssey：$519–$635",
       },
       {
         job: "更換冷卻液",
         laborTime: "1.2 小時",
-        total: "工時 $144 + 冷卻液",
+        total: "工時 $130–$158 + 冷卻液",
         examples: "2016 Toyota Highlander",
       },
     ],
@@ -1192,12 +1192,12 @@ const zhTWSeeds: ServiceSeeds = {
   brakes: {
     metaTitle: "列治文煞車維修：煞車片、煞車碟、煞車油",
     metaDescription:
-      "列治文車房煞車片、煞車碟、卡鉗、煞車油維修，鄰近 YVR。大部分 2015–2020 年車款換前煞車片連零件 $205–$405。工時費按標準工時收費。",
+      "列治文車房煞車片、煞車碟、卡鉗、煞車油維修，鄰近 YVR。大部分 2015–2020 年車款換前煞車片連零件 $185–$444。工時費按標準工時收費。",
     eyebrow: "煞車",
     title: "煞車檢查及維修",
     serviceType: "煞車維修",
     summary:
-      "SPEEDX AUTO 在列治文鄰近 YVR 的車房檢查及維修煞車：煞車片、煞車碟、卡鉗、煞車油和煞車警示燈。大部分 2015–2020 年車款更換前煞車片，連零件 205–405 加元。工時費按行業標準工時收費。如煞車感覺不安全或突然有變，請在安全時停車並安排拖車。",
+      "SPEEDX AUTO 在列治文鄰近 YVR 的車房檢查及維修煞車：煞車片、煞車碟、卡鉗、煞車油和煞車警示燈。大部分 2015–2020 年車款更換前煞車片，連零件 185–444 加元。工時費按行業標準工時收費。如煞車感覺不安全或突然有變，請在安全時停車並安排拖車。",
     symptoms: [
       "踩煞車時有尖叫、磨擦或刮擦聲",
       "煞車時方向盤或腳踏震動",
@@ -1220,45 +1220,45 @@ const zhTWSeeds: ServiceSeeds = {
       {
         job: "更換前煞車片",
         laborTime: "0.8–1.1 小時",
-        total: "$205–$405",
-        examples: "2018 Toyota Corolla：$206 · 2018 Honda Civic：$240–$283 · 2019 Toyota Camry：$291–$318",
+        total: "$185–$444",
+        examples: "2018 Toyota Corolla：$185–$227 · 2018 Honda Civic：$216–$311 · 2019 Toyota Camry：$262–$350",
       },
       {
         job: "更換後煞車片",
         laborTime: "0.9–1.1 小時",
-        total: "$225–$325",
-        examples: "2019 Toyota Camry：$227–$264 · 2018 Mercedes-Benz C300：$324",
+        total: "$204–$356",
+        examples: "2019 Toyota Camry：$204–$290 · 2018 Mercedes-Benz C300：$292–$356",
       },
       {
         job: "更換前煞車碟",
         laborTime: "0.7 小時",
-        total: "約 $365",
-        examples: "2020 Toyota RAV4 LE：$366",
+        total: "$329–$403",
+        examples: "2020 Toyota RAV4 LE：$329–$403",
       },
       {
         job: "更換後煞車碟",
         laborTime: "0.8 小時",
-        total: "約 $440",
-        examples: "2020 Toyota RAV4 LE：$442",
+        total: "$398–$486",
+        examples: "2020 Toyota RAV4 LE：$398–$486",
       },
       {
         job: "煞車油排氣 / 更換",
         laborTime: "0.9 小時",
-        total: "$118–$195",
-        examples: "2017 Honda CR-V：$118–$195",
+        total: "$106–$215",
+        examples: "2017 Honda CR-V：$106–$215",
       },
       {
         job: "更換煞車總泵",
         laborTime: "1.6 小時",
-        total: "約 $1,070",
-        examples: "2017 Honda CR-V：$1,069",
+        total: "$962–$1,176",
+        examples: "2017 Honda CR-V：$962–$1,176",
       },
     ],
     faqs: [
       {
         question: "換前煞車片要多少錢？",
         answer:
-          "大部分 2015–2020 年車款連零件和工時 205–405 加元。例如 2018 Toyota Corolla 206 加元，2019 Toyota Camry 291–318 加元。您車輛的報價會列出具體的煞車片選項。",
+          "大部分 2015–2020 年車款連零件和工時 185–444 加元。例如 2018 Toyota Corolla 185–227 加元，2019 Toyota Camry 262–350 加元。您車輛的報價會列出具體的煞車片選項。",
       },
       {
         question: "換煞車片一定要換煞車碟嗎？",
@@ -1314,32 +1314,32 @@ const zhTWSeeds: ServiceSeeds = {
       {
         job: "更換 12V 電池",
         laborTime: "0.3–0.7 小時",
-        total: "$270–$580",
-        examples: "2016 Mazda3：$287–$424 · 2017 Honda CR-V：$371–$391 · 2019 Toyota Camry：$295–$576",
+        total: "$244–$634",
+        examples: "2016 Mazda3：$258–$466 · 2017 Honda CR-V：$334–$430 · 2019 Toyota Camry：$266–$634",
       },
       {
         job: "更換發電機",
         laborTime: "0.8–3.6 小時",
-        total: "$750–$1,700",
-        examples: "2020 Toyota RAV4：$750–$898 · 2016 Toyota Highlander：$786–$911",
+        total: "$675–$1,866",
+        examples: "2020 Toyota RAV4：$675–$988 · 2016 Toyota Highlander：$707–$1,002",
       },
       {
         job: "更換摩打（啟動馬達）",
         laborTime: "1.4 小時",
-        total: "$760–$820",
-        examples: "2015 Nissan Altima：$759–$819",
+        total: "$683–$901",
+        examples: "2015 Nissan Altima：$683–$901",
       },
       {
         job: "更換含氧感應器",
         laborTime: "0.5–1.0 小時",
-        total: "$450–$570",
-        examples: "2016 Honda Civic：$450–$555 · 2018 Toyota Camry（前含氧）：$569",
+        total: "$405–$626",
+        examples: "2016 Honda Civic：$405–$611 · 2018 Toyota Camry（前含氧）：$512–$626",
       },
       {
         job: "更換節溫器",
         laborTime: "1.6–2.4 小時",
-        total: "$235–$355",
-        examples: "2018 Toyota Camry：$239–$305 · 2016 Toyota Highlander：$336–$355",
+        total: "$215–$391",
+        examples: "2018 Toyota Camry：$215–$336 · 2016 Toyota Highlander：$302–$391",
       },
     ],
     faqs: [
@@ -1349,7 +1349,7 @@ const zhTWSeeds: ServiceSeeds = {
       },
       {
         question: "換汽車電池要多少錢？",
-        answer: "按我們報過價的車款，連電池及安裝 270–580 加元，視乎您車輛需要的電池規格和類型。",
+        answer: "按我們報過價的車款，連電池及安裝 244–634 加元，視乎您車輛需要的電池規格和類型。",
       },
       {
         question: "怎樣知道是電池壞還是發電機壞？",
@@ -1401,48 +1401,48 @@ const zhTWSeeds: ServiceSeeds = {
       {
         job: "更換前避震器總成",
         laborTime: "1.9–2.4 小時",
-        total: "$495–$795",
-        examples: "2019 Subaru Outback：$496–$667 · 2015 Honda Accord：$555–$794",
+        total: "$446–$873",
+        examples: "2019 Subaru Outback：$446–$734 · 2015 Honda Accord：$500–$873",
       },
       {
         job: "更換後避震器總成",
         laborTime: "1.6 小時",
-        total: "$520–$585",
-        examples: "2015 Honda Accord：$519–$583",
+        total: "$467–$641",
+        examples: "2015 Honda Accord：$467–$641",
       },
       {
         job: "更換前避震頂膠",
         laborTime: "3.4 小時",
-        total: "約 $650",
-        examples: "2015 Honda Accord：$647",
+        total: "$582–$712",
+        examples: "2015 Honda Accord：$582–$712",
       },
       {
         job: "更換前平衡桿連桿",
         laborTime: "0.4 小時",
-        total: "$205–$235",
-        examples: "2015 Honda Accord：$208–$234",
+        total: "$187–$257",
+        examples: "2015 Honda Accord：$187–$257",
       },
       {
         job: "更換前半軸",
         laborTime: "2.2 小時",
-        total: "$960–$1,685",
-        examples: "2016 Toyota RAV4：$959–$1,683",
+        total: "$863–$1,851",
+        examples: "2016 Toyota RAV4：$863–$1,851",
       },
       {
         job: "更換前輪軸承",
         laborTime: "1.2 小時",
-        total: "工時 $144 + 零件",
+        total: "工時 $130–$158 + 零件",
         examples: "2020 Kia Sorento",
       },
     ],
     faqs: [
       {
         question: "換前避震器要多少錢？",
-        answer: "按我們報過價的車款，連零件和工時 495–795 加元，例如 2019 Subaru Outback 496–667 加元，2015 Honda Accord 555–794 加元。",
+        answer: "按我們報過價的車款，連零件和工時 446–873 加元，例如 2019 Subaru Outback 446–734 加元，2015 Honda Accord 500–873 加元。",
       },
       {
         question: "過坑有咯咯聲是甚麼問題？",
-        answer: "常見原因有平衡桿連桿、避震頂膠、襯套老化或避震器損壞。平衡桿連桿是較便宜的一種，2015 Honda Accord 約 205–235 加元。",
+        answer: "常見原因有平衡桿連桿、避震頂膠、襯套老化或避震器損壞。平衡桿連桿是較便宜的一種，2015 Honda Accord 約 187–257 加元。",
       },
       {
         question: "走偏一定要做四輪定位嗎？",
