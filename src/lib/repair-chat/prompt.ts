@@ -94,10 +94,36 @@ const SAFETY_SIGNS: Array<[RegExp, string]> = [
   [/high[- ]?voltage.{0,25}(warning|fault|error|alert|light)|(warning|fault|error).{0,25}high[- ]?voltage|高压系统.{0,6}(故障|警告)|高壓系統.{0,6}(故障|警告)|(burning smell|焦味|烧焦|燒焦).{0,40}(tesla|\bev\b|electric|hybrid|特斯拉|电动|電動|混动|混動)|(tesla|\bev\b|electric|hybrid|特斯拉|电动|電動|混动|混動).{0,40}(burning smell|焦味|烧焦|燒焦)/i, "a high-voltage warning or burning smell on a hybrid/EV"],
 ];
 
+/** Brakes worn to metal: not a tow-now emergency, but not "another week" either. */
+const WORN_BRAKES = /(grind|scrap)\w*.{0,30}metal|metal.{0,10}(on|to).{0,10}metal|(刹车|剎車|煞車|刹車).{0,10}(金属|金屬|铁|鐵)(摩擦|声|聲|响|響)/i;
+
 /** What the customer described that makes driving unsafe, if anything. */
 export function safetyConcern(message: string): string | null {
   const hit = SAFETY_SIGNS.find(([pattern]) => pattern.test(message));
-  return hit ? hit[1] : null;
+  if (hit) return hit[1];
+  return WORN_BRAKES.test(message) ? "brakes grinding metal on metal" : null;
+}
+
+const STOP_WARNING: Record<string, string> = {
+  English: "⚠️ For your safety, please stop driving the car now and arrange a tow to the shop rather than driving it in.",
+  "Simplified Chinese": "⚠️ 为了安全，请先不要再开这辆车，建议安排拖车送到店里，不要自己开过来。",
+  "Traditional Chinese": "⚠️ 為了安全，請先不要再開這輛車，建議安排拖車送到店裡，不要自己開過來。",
+};
+const BRAKE_WARNING: Record<string, string> = {
+  English: "⚠️ Metal-on-metal grinding usually means the brake pads are worn through, so braking is weaker and the rotors are being damaged. Please don't keep driving it for another week: bring it in as soon as you can, and if it's far, arrange a tow.",
+  "Simplified Chinese": "⚠️ 刹车出现金属摩擦声，通常是刹车片已经磨光，刹车力会变弱，刹车盘也在受损。请不要再继续开一周，尽快送店检查；路程远的话建议叫拖车。",
+  "Traditional Chinese": "⚠️ 煞車出現金屬摩擦聲，通常是煞車片已經磨光，煞車力會變弱，煞車盤也在受損。請不要再繼續開一週，盡快送店檢查；路程遠的話建議叫拖車。",
+};
+
+/**
+ * The warning shown above the reply when the customer describes something
+ * unsafe — added in code, because the model doesn't reliably lead with it.
+ */
+export function safetyWarning(message: string, language: string): string | null {
+  const concern = safetyConcern(message);
+  if (!concern) return null;
+  const table = concern === "brakes grinding metal on metal" ? BRAKE_WARNING : STOP_WARNING;
+  return table[language] ?? table.English;
 }
 
 export function turnContext(
@@ -117,7 +143,7 @@ export function turnContext(
   const concern = safetyConcern(customerMessage);
   if (concern) {
     lines.push(
-      `Safety: the customer describes ${concern}. Begin this reply by telling them to stop driving and arrange a tow to the shop; only then ask questions or estimate.`,
+      `Safety: the customer describes ${concern}. A safety warning (stop driving / arrange a tow) is already shown above your reply, so don't repeat it; go on with likely causes and what the shop will check.`,
     );
   }
   if (vehicle) {

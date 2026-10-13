@@ -170,3 +170,18 @@ describe("turnContext", () => {
     expect(turnContext("xx", null, "hi there friend")).toContain("https://speedxrental.com/en/hosting");
   });
 });
+
+describe("safety warning", () => {
+  it("puts a stop-driving warning above the reply in code, in the customer's script", async () => {
+    const { client } = scriptedClient([message("end_turn", [{ type: "text", text: "這可能是點火系統失火。" }])]);
+    const result = await runChat(
+      client,
+      catalog,
+      { history: [], message: "故障燈在閃，車抖得很厲害", locale: "zh-TW", vehicleKey: null },
+      () => {},
+      () => "E-1",
+    );
+    expect(result.text.startsWith("⚠️ 為了安全，請先不要再開這輛車")).toBe(true);
+    expect(result.text).toContain("這可能是點火系統失火。");
+  });
+});

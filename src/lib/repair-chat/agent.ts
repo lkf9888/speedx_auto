@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { decodeVehicleKey, describeVehicle, type CatalogApi } from "@/lib/worldpac/catalog";
 import { WorldpacError } from "@/lib/worldpac/client";
-import { detectCustomerLanguage, SYSTEM_PROMPT, turnContext } from "./prompt";
+import { detectCustomerLanguage, safetyWarning, SYSTEM_PROMPT, turnContext } from "./prompt";
 import { matchScript } from "./script";
 import { runTool, statusForTool, TOOLS, type ChatEvent } from "./tools";
 
@@ -117,7 +117,8 @@ export async function runChat(
       (block): block is Anthropic.Beta.BetaToolUseBlock => block.type === "tool_use",
     );
     if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
-      const text = matchScript(
+      const warning = safetyWarning(request.message, language);
+      const answer = matchScript(
         toPlainText(
           response.content
             .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
@@ -126,6 +127,7 @@ export async function runChat(
         ),
         language,
       );
+      const text = warning ? `${warning}\n\n${answer}` : answer;
       return { text, events };
     }
 

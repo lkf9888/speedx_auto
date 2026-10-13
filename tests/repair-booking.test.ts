@@ -256,7 +256,11 @@ describe("safety detection", () => {
       expect(safetyConcern(text), text).toBeNull();
     }
     expect(turnContext("en", null, "There's smoke coming from under my hood", [], tuesday)).toContain(
-      "Begin this reply by telling them to stop driving and arrange a tow",
+      "A safety warning (stop driving / arrange a tow) is already shown above your reply",
     );
+    const { safetyWarning } = await import("@/lib/repair-chat/prompt");
+    expect(safetyWarning("刹车踩到底了还停不住", "Simplified Chinese")).toContain("请先不要再开这辆车");
+    expect(safetyWarning("brakes grinding metal on metal, ok for a week?", "English")).toContain("don't keep driving it for another week");
+    expect(safetyWarning("front pads squeak", "English")).toBeNull();
   });
 });
