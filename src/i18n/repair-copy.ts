@@ -243,7 +243,7 @@ export const enAutoRepair: AutoRepairCopy = {
   ctaTitle: "Book your repair",
   ctaBody:
     "Send the vehicle details and the problem by WhatsApp or WeChat, or call SPEEDX AUTO to book an appointment.",
-  lastUpdated: "Updated October 12, 2026",
+  lastUpdated: "Updated October 13, 2026",
   services: enRepairServices,
   priceGuide: enPriceGuide,
 };
@@ -437,7 +437,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
   ],
   ctaTitle: "预约维修",
   ctaBody: "通过 WhatsApp 或微信发送车辆资料和问题，或直接致电 SPEEDX AUTO 预约。",
-  lastUpdated: "更新于 2026 年 10 月 12 日",
+  lastUpdated: "更新于 2026 年 10 月 13 日",
   services: zhCNRepairServices,
   priceGuide: zhCNPriceGuide,
 };
@@ -630,7 +630,7 @@ const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide"> = {
   ],
   ctaTitle: "預約維修",
   ctaBody: "透過 WhatsApp 或微信傳送車輛資料和問題，或直接致電 SPEEDX AUTO 預約。",
-  lastUpdated: "更新於 2026 年 10 月 12 日",
+  lastUpdated: "更新於 2026 年 10 月 13 日",
 };
 
 export const zhTWAutoRepair: AutoRepairCopy = {

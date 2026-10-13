@@ -70,7 +70,7 @@ const enLabels: ServiceLabels = {
     "SPEEDX AUTO repairs vehicles at 2980 Number 3 Road in Richmond near YVR, for drivers from Richmond, Vancouver, Burnaby, Delta, Surrey, and across Metro Vancouver. Appointments are required; the shop speaks English, Cantonese, and Mandarin.",
   faqTitle: "Frequently asked questions",
   ctaTitle: "Book this repair",
-  lastUpdated: "Updated October 12, 2026",
+  lastUpdated: "Updated October 13, 2026",
   pricingTitle: "What it costs",
   pricingColumns: {
     job: "Job",
@@ -585,7 +585,7 @@ const zhCNLabels: ServiceLabels = {
     "SPEEDX AUTO 的车间位于列治文 2980 Number 3 Road，靠近 YVR，服务列治文、温哥华、本拿比、三角洲、素里及大温各地车主。需要预约，店里讲普通话、粤语和英语。",
   faqTitle: "常见问题",
   ctaTitle: "预约这项维修",
-  lastUpdated: "更新于 2026 年 10 月 12 日",
+  lastUpdated: "更新于 2026 年 10 月 13 日",
   pricingTitle: "大概多少钱",
   pricingColumns: {
     job: "项目",
@@ -1069,7 +1069,7 @@ const zhTWLabels: ServiceLabels = {
     "SPEEDX AUTO 的車房位於列治文 2980 Number 3 Road，鄰近 YVR，服務列治文、溫哥華、本拿比、三角洲、素里及大溫各區車主。須預約，店內可說粵語、普通話及英語。",
   faqTitle: "常見問題",
   ctaTitle: "預約這項維修",
-  lastUpdated: "更新於 2026 年 10 月 12 日",
+  lastUpdated: "更新於 2026 年 10 月 13 日",
   pricingTitle: "大概要多少錢",
   pricingColumns: {
     job: "項目",

@@ -44,12 +44,12 @@ export const repairRouteKeys: Record<RepairServiceSlug, RouteKey> = {
 
 /** Routes whose content changed after CONTENT_LAST_MODIFIED. */
 export const routeLastModified: Partial<Record<RouteKey, string>> = {
-  autoRepair: "2026-10-12",
-  repairMaintenance: "2026-10-12",
-  repairBrakes: "2026-10-12",
-  repairDiagnostics: "2026-10-12",
-  repairSuspension: "2026-10-12",
-  repairTeslaEv: "2026-10-12",
+  autoRepair: "2026-10-13",
+  repairMaintenance: "2026-10-13",
+  repairBrakes: "2026-10-13",
+  repairDiagnostics: "2026-10-13",
+  repairSuspension: "2026-10-13",
+  repairTeslaEv: "2026-10-13",
   repairPrices: "2026-10-13",
 };
 
