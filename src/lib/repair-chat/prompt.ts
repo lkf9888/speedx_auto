@@ -79,6 +79,27 @@ export function shopToday(now: Date): string {
   return `${day} ${date}, ${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
+/**
+ * Unsafe-to-drive descriptions, matched in code so the warning never depends
+ * on the model noticing. Each entry: pattern on the customer's message, and
+ * what to name in the instruction.
+ */
+const SAFETY_SIGNS: Array<[RegExp, string]> = [
+  [/((check engine|engine light|cel|mil).{0,40}(flash|blink))|((flash|blink).{0,40}(check engine|engine light))|(故障灯.{0,8}(闪|閃))|(故障燈.{0,8}閃)/i, "a flashing check-engine light"],
+  [/(brake|pedal).{0,30}(floor|sink|no brakes|won'?t stop|can'?t stop)|no brakes|(刹车|剎車|煞車|刹車).{0,10}(踩到底|没反应|沒反應|失灵|失靈|停不住|软到底)/i, "brakes that don't stop the car"],
+  [/smok(e|ing).{0,30}(hood|engine|bonnet|car)|(hood|engine|bonnet).{0,30}smok|冒烟|冒煙|起火|着火了|著火了|\bon fire\b|\bcaught fire\b/i, "smoke or fire"],
+  [/(gas|fuel|petrol) smell|smell(s)? (of|like) (gas|fuel|petrol)|汽油味|油味很大/i, "a fuel smell"],
+  [/(temp(erature)?|gauge).{0,30}\bred\b|overheat|水温.{0,6}(爆表|(?<![没沒未])到了?红线|进红|红了)|水溫.{0,6}(爆表|(?<![没沒未])到了?紅線|進紅|紅了)|开锅|開鍋/i, "overheating"],
+  [/steering.{0,30}(lock|stuck|won'?t turn|can'?t turn|seized)|方向盘.{0,10}(转不动|锁死|卡住)|方向盤.{0,10}(轉不動|鎖死|卡住)/i, "lost steering"],
+  [/high[- ]?voltage.{0,25}(warning|fault|error|alert|light)|(warning|fault|error).{0,25}high[- ]?voltage|高压系统.{0,6}(故障|警告)|高壓系統.{0,6}(故障|警告)|(burning smell|焦味|烧焦|燒焦).{0,40}(tesla|\bev\b|electric|hybrid|特斯拉|电动|電動|混动|混動)|(tesla|\bev\b|electric|hybrid|特斯拉|电动|電動|混动|混動).{0,40}(burning smell|焦味|烧焦|燒焦)/i, "a high-voltage warning or burning smell on a hybrid/EV"],
+];
+
+/** What the customer described that makes driving unsafe, if anything. */
+export function safetyConcern(message: string): string | null {
+  const hit = SAFETY_SIGNS.find(([pattern]) => pattern.test(message));
+  return hit ? hit[1] : null;
+}
+
 export function turnContext(
   locale: string,
   vehicle: { key: string; label: string } | null,
@@ -93,6 +114,12 @@ export function turnContext(
     `Turo hosting page for this language: https://speedxrental.com/${LANGUAGE_NAMES[locale] ? locale : "en"}/hosting`,
     `Today at the shop (Vancouver time): ${shopToday(now)}.`,
   ];
+  const concern = safetyConcern(customerMessage);
+  if (concern) {
+    lines.push(
+      `Safety: the customer describes ${concern}. Begin this reply by telling them to stop driving and arrange a tow to the shop; only then ask questions or estimate.`,
+    );
+  }
   if (vehicle) {
     lines.push(
       `Vehicle already confirmed earlier in this conversation: ${vehicle.label} (vehicle_key: ${vehicle.key}). Reuse it unless the customer is now asking about a different vehicle.`,

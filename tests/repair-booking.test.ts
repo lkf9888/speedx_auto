@@ -229,3 +229,34 @@ describe("appointments asked for in the chat", () => {
     expect(sent).toHaveLength(1);
   });
 });
+
+const tuesday = new Date("2026-10-13T20:10:00Z");
+
+describe("safety detection", () => {
+  it("flags unsafe-to-drive descriptions in code and leaves ordinary ones alone", async () => {
+    const { safetyConcern } = await import("@/lib/repair-chat/prompt");
+    for (const text of [
+      "Check engine light is flashing and the car is shaking a lot",
+      "刹车踩到底了还停不住！",
+      "There's smoke coming from under my hood right now",
+      "车里有很大的汽油味",
+      "Temperature gauge is in the red and steam is coming out",
+      "開車的時候方向盤突然轉不動了",
+      "特斯拉 Model 3 显示高压系统故障，还有点烧焦的味道",
+    ]) {
+      expect(safetyConcern(text), text).not.toBeNull();
+    }
+    for (const text of [
+      "早上打不着火，咔咔响",
+      "水温表偏高但没到红线",
+      "How do I disconnect the high voltage battery on my Prius?",
+      "My check engine light came on, car drives fine",
+      "front brake pads squeak",
+    ]) {
+      expect(safetyConcern(text), text).toBeNull();
+    }
+    expect(turnContext("en", null, "There's smoke coming from under my hood", [], tuesday)).toContain(
+      "Begin this reply by telling them to stop driving and arrange a tow",
+    );
+  });
+});
