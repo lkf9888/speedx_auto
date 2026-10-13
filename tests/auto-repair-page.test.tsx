@@ -31,7 +31,7 @@ describe("auto repair hub page", () => {
     }
   });
 
-  it("shows the labor rate, price table, and shop facts in visible text", async () => {
+  it("shows the price table and shop facts in visible text", async () => {
     await renderPage("en");
 
     expect(screen.getByRole("heading", { name: "What repairs cost" })).toBeInTheDocument();
@@ -39,7 +39,9 @@ describe("auto repair hub page", () => {
     expect(within(laborTable).getAllByRole("row")).toHaveLength(en.autoRepair.pricing.rows.length + 1);
     expect(within(flatTable).getByText("Regular 0W-20 $95 · Premium 0W-30 $120")).toBeInTheDocument();
     expect(within(flatTable).getByText("R-134a (older systems) $150 · R-1234yf (newer systems) $230")).toBeInTheDocument();
-    expect(screen.getByText("$120 per hour, before tax")).toBeInTheDocument();
+    // The shop asked to keep the hourly rate out of the "At a glance" list.
+    expect(screen.queryByText("Labor rate")).not.toBeInTheDocument();
+    expect(screen.getByText(en.autoRepair.pricing.laborBody)).toBeInTheDocument();
     expect(screen.getByText("2980 Number 3 Rd, Richmond, BC V6X 2B3")).toBeInTheDocument();
     expect(screen.getByText("Mon–Sat · 10:00 AM – 6:30 PM")).toBeInTheDocument();
   });

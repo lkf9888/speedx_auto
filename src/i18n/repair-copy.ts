@@ -60,7 +60,6 @@ export const enAutoRepair: AutoRepairCopy = {
   facts: {
     title: "At a glance",
     items: [
-      { label: "Labor rate", value: "$120 per hour, before tax" },
       { label: "Labor time", value: "Industry-standard labor-guide times (ALLDATA), not a stopwatch" },
       { label: "Parts", value: "WorldPac parts, quoted at list price" },
       { label: "Oil change", value: "From $95, oil and filter included" },
@@ -478,7 +477,6 @@ export const zhCNAutoRepair: AutoRepairCopy = {
   facts: {
     title: "基本信息",
     items: [
-      { label: "工时费", value: "每小时 $120（税前）" },
       { label: "工时标准", value: "按行业标准工时手册（ALLDATA）计时，不按实际干活时间随意计算" },
       { label: "配件", value: "WorldPac 配件，按标价报价" },
       { label: "换机油", value: "$95 起，含机油和机滤" },
@@ -901,7 +899,6 @@ const zhTWHub: Omit<AutoRepairCopy, "services"> = {
   facts: {
     title: "基本資料",
     items: [
-      { label: "工時費", value: "每小時 $120（未連稅）" },
       { label: "工時標準", value: "按行業標準工時手冊（ALLDATA）計算，並非隨意計時" },
       { label: "零件", value: "WorldPac 零件，按標價報價" },
       { label: "換機油", value: "$95 起，已包機油及機油格" },
