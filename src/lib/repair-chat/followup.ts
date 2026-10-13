@@ -39,7 +39,7 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 
 export function estimateLine(card: EstimateCard): string {
   const label = `${card.id} · ${card.vehicle} · ${card.service}${card.position ? `（${card.position}）` : ""}`;
-  if (card.kind === "team_quote") return `${label} · 未给价格，客户需联系店里报价（${card.partsNote}）`;
+  if (card.kind === "team_quote") return `${label} · 未给价格，请回电给客户报价（${card.partsNote}）`;
   if (card.kind === "flat") {
     const options = card.partOptions.map((p) => `${p.description}${p.quantity > 1 ? ` ×${p.quantity}` : ""} ${money(p.total)}`).join("；");
     return `${label} · 一口价：${options}（未含税）`;
