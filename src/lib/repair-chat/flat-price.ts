@@ -213,7 +213,7 @@ const WORDS: Record<Locale, Record<string, string>> = {
     ac_r134a: "R-134a (older systems)",
     ac_r1234yf: "R-1234yf (newer systems)",
     oil_note: "Flat price including oil and filter.",
-    tire_note: "Priced per tire; tires themselves are extra.",
+    tire_note: "Priced per tire for the tire change; buying the tires is extra.",
     ac_note: "Flat price. The refrigerant type is confirmed from the label under the hood.",
   },
   "zh-CN": {
@@ -235,7 +235,7 @@ const WORDS: Record<Locale, Record<string, string>> = {
     ac_r134a: "旧雪种 R-134a",
     ac_r1234yf: "新雪种 R-1234yf",
     oil_note: "一口价，含机油和机油滤芯。",
-    tire_note: "按条计价，轮胎本身另计。",
+    tire_note: "换胎工钱按条计价，轮胎购买费用另计。",
     ac_note: "一口价。雪种类型以发动机舱内的标签为准。",
   },
   "zh-TW": {
@@ -257,7 +257,7 @@ const WORDS: Record<Locale, Record<string, string>> = {
     ac_r134a: "舊雪種 R-134a",
     ac_r1234yf: "新雪種 R-1234yf",
     oil_note: "一口價，含機油和機油濾芯。",
-    tire_note: "按條計價，輪胎本身另計。",
+    tire_note: "換胎工錢按條計價，輪胎購買費用另計。",
     ac_note: "一口價。雪種類型以引擎室內的標籤為準。",
   },
 };
