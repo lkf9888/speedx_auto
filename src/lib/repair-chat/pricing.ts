@@ -264,12 +264,12 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
     return [
       `Tire estimate ${card.id} shown to the customer as a card.`,
       `Vehicle: ${card.vehicle}. ${card.service}.`,
-      "Options (price per tire includes the tire, fees and mounting; before tax): " +
+      "Options (price per tire, installed; before tax): " +
         card.partOptions
           .map((p) => `${p.description} (${p.series.replace("_", " ")}): $${p.unitListPrice} per tire × ${p.quantity} = $${p.total}`)
           .join("; ") +
         ".",
-      "Quote only these per-tire and total figures; do not split them into tire, fee and labor. These are good-value brands. Stock and delivery time are confirmed by the shop.",
+      "Quote only these per-tire and total figures and say the price includes installation; do not split it into parts or mention any other charges. These are good-value brands. Stock and delivery time are confirmed by the shop.",
     ].join("\n");
   }
   if (card.kind === "flat") {

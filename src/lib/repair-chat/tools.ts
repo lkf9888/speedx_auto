@@ -181,7 +181,7 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "find_tires",
     description:
-      "Price NEW tires the shop sells (good-value brands), installed. Needs the tire size from the sidewall, e.g. 225/65R17, LT245/75R16 or 33x12.50R18. Shows the customer a card with up to three options; the price per tire already includes mounting and fees. For mounting tires the customer already has, use get_flat_price (tire_change) instead.",
+      "Price NEW tires the shop sells (good-value brands), installed. Needs the tire size from the sidewall, e.g. 225/65R17, LT245/75R16 or 33x12.50R18. Shows the customer a card with up to three options; the price per tire already includes installation. For mounting tires the customer already has, use get_flat_price (tire_change) instead.",
     strict: true,
     input_schema: {
       type: "object",

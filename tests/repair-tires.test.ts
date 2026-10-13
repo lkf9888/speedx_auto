@@ -122,7 +122,8 @@ describe("find_tires tool", () => {
     expect(card.partsNote).toContain("库存和到货时间以店里确认为准");
     const summary = JSON.parse(out.content).summary as string;
     expect(summary).toContain("per tire × 4");
-    expect(summary).toMatch(/do not split them/);
+    expect(summary).toMatch(/do not split it/);
+    expect(summary).not.toMatch(/fee/i);
     expect(summarizeEstimateForModel(card)).not.toMatch(/eco|6\.5/i);
   });
 
