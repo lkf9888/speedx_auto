@@ -44,3 +44,6 @@ next-env.d.ts
 # local code intelligence index
 .codegraph/
 .playwright-cli/
+
+# Partner tire price list (Render Secret File) — never commit
+tires.json

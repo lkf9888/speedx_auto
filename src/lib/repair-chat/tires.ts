@@ -2,14 +2,16 @@
  * New tires the shop sells, from a partner's price list.
  *
  * The list holds retail prices only (no cost, no supplier details) and lives
- * outside this public repo: a Render Secret File at /etc/secrets/tires.json,
- * or the path in TIRE_PRICES_FILE. Without it, tire questions go to the team.
+ * outside this public repo: a Render Secret File named tires.json (Render puts
+ * it in /etc/secrets and in the app's root folder), or the path in
+ * TIRE_PRICES_FILE. Without it, tire questions go to the team.
  *
  * What a customer sees per tire is one all-in number: retail price plus the
  * BC tire eco fee, rounded to whole dollars, plus the shop's posted tire
  * change price for that tire. The fee is folded in, never shown on its own.
  */
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { FLAT_PRICES } from "./flat-price";
 
 export type TireSeason = "all_season" | "all_weather" | "winter" | "off_road" | "trailer";
@@ -36,7 +38,12 @@ export interface TireOption {
   total: number;
 }
 
-const DEFAULT_FILE = "/etc/secrets/tires.json";
+function candidatePaths(): string[] {
+  if (process.env.TIRE_PRICES_FILE) return [process.env.TIRE_PRICES_FILE];
+  return ["/etc/secrets/tires.json", join(process.cwd(), "tires.json")];
+}
+
+let reportedMissing = false;
 
 /** BC tire stewardship (eco) fee per passenger / light-truck tire. */
 export function ecoFee(now: Date): number {
@@ -89,7 +96,21 @@ function isListing(value: unknown): value is TireListing {
 }
 
 /** The price list, or null when the file isn't there (or is broken). */
-export function loadTireList(path = process.env.TIRE_PRICES_FILE || DEFAULT_FILE): TireListing[] | null {
+export function loadTireList(path?: string): TireListing[] | null {
+  if (path) return readTireList(path);
+  const paths = candidatePaths();
+  for (const candidate of paths) {
+    const listings = readTireList(candidate);
+    if (listings) return listings;
+  }
+  if (!reportedMissing) {
+    reportedMissing = true;
+    console.error("tire price list not found; looked in", paths.join(", "));
+  }
+  return null;
+}
+
+function readTireList(path: string): TireListing[] | null {
   if (cached?.path === path) return cached.listings;
   try {
     const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
@@ -115,6 +136,7 @@ export function loadTireList(path = process.env.TIRE_PRICES_FILE || DEFAULT_FILE
 
 export function resetTireListCache(): void {
   cached = null;
+  reportedMissing = false;
 }
 
 const SEASONS: TireSeason[] = ["all_season", "all_weather", "winter", "off_road"];
