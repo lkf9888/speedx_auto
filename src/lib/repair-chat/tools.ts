@@ -219,7 +219,7 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "request_team_quote",
     description:
-      "Show the customer a card asking them to contact the team for a price. Use only when a job cannot be priced online: body, collision or paint work; identify_vehicle returned not_found for the vehicle; or find_services found nothing matching after two different wordings.",
+      "Show the customer a card asking them to contact the team for a price. Use only when a job cannot be priced online: body, collision or paint work; tires of a particular international brand (no vehicle needed); identify_vehicle returned not_found for the vehicle; or find_services found nothing matching after two different wordings.",
     strict: true,
     input_schema: {
       type: "object",
@@ -227,7 +227,7 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
         vehicle_key: { anyOf: [{ type: "string" }, { type: "null" }], description: "When the vehicle was identified" },
         vehicle_description: {
           type: "string",
-          description: "Year, make and model in English as the customer gave them, e.g. 2023 BYD Atto 3",
+          description: "Year, make and model in English as the customer gave them, e.g. 2023 BYD Atto 3; empty if unknown",
         },
         service: { type: "string", description: "The job in a few English words, e.g. Front brake pads" },
       },
@@ -344,6 +344,8 @@ export async function runTool(
   input: Record<string, unknown>,
   newEstimateId: () => string,
   locale = "en",
+  /** Vehicle confirmed earlier in the conversation, used when the model leaves vehicle_key out. */
+  knownVehicleKey: string | null = null,
 ): Promise<ToolOutcome> {
   switch (name) {
     case "identify_vehicle": {
@@ -457,7 +459,20 @@ export async function runTool(
       const season = pick<TireSeason | "any">(input.season, ["all_season", "all_weather", "winter", "off_road", "any"]) ?? "any";
       const countRaw = Number(input.count);
       const count = Number.isInteger(countRaw) && countRaw >= 1 && countRaw <= 6 ? countRaw : 4;
-      const decoded = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;
+      const vehicleKey = typeof input.vehicle_key === "string" && input.vehicle_key ? input.vehicle_key : knownVehicleKey;
+      let decoded = vehicleKey ? decodeVehicleKey(vehicleKey) : null;
+      if (decoded) {
+        const known = await withKnownCylinders(api, decoded);
+        if ("ask" in known) {
+          return ok({
+            status: "need_details",
+            questions: known.ask.questions,
+            vehicle_key: encodeVehicleKey(known.ask.vehicle),
+            note: "Ask which engine; whether a posted tire price applies depends on it. Then record it with set_vehicle_details and call find_tires again.",
+          });
+        }
+        decoded = known.vehicle;
+      }
       const vehicle = decoded ? describeVehicle(decoded) : "—";
       const serviceName = `${flatWord(locale, "tires_new")} · ${size.toUpperCase().replace(/\s+/g, " ").trim()}`;
       // Same rule as the shop's other posted prices: V8+ and premium vehicles are quoted by the team.
@@ -509,9 +524,9 @@ export async function runTool(
     }
     case "request_team_quote": {
       const known = readVehicle(input);
-      const vehicle = known ? describeVehicle(known) : cardText(input.vehicle_description, 80);
+      const vehicle = (known ? describeVehicle(known) : cardText(input.vehicle_description, 80)) || "—";
       const service = cardText(input.service, 80);
-      if (!vehicle || !service) return fail("Give the vehicle and the service.");
+      if (!service) return fail("Give the service.");
       return teamQuote(vehicle, service, "Could not be priced online.", newEstimateId);
     }
     default:

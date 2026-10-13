@@ -131,6 +131,11 @@ export async function runChat(
 
     const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
     for (const use of toolUses) {
+      // The vehicle confirmed so far (earlier turns or this one), so rules that
+      // depend on it don't rely on the model remembering to pass it along.
+      const knownVehicleKey =
+        [...events].reverse().find((e): e is Extract<ChatEvent, { type: "vehicle" }> => e.type === "vehicle")?.vehicle.key ??
+        request.vehicleKey;
       emit({ type: "status", status: statusForTool(use.name) });
       try {
         const outcome = await runTool(
@@ -139,6 +144,7 @@ export async function runChat(
           (use.input ?? {}) as Record<string, unknown>,
           newEstimateId,
           request.locale,
+          knownVehicleKey,
         );
         outcome.events.forEach(emit);
         results.push({

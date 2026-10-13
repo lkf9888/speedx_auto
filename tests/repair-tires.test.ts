@@ -133,6 +133,56 @@ describe("find_tires tool", () => {
     expect(JSON.parse(out.content)).toEqual({ status: "not_in_this_season", available_seasons: ["all_season", "all_weather", "winter"] });
   });
 
+  it("applies the V8 rule to the vehicle confirmed earlier even if the model leaves it out", async () => {
+    useList(LIST);
+    const v8 = encodeVehicleKey({
+      baseVehicleId: 5,
+      label: "2020 Ford F-150",
+      attributes: [{ name: "EngineBase", id: 2, label: "5.0 V8" }],
+    });
+    const out = await runTool(
+      api,
+      "find_tires",
+      { size: "245/75R16", season: "off_road", count: 4, vehicle_key: null, new_price_over_120k: false },
+      () => "E-T2",
+      "en",
+      v8,
+    );
+    expect(cards(out.events)[0].kind).toBe("team_quote");
+  });
+
+  it("asks which engine when some versions of the vehicle are V8", async () => {
+    useList(LIST);
+    const engines = {
+      get: async () => ({}) as never,
+      post: async () =>
+        ({
+          recommendedVehAttrs: [
+            { attrName: "EngineBase", attrDesc: "Engine", vehAttrs: [{ isEnabled: true, value: { key: 1, value: "3.5 V6" } }, { isEnabled: true, value: { key: 2, value: "5.0 V8" } }] },
+          ],
+        }) as never,
+    };
+    const f150 = encodeVehicleKey({ baseVehicleId: 5, label: "2020 Ford F-150", attributes: [] });
+    const out = await runTool(
+      engines,
+      "find_tires",
+      { size: "245/75R16", season: "off_road", count: 4, vehicle_key: f150, new_price_over_120k: false },
+      () => "E-T3",
+    );
+    expect(JSON.parse(out.content)).toMatchObject({ status: "need_details", questions: [{ attribute: "EngineBase" }] });
+    expect(out.events).toEqual([]);
+  });
+
+  it("sends a named international brand to the team without needing the vehicle", async () => {
+    const out = await runTool(
+      api,
+      "request_team_quote",
+      { vehicle_key: null, vehicle_description: "", service: "Michelin tires 225/65R17 x4" },
+      () => "E-T4",
+    );
+    expect(cards(out.events)[0]).toMatchObject({ kind: "team_quote", vehicle: "—", service: "Michelin tires 225/65R17 x4" });
+  });
+
   it("hands unknown sizes, missing lists and V8 trucks to the team", async () => {
     useList(LIST);
     expect(cards((await ask({ size: "195/65R15" })).events)[0].kind).toBe("team_quote");
