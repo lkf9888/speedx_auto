@@ -13,6 +13,8 @@ import {
   decodeVehicleKey,
   describeVehicle,
   quoteServiceForStaff,
+  readDoneWith,
+  sharedLabor,
   staffPartsByName,
   type CatalogApi,
   type VehicleRef,
@@ -54,7 +56,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - If staff ask for text to send a customer, write it with customer prices only, never cost or margin (the card's "copy for customer" button does the same). Put any note for staff first; then a line "—— 发给客人 ——" and the customer text, with nothing after it, so staff can copy everything below that line.
 
 # Shop labor rules
-- Jobs done at the same time in the same place (front pads + front rotors, pads + calipers on one axle, water pump with the timing belt): the job with the most hours is charged in full and every other job at half its hours. Example: front pads 0.9 h + front rotors 0.9 h = 0.9 + 0.45 = 1.35 h. Say so in the reply and use these hours in ALLDATA drafts (label the reduced line "同时施工 50%").
+- Jobs done at the same time in the same place (front pads + front rotors, pads + calipers on one axle, water pump with the timing belt): the job with the most hours is charged in full and every other job at half its hours. Example: front pads 0.9 h + front rotors 0.9 h = 0.9 + 0.45 = 1.35 h. Quote both with get_estimate, each with done_with pointing at the other: the cards then already show the halved hours. When one of them has no labor job (priced with find_parts), apply the rule yourself and say so. Use the charged hours in ALLDATA drafts (label the reduced line "同时施工 50%").
 - Labor-guide times for struts/shocks, control arms, wheel bearings/hubs, CV axles, tie rods and calipers are per side. When staff ask for both sides (两边 / 一对 / left and right), double the hours and the part quantity, and say so. Pads and rotors come as an axle set, so don't double those.
 - If get_estimate's part list doesn't contain the part the job is about (a strut job that only lists the mount, a labor guide with no rotor job at all), price the part itself with find_parts and add the labor by hand: use a related job's time if there is one and say so, otherwise ask staff for the hours. Never invent hours.
 - Electric cars (Tesla and others) and some exotic cars have no labor-guide data. Say early that labor needs a manual quote; parts can still be priced with find_parts.
@@ -490,7 +492,13 @@ export async function runWorkbenchTool(
       if (variants) return variants;
     }
     if (job.status !== "ok") return { content: JSON.stringify(job), isError: false, events: [] };
-    return quoteOutcome(buildLaborQuote(describeVehicle(vehicle), job, newEstimateId()));
+    const shared = await sharedLabor(api, vehicle, serviceId, job.laborHours, readDoneWith(input.done_with));
+    const charged = !shared
+      ? job
+      : shared.halved
+        ? { ...job, laborHours: shared.chargedHours, laborNote: `与「${shared.otherName}」同时施工，工时按一半（原 ${job.laborHours} h → ${shared.chargedHours} h）。${job.laborNote}` }
+        : { ...job, laborNote: `与「${shared.otherName}」同时施工：本项工时全收，对方按一半。${job.laborNote}` };
+    return quoteOutcome(buildLaborQuote(describeVehicle(vehicle), charged, newEstimateId()));
   }
   if (name === "find_parts") {
     const vehicle = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;

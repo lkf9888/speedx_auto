@@ -8,8 +8,10 @@ import {
   identifyByVin,
   identifyByYearMakeModel,
   quoteService,
+  readDoneWith,
   refineVehicle,
   serviceById,
+  sharedLabor,
   type CatalogApi,
   type VehicleLookup,
   type VehicleRef,
@@ -126,8 +128,24 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
         vehicle_key: { type: "string" },
         service_id: { type: "integer" },
         position: { anyOf: [{ type: "string" }, { type: "null" }], description: "e.g. Front or Rear, when asked" },
+        done_with: {
+          anyOf: [
+            {
+              type: "object",
+              properties: {
+                service_id: { type: "integer" },
+                position: { anyOf: [{ type: "string" }, { type: "null" }] },
+              },
+              required: ["service_id", "position"],
+              additionalProperties: false,
+            },
+            { type: "null" },
+          ],
+          description:
+            "The other job when two are done at the same time in the same place (front pads + front rotors on the same axle). Quote both, each pointing at the other; the shop charges the longer job's labor in full and the shorter one's at half. Null otherwise.",
+        },
       },
-      required: ["vehicle_key", "service_id", "position"],
+      required: ["vehicle_key", "service_id", "position", "done_with"],
       additionalProperties: false,
     },
   },
@@ -398,7 +416,20 @@ export async function runTool(
       const serviceId = Number(input.service_id);
       if (!Number.isInteger(serviceId) || serviceId <= 0) return fail("Invalid service_id.");
       const position = typeof input.position === "string" && input.position.trim() ? input.position : null;
-      const quote = await quoteService(api, vehicle, serviceId, position);
+      const quoted = await quoteService(api, vehicle, serviceId, position);
+      let quote = quoted;
+      if (quoted.status === "ok") {
+        const shared = await sharedLabor(api, vehicle, serviceId, quoted.laborHours, readDoneWith(input.done_with));
+        if (shared?.halved) {
+          quote = {
+            ...quoted,
+            laborHours: shared.chargedHours,
+            laborNote: `Done together with ${shared.otherName}: labor charged at half (${quoted.laborHours} h → ${shared.chargedHours} h). ${quoted.laborNote}`.trim(),
+          };
+        } else if (shared) {
+          quote = { ...quoted, laborNote: `Done together with ${shared.otherName}, whose labor is charged at half. ${quoted.laborNote}`.trim() };
+        }
+      }
       if (quote.status === "unavailable") {
         const service = (await serviceById(api, vehicle, serviceId).catch(() => undefined))?.name ?? "Requested service";
         return teamQuote(describeVehicle(vehicle), service, quote.reason, newEstimateId);

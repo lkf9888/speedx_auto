@@ -999,3 +999,54 @@ export async function staffPartsByName(
   if (options.length === 0) return { status: "not_found", similar: scored.slice(0, 6).map((p) => p.part.name) };
   return { status: "ok", partName: best.name, options };
 }
+
+// ------------------------------------------------------- jobs done together
+
+export interface DoneWith {
+  serviceId: number;
+  position: string | null;
+}
+
+export interface SharedLabor {
+  /** True when this job is the one charged at half. */
+  halved: boolean;
+  /** Hours to charge for this job. */
+  chargedHours: number;
+  otherName: string;
+  otherHours: number;
+}
+
+/** Read get_estimate's done_with input. */
+export function readDoneWith(raw: unknown): DoneWith | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const serviceId = Number(r.service_id);
+  if (!Number.isInteger(serviceId) || serviceId <= 0) return null;
+  const position = typeof r.position === "string" && r.position.trim() ? r.position : null;
+  return { serviceId, position };
+}
+
+/**
+ * Shop rule for jobs done at the same time in the same place (front pads and
+ * front rotors): the job with the most labor hours is charged in full and
+ * the other at half. Decided the same way whichever job is quoted first, so
+ * the two cards always agree. Null when the other job has no labor time.
+ */
+export async function sharedLabor(
+  api: CatalogApi,
+  vehicle: VehicleRef,
+  serviceId: number,
+  hours: number,
+  doneWith: DoneWith | null,
+): Promise<SharedLabor | null> {
+  if (!doneWith || doneWith.serviceId === serviceId) return null;
+  const other = await quoteService(api, vehicle, doneWith.serviceId, doneWith.position).catch(() => null);
+  if (!other || other.status !== "ok") return null;
+  const halved = hours < other.laborHours || (hours === other.laborHours && serviceId > doneWith.serviceId);
+  return {
+    halved,
+    chargedHours: halved ? Math.round((hours / 2) * 100) / 100 : hours,
+    otherName: `${other.serviceName}${other.position ? ` (${other.position})` : ""}`,
+    otherHours: other.laborHours,
+  };
+}
