@@ -576,7 +576,21 @@ export function sanitizePartQuotes(
       note: String(app?.applicationNote ?? "").slice(0, 160),
     });
   }
-  return options;
+  return dedupe(options, (o) => `${o.series}|${o.description}|${o.listPrice}|${o.quantity}`, (a, b) => Number(b.inStockLocally) - Number(a.inStockLocally));
+}
+
+/**
+ * speedDIAL quotes the same part once per warehouse and order type, so one
+ * pad set can come back several times. Keep one row per key, the best one.
+ */
+function dedupe<T>(options: T[], key: (o: T) => string, better: (a: T, b: T) => number): T[] {
+  const best = new Map<string, T>();
+  for (const option of options) {
+    const k = key(option);
+    const current = best.get(k);
+    if (!current || better(option, current) < 0) best.set(k, option);
+  }
+  return options.filter((o) => best.get(key(o)) === o);
 }
 
 const BULK_PACKAGING = /\b(drum|pail|bulk|tote|case of|\d+\s?(gal|gallon|g)\b|55g|\d+\s?l(iter|itre)?\s?(jug|box))/i;
@@ -654,7 +668,10 @@ async function loadServiceData(
   }
   const positionLabel = (op: (typeof operations)[number]) => op.position?.description?.trim() ?? "";
   let operation = operations[0];
-  if (operations.length > 1) {
+  // Several operations that name no position (or all the same one), e.g. a
+  // thermostat, are not a front/rear choice: there is nothing to ask.
+  const positionChoices = new Set(operations.map(positionLabel).filter(Boolean));
+  if (operations.length > 1 && positionChoices.size > 1) {
     const wanted = position ? normalize(position) : "";
     const match = operations.find((op) => wanted && normalize(positionLabel(op)) === wanted);
     if (!match) {
@@ -844,7 +861,15 @@ export function staffPartQuotes(response: PnaResponse, positionId: number | null
       fields,
     });
   }
-  return options
+  // One row per part: local stock first, then the lower account price.
+  const unique = dedupe(
+    options,
+    (o) => (o.partNumber ? `${o.brand}|${o.partNumber}` : `${o.series}|${o.description}|${o.listPrice}`),
+    (a, b) =>
+      Number(b.inStockLocally) - Number(a.inStockLocally) ||
+      (a.prices.unitPrice ?? Infinity) - (b.prices.unitPrice ?? Infinity),
+  );
+  return unique
     .filter((o) => !BULK_PACKAGING.test(o.description))
     .sort((a, b) => a.listPrice * a.quantity - b.listPrice * b.quantity)
     .slice(0, 15);

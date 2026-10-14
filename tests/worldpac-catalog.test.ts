@@ -8,6 +8,7 @@ import {
   refineVehicle,
   representativeOptions,
   sanitizePartQuotes,
+  staffPartQuotes,
   scoreService,
   type CatalogApi,
   type VehicleRef,
@@ -383,5 +384,45 @@ describe("Canadian model names", () => {
     const { api } = fakeApi(routes(true, 101));
     const result = await identifyByVin(api, "JA4AJ3AU2KU000001");
     expect(result.status === "ok" && result.vehicle.baseVehicleId).toBe(101);
+  });
+});
+
+describe("deep-test fixes", () => {
+  it("lists a part once even when speedDIAL quotes it from several warehouses", () => {
+    const response = {
+      applications: [],
+      quotes: [
+        {
+          productQuotes: [
+            quote({ manufacturerPart: "ACT2076", availability: "multipleDays", qtyAvailable: 0, unitPrice: 75 }),
+            quote({ manufacturerPart: "ACT2076", availability: "today-local", qtyAvailable: 4, unitPrice: 78.86 }),
+            quote({ manufacturerPart: "AD2076", listPrice: 185.84, seriesDescription: "Ultra-Premium" }),
+            quote({ manufacturerPart: "AD2076", listPrice: 185.84, seriesDescription: "Ultra-Premium" }),
+          ],
+        },
+      ],
+    };
+    const staff = staffPartQuotes(response, 22);
+    expect(staff.map((o) => o.partNumber)).toEqual(["ACT2076", "AD2076"]);
+    // The copy in local stock wins over a cheaper one days away.
+    expect(staff[0]).toMatchObject({ inStockLocally: true, prices: expect.objectContaining({ unitPrice: 78.86 }) });
+    expect(sanitizePartQuotes(response, 22)).toHaveLength(2);
+  });
+
+  it("prices a service whose operations name no position instead of asking for one", async () => {
+    const { api } = fakeApi({
+      "labor-ops-list": () => ({
+        laborOperations: [
+          { applicationID: 1, assetName: "t-1", position: { description: "" }, positionID: -1 },
+          { applicationID: 2, assetName: "t-2", position: { description: "" }, positionID: -1 },
+        ],
+        vehAttrOptions: [],
+      }),
+      "labor-ops-details": () => ({
+        laborOperation: { estimateTimeHour: 0.9, laborCategoryName: "Engine Coolant Thermostat R&R", applications: [] },
+      }),
+    });
+    const result = await quoteService(api, { ...camry, baseVehicleId: 900099 }, 5555, null);
+    expect(result).toMatchObject({ status: "ok", serviceName: "Engine Coolant Thermostat R&R", laborHours: 0.9 });
   });
 });
