@@ -21,6 +21,12 @@ function workbenchRoute(request: NextRequest): NextResponse | null {
   const { pathname } = request.nextUrl;
   const host = (request.headers.get("host") ?? "").toLowerCase();
   const isWorkbenchPath = pathname === "/workbench" || pathname.startsWith("/workbench/");
+  // repair.speedxrental.com is a Cloudflare Worker that forwards to this
+  // service and marks its requests. The mark only routes; what the page and
+  // API show is still decided by the verified Cloudflare Access token.
+  if (request.headers.get("x-speedx-workbench") === "1") {
+    return isWorkbenchPath ? NextResponse.next() : new NextResponse(null, { status: 404 });
+  }
   if (host.split(":")[0] === WORKBENCH_HOST) {
     if (pathname === "/") return NextResponse.rewrite(new URL("/workbench", request.url));
     if (isWorkbenchPath) return NextResponse.next();

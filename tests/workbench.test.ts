@@ -69,6 +69,12 @@ describe("workbench routing", () => {
     expect(at("https://repair.speedxrental.com/en/hosting", "repair.speedxrental.com").status).toBe(404);
     expect(at("https://speedxrental.com/workbench", "speedxrental.com").status).toBe(404);
     expect(at("http://localhost:3110/workbench", "localhost:3110").headers.get("x-middleware-next")).toBe("1");
+    // Forwarded by the Cloudflare Worker (Host is the Render origin).
+    const forwarded = (url: string) =>
+      proxy(new NextRequest(url, { headers: { host: "speedx-rental.onrender.com", "x-speedx-workbench": "1" } }));
+    expect(forwarded("https://speedx-rental.onrender.com/workbench").headers.get("x-middleware-next")).toBe("1");
+    expect(forwarded("https://speedx-rental.onrender.com/en/hosting").status).toBe(404);
+    expect(at("https://speedx-rental.onrender.com/workbench", "speedx-rental.onrender.com").status).toBe(404);
     // The public site still redirects to a locale as before.
     expect(at("https://speedxrental.com/auto-repair", "speedxrental.com").headers.get("location")).toContain("/en/auto-repair");
   });
