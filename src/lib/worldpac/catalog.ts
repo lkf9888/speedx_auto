@@ -259,7 +259,41 @@ export async function identifyByVin(api: CatalogApi, vin: string): Promise<Vehic
     label: [year, make, model].filter(Boolean).join(" ") || `VIN ${clean.slice(-6)}`,
     attributes: kept,
   };
-  return refineVehicle(api, vehicle);
+  return withUsTwin(api, await refineVehicle(api, vehicle), Number(year), make, model);
+}
+
+/**
+ * Canadian-market names for cars sold in the US under another name. speedDIAL
+ * knows the Canadian name (a VIN decodes to it) but its labor guide may have
+ * no operations filed under it, so quotes come back empty. The US twin is the
+ * same car with the same parts and labor times.
+ */
+const US_TWINS: Array<{ make: string; model: string; from?: number; usMake: string; usModel: string }> = [
+  { make: "Mitsubishi", model: "RVR", from: 2011, usMake: "Mitsubishi", usModel: "Outlander Sport" },
+  { make: "Acura", model: "CSX", usMake: "Honda", usModel: "Civic" },
+  { make: "Acura", model: "EL", usMake: "Honda", usModel: "Civic" },
+  { make: "Buick", model: "Allure", usMake: "Buick", usModel: "LaCrosse" },
+  { make: "Pontiac", model: "Wave", usMake: "Chevrolet", usModel: "Aveo" },
+  { make: "Suzuki", model: "Swift+", usMake: "Chevrolet", usModel: "Aveo" },
+  { make: "Chrysler", model: "Grand Caravan", from: 2021, usMake: "Chrysler", usModel: "Voyager" },
+];
+
+/** Swap a Canadian-name vehicle with no labor-guide data for its US twin, keeping the name the customer knows. */
+async function withUsTwin(api: CatalogApi, lookup: VehicleLookup, year: number, make: string, model: string): Promise<VehicleLookup> {
+  if (lookup.status !== "ok" && lookup.status !== "needs_details") return lookup;
+  const twin = US_TWINS.find(
+    (t) => compact(t.make) === compact(make) && compact(t.model) === compact(model) && (!t.from || year >= t.from),
+  );
+  if (!twin) return lookup;
+  const own = await allServices(api, lookup.vehicle).catch(() => []);
+  if (own.length > 0) return lookup;
+  const us = await identifyByYearMakeModel(api, year, twin.usMake, twin.usModel);
+  if (us.status !== "ok" && us.status !== "needs_details") return lookup;
+  // Keep what is already known about the car (engine, trim) where the twin offers the same option.
+  const known = lookup.vehicle.attributes.map((a) => ({ attribute: a.name, option: a.label }));
+  const applied = known.length > 0 ? await applyVehicleDetails(api, us.vehicle, known) : us;
+  if (applied.status !== "ok" && applied.status !== "needs_details") return lookup;
+  return { ...applied, vehicle: { ...applied.vehicle, label: lookup.vehicle.label } };
 }
 
 const makesCache = new TtlCache<Array<{ makeID: number; makeDesc: string }>>(WEEK_MS);
@@ -313,11 +347,12 @@ export async function identifyByYearMakeModel(
     return { status: "ambiguous", candidates: matches.map((m) => m.modelDesc) };
   }
   const chosen = matches[0];
-  return refineVehicle(api, {
+  const lookup = await refineVehicle(api, {
     baseVehicleId: Number(chosen.baseVehicleID),
     label: `${year} ${chosen.makeDesc} ${chosen.modelDesc}`,
     attributes: [],
   });
+  return withUsTwin(api, lookup, year, chosen.makeDesc, chosen.modelDesc);
 }
 
 interface RefineResponse {

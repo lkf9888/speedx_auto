@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   decodeVehicleKey,
   encodeVehicleKey,
+  identifyByVin,
   identifyByYearMakeModel,
   quoteService,
   refineVehicle,
@@ -327,5 +328,60 @@ describe("missing part prices", () => {
       status: "need_details",
       questions: [{ attribute: "SubModel", label: "Sub Model", options: ["LX", "EX"] }],
     });
+  });
+});
+
+describe("Canadian model names", () => {
+  // speedDIAL decodes a Canadian RVR, but its labor guide files the car as the US Outlander Sport.
+  // Each test uses its own RVR id: speedDIAL answers are cached per vehicle.
+  const routes = (rvrHasServices: boolean, rvr = 100) => ({
+    "vehicle/searchMultiVehicle": () => ({
+      vehicles: [
+        {
+          baseVehicleID: rvr,
+          vehicleAttributes: [
+            { name: { key: "Year" }, value: { key: 2019, value: "2019" } },
+            { name: { key: "Make" }, value: { key: 1, value: "Mitsubishi" } },
+            { name: { key: "Model" }, value: { key: 2, value: "RVR" } },
+            { name: { key: "EngineBase" }, value: { key: 777, value: "2.0 L4" } },
+          ],
+        },
+      ],
+    }),
+    "vehicle/makesbyyear": () => ({ makes: [{ makeID: 31, makeDesc: "Mitsubishi" }] }),
+    "vehicle/modelsbyyearmake": () => ({
+      models: [
+        { baseVehicleID: "200", modelDesc: "Outlander Sport", makeDesc: "Mitsubishi", yearID: 2019 },
+        { baseVehicleID: "201", modelDesc: "Outlander", makeDesc: "Mitsubishi", yearID: 2019 },
+      ],
+    }),
+    "vehicle/refine": (data: unknown) => {
+      const base = (data as { baseVehicleID: string }).baseVehicleID;
+      return {
+        recommendedVehAttrs: [
+          { attrName: "EngineBase", attrDesc: "Engine", vehAttrs: [{ isEnabled: true, value: { key: base === "200" ? 888 : 777, value: "2.0 L4" } }, { isEnabled: true, value: { key: 999, value: "2.4 L4" } }] },
+        ],
+      };
+    },
+    "category/details": (data: unknown) => {
+      const d = data as { baseVehicleID: string; categoryCode: string };
+      if (d.baseVehicleID === String(rvr) && !rvrHasServices) return {};
+      if (!d.categoryCode) return { replacementParts: [{ code: "BR", description: "Brakes" }] };
+      return { laborOperations: [{ acaPartTerminologyID: 1684, description: "Brake Pads R&R" }] };
+    },
+  });
+
+  it("quotes an RVR as its US twin, keeping the engine and the name the customer knows", async () => {
+    const { api } = fakeApi(routes(false));
+    const result = await identifyByVin(api, "JA4AJ3AU2KU000000");
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.vehicle).toEqual({ baseVehicleId: 200, label: "2019 Mitsubishi RVR", attributes: [{ name: "EngineBase", id: 888, label: "2.0 L4" }] });
+  });
+
+  it("keeps the RVR when speedDIAL has labor data for it", async () => {
+    const { api } = fakeApi(routes(true, 101));
+    const result = await identifyByVin(api, "JA4AJ3AU2KU000001");
+    expect(result.status === "ok" && result.vehicle.baseVehicleId).toBe(101);
   });
 });
