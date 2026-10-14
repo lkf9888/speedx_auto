@@ -69,6 +69,26 @@ describe("workbench conversations", () => {
     expect(titles()).toEqual(["2019 Camry 前刹车片"]);
   });
 
+  it("lets staff rename a conversation, keeps the name after a reload, and Escape cancels", async () => {
+    const { unmount } = render(<Workbench email="a@speedx.test" />);
+    await ask("2019 Camry 前刹车片");
+    await screen.findByText(/答复：2019 Camry/);
+
+    await userEvent.click(screen.getByRole("button", { name: "重命名会话 2019 Camry 前刹车片" }));
+    await userEvent.keyboard("{Escape}");
+    expect(titles()).toEqual(["2019 Camry 前刹车片"]);
+
+    await userEvent.click(screen.getByRole("button", { name: "重命名会话 2019 Camry 前刹车片" }));
+    const box = screen.getByLabelText("会话标题");
+    await userEvent.clear(box);
+    await userEvent.type(box, "张先生 Camry{enter}");
+    expect(titles()).toEqual(["张先生 Camry"]);
+
+    unmount();
+    render(<Workbench email="a@speedx.test" />);
+    expect(titles()).toEqual(["张先生 Camry"]);
+  });
+
   it("keeps one staff member's conversations separate from another's on the same browser", async () => {
     const first = render(<Workbench email="a@example.com" />);
     await ask("2019 Camry 前刹车片");

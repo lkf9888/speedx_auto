@@ -97,6 +97,8 @@ export function Workbench({ email }: { email: string }) {
   const [pending, setPending] = useState<Record<string, string>>({});
   const [input, setInput] = useState("");
   const [showDocuments, setShowDocuments] = useState(false);
+  /** The conversation whose title is being edited, and the text typed so far. */
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   const active = conversations.find((c) => c.id === activeId) ?? conversations[0];
@@ -134,6 +136,17 @@ export function Workbench({ email }: { email: string }) {
       ...c,
       turns: c.turns.map((t) => (t.drafts?.some((d) => d.id === draftId) ? { ...t, drafts: t.drafts.map((d) => (d.id === draftId ? { ...d, created } : d)) } : t)),
     }));
+  }
+
+  /** Save a new title without moving the conversation in the list; an empty title goes back to the first question. */
+  function renameConversation(id: string, title: string) {
+    const clean = title.trim().slice(0, 60);
+    setConversations((list) =>
+      list.map((c) =>
+        c.id === id ? { ...c, title: clean || c.turns.find((t) => t.role === "user")?.text.slice(0, 30) || "" } : c,
+      ),
+    );
+    setRenaming(null);
   }
 
   function removeConversation(id: string) {
@@ -277,27 +290,56 @@ export function Workbench({ email }: { email: string }) {
                     c.id === active.id ? "bg-ink-900 text-white" : "text-ink-700 hover:bg-ink-50"
                   }`}
                 >
-                  <button
-                    type="button"
-                    data-testid="conversation"
-                    aria-current={c.id === active.id ? "true" : undefined}
-                    onClick={() => setActiveId(c.id)}
-                    className="min-w-0 flex-1 px-3 py-2 text-left"
-                  >
-                    <span className="block truncate text-sm">{c.title || "新会话"}</span>
-                    <span className={`block text-xs ${c.id === active.id ? "text-ink-300" : "text-ink-400"}`}>
-                      {pending[c.id] ? "查询中…" : `${c.vehicle?.label ?? ""} ${timeLabel(c.updatedAt)}`.trim()}
-                    </span>
-                  </button>
-                  {c.turns.length > 0 && (
+                  {renaming?.id === c.id ? (
+                    <input
+                      autoFocus
+                      aria-label="会话标题"
+                      value={renaming.title}
+                      maxLength={60}
+                      onChange={(e) => setRenaming({ id: c.id, title: e.target.value })}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onBlur={() => renameConversation(c.id, renaming.title)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.nativeEvent.isComposing) renameConversation(c.id, renaming.title);
+                        else if (e.key === "Escape") setRenaming(null);
+                      }}
+                      className="m-1.5 min-w-0 flex-1 rounded-md border border-brand-300 bg-white px-2 py-1.5 text-sm text-ink-900 focus:outline-none"
+                    />
+                  ) : (
                     <button
                       type="button"
-                      aria-label={`删除会话 ${c.title}`}
-                      onClick={() => removeConversation(c.id)}
-                      className="mr-1 rounded px-1.5 text-xs opacity-60 hover:opacity-100"
+                      data-testid="conversation"
+                      aria-current={c.id === active.id ? "true" : undefined}
+                      onClick={() => setActiveId(c.id)}
+                      onDoubleClick={() => setRenaming({ id: c.id, title: c.title })}
+                      className="min-w-0 flex-1 px-3 py-2 text-left"
                     >
-                      ×
+                      <span className="block truncate text-sm">{c.title || "新会话"}</span>
+                      <span className={`block text-xs ${c.id === active.id ? "text-ink-300" : "text-ink-400"}`}>
+                        {pending[c.id] ? "查询中…" : `${c.vehicle?.label ?? ""} ${timeLabel(c.updatedAt)}`.trim()}
+                      </span>
                     </button>
+                  )}
+                  {c.turns.length > 0 && renaming?.id !== c.id && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label={`重命名会话 ${c.title}`}
+                        title="重命名"
+                        onClick={() => setRenaming({ id: c.id, title: c.title })}
+                        className="rounded px-1.5 text-xs opacity-60 hover:opacity-100"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`删除会话 ${c.title}`}
+                        onClick={() => removeConversation(c.id)}
+                        className="mr-1 rounded px-1.5 text-xs opacity-60 hover:opacity-100"
+                      >
+                        ×
+                      </button>
+                    </>
                   )}
                 </div>
               </li>
