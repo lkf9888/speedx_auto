@@ -11,6 +11,7 @@ import { shopToday } from "@/lib/repair-chat/prompt";
 import { decodeVehicleKey, describeVehicle, quoteServiceForStaff, type CatalogApi } from "@/lib/worldpac/catalog";
 import { dtTireConfigured, getDtTireClient, type DtSeasonFilter, type DtTireClient } from "@/lib/dt-tire/client";
 import type { DtTire } from "@/lib/dt-tire/parse";
+import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
 import { buildLaborQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
 
 export const WORKBENCH_MODEL = process.env.WORKBENCH_MODEL || "claude-sonnet-5-5";
@@ -18,7 +19,8 @@ export const WORKBENCH_MODEL = process.env.WORKBENCH_MODEL || "claude-sonnet-5-5
 export type WorkbenchEvent =
   | { type: "status"; status: ReturnType<typeof statusForTool> }
   | Extract<ChatEvent, { type: "vehicle" }>
-  | { type: "quote"; quote: StaffQuote };
+  | { type: "quote"; quote: StaffQuote }
+  | { type: "alldata_draft"; draft: AlldataDraft };
 
 export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant for SPEEDX AUTO's own staff (service advisors and the owner). It uses the same parts catalog, labor guide and shop price rules as the public website assistant, but shows everything: every part option, the shop's cost, the margin, labor hours and the referral price.
 
@@ -29,7 +31,13 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - Each result is shown to staff as a quote card with the full table. In your reply, summarise in a few lines: the cheapest sensible option, the best-margin option, stock, and anything the labor note says is not included. Point out thin margins (under 25%) or items out of stock.
 - Never invent a price, cost or labor time; use only tool results. If a figure is missing (for example no cost on a part), say so.
 - Staff may ask in Chinese or English; reply in the language of their message. Be brief and practical: short lines, "•" bullets, no headings or bold.
-- If staff ask for text to send a customer, write it with customer prices only, never cost or margin (the card's "copy for customer" button does the same).`;
+- If staff ask for text to send a customer, write it with customer prices only, never cost or margin (the card's "copy for customer" button does the same).
+
+# ALLDATA estimates (开单 / 估价单 / 收据)
+- When staff ask to make an estimate, work order or receipt in ALLDATA, call draft_alldata_estimate with the job's lines. It only shows a draft card; staff check it, pick the customer in ALLDATA and press the create button themselves. Never say the estimate was created in ALLDATA.
+- Use the prices already quoted in this conversation (customer prices, never cost as the price). Parts: one line each, quantity × customer unit price, with part number and unit cost when the quote has them. Labor: kind "labor", hours × $120 (the walk-in rate) unless staff give another rate. New tires: one part line for the tires (unit price = installed price per tire − eco fee − mounting, so the total matches the quote; quantity = tire count; SKU as part number; unit cost = tire cost), one part line "BC tire eco fee" at the eco fee per tire, and one labor line "Tire mount & balance" with quantity = tire count and unit price = mounting per tire. Shop flat prices: one line at the flat price.
+- If something is missing (which part option, how many tires, the customer), ask first or leave it out and say so. Include the customer's name and phone when staff gave them, and the vehicle and mileage.
+- Printing past estimates, work orders or invoices (receipts) is done in the "ALLDATA 单据" panel at the top of the workbench; point staff there.`;
 
 const STAFF_TOOL_NAMES = ["identify_vehicle", "set_vehicle_details", "find_services", "get_estimate", "get_flat_price", "find_tires"];
 
@@ -56,6 +64,54 @@ const FIND_BRAND_TIRES: Anthropic.Beta.BetaTool = {
   },
 };
 
+const DRAFT_ALLDATA_ESTIMATE: Anthropic.Beta.BetaTool = {
+  name: "draft_alldata_estimate",
+  description:
+    "Draft an ALLDATA Shop Manager estimate for staff to review. Shows a draft card with the lines and totals; staff create it in ALLDATA themselves from the card. Prices are customer prices before tax.",
+  input_schema: {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "Short name for the job, e.g. 前刹车片 + 刹车盘" },
+      customer: {
+        anyOf: [
+          {
+            type: "object",
+            properties: { name: { type: "string" }, phone: { type: "string" }, email: { type: "string" } },
+            required: ["name", "phone", "email"],
+            additionalProperties: false,
+          },
+          { type: "null" },
+        ],
+        description: "The customer if staff named them (empty strings for unknown fields), else null",
+      },
+      vehicle: { type: "string", description: "Year make model trim, or empty" },
+      vin: { type: "string", description: "VIN if known, else empty" },
+      mileage: { anyOf: [{ type: "integer" }, { type: "null" }], description: "Odometer in km if staff gave it" },
+      lines: {
+        type: "array",
+        description: "Line items in the order they should appear",
+        items: {
+          type: "object",
+          properties: {
+            kind: { type: "string", enum: ["part", "labor"] },
+            description: { type: "string" },
+            part_number: { type: "string", description: "Part number or SKU, empty for labor" },
+            quantity: { type: "number", description: "Units for parts; hours (or units for per-item labor) for labor" },
+            unit_price: { type: "number", description: "Customer price per unit or per hour, before tax" },
+            unit_cost: { anyOf: [{ type: "number" }, { type: "null" }], description: "Shop cost per unit for parts when known" },
+            taxable: { type: "boolean" },
+          },
+          required: ["kind", "description", "part_number", "quantity", "unit_price", "unit_cost", "taxable"],
+          additionalProperties: false,
+        },
+      },
+      note: { type: "string", description: "Internal shop note, or empty" },
+    },
+    required: ["title", "customer", "vehicle", "vin", "mileage", "lines", "note"],
+    additionalProperties: false,
+  },
+};
+
 export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => STAFF_TOOL_NAMES.includes(t.name)).map((tool) => {
   if (tool.name === "get_estimate") {
     return {
@@ -72,7 +128,7 @@ export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => ST
     };
   }
   return tool;
-}).concat(FIND_BRAND_TIRES);
+}).concat(FIND_BRAND_TIRES, DRAFT_ALLDATA_ESTIMATE);
 
 const MAX_BRAND_TIRES = 12;
 
@@ -190,6 +246,11 @@ export async function runWorkbenchTool(
   dt: () => DtTireClient | null = defaultDt,
 ): Promise<{ content: string; isError: boolean; events: WorkbenchEvent[] }> {
   if (name === "find_brand_tires") return findBrandTires(dt, input, knownVehicleKey, newEstimateId);
+  if (name === "draft_alldata_estimate") {
+    const draft = parseDraftInput(input, newEstimateId().replace(/^W-/, "D-"));
+    if ("error" in draft) return { content: JSON.stringify(draft), isError: true, events: [] };
+    return { content: JSON.stringify({ status: "ok", summary: summarizeDraft(draft) }), isError: false, events: [{ type: "alldata_draft", draft }] };
+  }
   if (name === "get_estimate") {
     const vehicle = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;
     if (!vehicle) return { content: JSON.stringify({ error: "Unknown vehicle_key. Call identify_vehicle first." }), isError: true, events: [] };

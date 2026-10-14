@@ -100,3 +100,115 @@ describe("workbench conversations", () => {
     expect(await screen.findByText("答复：慢的问题")).toBeInTheDocument();
   });
 });
+
+describe("ALLDATA in the workbench", () => {
+  const requests: Array<{ op: string; args: Record<string, unknown> }> = [];
+  let fakeExtension: ((event: MessageEvent) => void) | null = null;
+
+  function installFakeExtension(answers: Record<string, unknown>) {
+    fakeExtension = (event: MessageEvent) => {
+      const data = event.data as { channel?: string; direction?: string; id?: string; op?: string; args?: Record<string, unknown> };
+      if (data?.channel !== "speedx-alldata") return;
+      // jsdom's postMessage leaves origin and source empty, so answer the way a browser would deliver it.
+      const answer = (message: Record<string, unknown>) =>
+        setTimeout(() =>
+          window.dispatchEvent(new MessageEvent("message", { data: { channel: "speedx-alldata", id: data.id, ...message }, origin: window.location.origin, source: window })),
+        );
+      if (data.direction === "ping") answer({ direction: "pong", version: "1.0.0" });
+      if (data.direction === "request") {
+        requests.push({ op: data.op!, args: data.args! });
+        answer({ direction: "response", ok: true, result: answers[data.op!] });
+      }
+    };
+    window.addEventListener("message", fakeExtension);
+  }
+
+  const draftEvent = {
+    type: "alldata_draft",
+    draft: {
+      id: "D-1",
+      title: "前刹车片",
+      customer: { name: "Test Person", phone: "604-555-0100", email: "" },
+      vehicle: "2019 Toyota Camry LE",
+      vin: "",
+      mileage: 82000,
+      lines: [
+        { kind: "part", description: "Front brake pads", partNumber: "ACT2076", quantity: 1, unitPrice: 129.99, unitCost: 78.86, taxable: true },
+        { kind: "labor", description: "Replace front pads", partNumber: "", quantity: 1.3, unitPrice: 120, unitCost: null, taxable: true },
+      ],
+      note: "",
+      createdAt: "2026-10-14T18:00:00Z",
+    },
+  };
+
+  beforeEach(async () => {
+    window.localStorage.clear();
+    requests.length = 0;
+    const { resetBridge } = await import("@/lib/workbench/alldata-bridge");
+    resetBridge();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ndjson([draftEvent, { type: "message", text: "草稿好了，请核对后创建。" }, { type: "done" }])),
+    );
+  });
+  afterEach(() => {
+    if (fakeExtension) window.removeEventListener("message", fakeExtension);
+    fakeExtension = null;
+    vi.unstubAllGlobals();
+  });
+
+  it("creates the drafted estimate through the extension and keeps the result", async () => {
+    installFakeExtension({
+      searchCustomers: { customers: [{ customerId: 55, name: "Test Person", phone: "604-555-0100", vehicles: [{ customerVehicleId: 901, description: "2019 Toyota Camry 2.5L", vin: "" }] }] },
+      createEstimate: { documentId: 444, estimateNumber: 954, customerAttached: true },
+      openPdf: { opened: true },
+    });
+    const view = render(<Workbench email="staff@example.com" />);
+    await ask("开 ALLDATA 估价单");
+    const card = await screen.findByTestId("alldata-draft");
+    expect(within(card).getByText("$285.99")).toBeInTheDocument();
+    expect(within(card).getByLabelText("ALLDATA 客户")).toHaveValue("604-555-0100");
+
+    await userEvent.click(within(card).getByRole("button", { name: "查找" }));
+    await userEvent.click(await within(card).findByRole("radio", { name: /Test Person 604-555-0100 · 2019 Toyota Camry/ }));
+    await userEvent.click(within(card).getByRole("button", { name: "在 ALLDATA 创建估价单" }));
+    expect(await within(card).findByText(/已在 ALLDATA 建好 Estimate #954/)).toBeInTheDocument();
+
+    const create = requests.find((r) => r.op === "createEstimate")!;
+    expect(create.args).toMatchObject({ customerId: 55, customerVehicleId: 901, mileageIn: 82000 });
+    expect((create.args.datalines as unknown[]).length).toBe(2);
+
+    await userEvent.click(within(card).getByRole("button", { name: "打开 PDF（打印 / 下载）" }));
+    expect(requests.at(-1)).toEqual({ op: "openPdf", args: { documentId: 444, documentType: "Estimate" } });
+
+    // The created estimate survives a reload: no second create button.
+    view.unmount();
+    render(<Workbench email="staff@example.com" />);
+    expect(screen.getByText(/已在 ALLDATA 建好 Estimate #954/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在 ALLDATA 创建估价单" })).not.toBeInTheDocument();
+  });
+
+  it("tells staff to install the extension when it is missing", async () => {
+    render(<Workbench email="staff@example.com" />);
+    await ask("开 ALLDATA 估价单");
+    const card = await screen.findByTestId("alldata-draft");
+    await userEvent.click(within(card).getByRole("button", { name: "查找" }));
+    expect(await within(card).findByRole("alert", {}, { timeout: 3000 })).toHaveTextContent("还没装 SPEEDX ALLDATA 扩展");
+  });
+
+  it("finds past documents and opens the invoice PDF", async () => {
+    installFakeExtension({
+      searchDocuments: {
+        documents: [{ documentId: 444, number: 954, state: "Invoice", voided: false, customerName: "Test Person", vehicle: "2019 Toyota Camry", updatedOn: 0, printable: ["Estimate", "Invoice"] }],
+      },
+      openPdf: { opened: true },
+    });
+    render(<Workbench email="staff@example.com" />);
+    await userEvent.click(screen.getByRole("button", { name: "ALLDATA 单据" }));
+    await userEvent.type(screen.getByLabelText("查找单据"), "Test{Enter}");
+    const row = await screen.findByTestId("alldata-document");
+    expect(row).toHaveTextContent("#954 · 发票");
+    await userEvent.click(within(row).getByRole("button", { name: "发票 / 收据 PDF" }));
+    expect(requests.at(-1)).toEqual({ op: "openPdf", args: { documentId: 444, documentType: "Invoice" } });
+  });
+});

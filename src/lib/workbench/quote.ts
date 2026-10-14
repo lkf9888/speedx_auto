@@ -285,6 +285,7 @@ export function summarizeStaffQuote(quote: StaffQuote): string {
     .map(
       (o, i) =>
         `${i + 1}. ${[o.brand, o.label].filter(Boolean).join(" ")}${o.partNumber ? ` #${o.partNumber}` : ""} ×${o.quantity}: unit $${o.unitPrice}` +
+        `${quote.kind === "tires" && o.prices.retail !== undefined ? ` (= tire $${o.prices.retail} + eco fee $${o.prices.eco} + mounting $${o.prices.mounting}, eco rounded in)` : ""}` +
         `${o.unitCost !== null ? `, cost $${o.unitCost}` : ""}; customer $${o.customerTotal} (referral $${o.referralTotal})` +
         `${o.profit !== null ? `, profit $${o.profit}${o.margin !== null ? ` (${Math.round(o.margin * 100)}%)` : ""}` : ""}${o.stock ? `, ${o.stock}` : ""}`,
     )

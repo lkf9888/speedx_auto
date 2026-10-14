@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "SPEEDX ALLDATA 助手",
+  "version": "1.0.0",
+  "description": "让 SPEEDX 维修工作台用这台电脑上已登录的 ALLDATA 建估价单、查单据、打开 PDF 打印。",
+  "permissions": ["scripting"],
+  "host_permissions": ["https://my.alldata.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://repair.speedxrental.com/*", "http://localhost/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
