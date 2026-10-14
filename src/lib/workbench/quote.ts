@@ -145,7 +145,7 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
     job.laborNote && `工时说明：${job.laborNote}`,
     job.partsNote && `零件：${job.partsNote}`,
     job.otherPartNames.length ? `可能还需要：${job.otherPartNames.join("、")}` : "",
-    "毛利 = 客户价（零件标价 + 工时）− 零件进价，未扣人工成本。",
+    "毛利 = 客户总价（零件标价 + 工时）− 零件进价，未扣人工成本。",
   ].filter(Boolean) as string[];
   return withText({
     id,
@@ -237,7 +237,7 @@ export function buildTireQuote(vehicle: string, size: string, options: StaffTire
   const notes = [
     `客户每条价 = 零售价 + 环保费（取整）+ 换胎工钱；表中“进价”为轮胎拿货价。`,
     options.some((o) => o.cost === null) ? "未配置 TIRE_MARKUP，无法显示轮胎进价。" : "",
-    "毛利 = 客户价 − 轮胎进价 − 环保费，换胎工钱计入毛利。",
+    "毛利 = 客户总价 − 轮胎进价 − 环保费，换胎工钱计入毛利。",
   ].filter(Boolean);
   return withText({
     id,
