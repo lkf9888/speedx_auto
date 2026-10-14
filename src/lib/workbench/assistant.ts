@@ -306,6 +306,7 @@ async function findBrandTires(
   const quote = buildTireQuote(decoded ? describeVehicle(decoded) : "—", size.toUpperCase(), options, count, newEstimateId(), new Date(), {
     name: "DT Tire Hub（实时）",
     retailRule: "MSRP",
+    supplier: "dt",
   });
   if (page.total !== null && page.total > page.tires.length) quote.notes.push(`DT 共有 ${page.total} 款，这里只列有货优先、价格从低到高的前 ${options.length} 款；要看某个品牌可直接说品牌名。`);
   return quoteOutcome(quote);

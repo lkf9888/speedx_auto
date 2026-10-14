@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { optionLinks, type ProductLink } from "@/lib/workbench/links";
 import type { StaffQuote } from "@/lib/workbench/quote";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
@@ -13,6 +14,36 @@ const KIND_LABEL: Record<StaffQuote["kind"], string> = {
   tires: "新轮胎",
   team_quote: "对外不报价",
 };
+
+/** Buttons that open the part at the supplier or on marketplaces, in a new tab. */
+function ProductLinks({ links }: { links: ProductLink[] }) {
+  const [copied, setCopied] = useState("");
+  if (links.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1">
+      {links.map((link) => (
+        <a
+          key={link.label}
+          href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={link.copy ? `复制零件号 ${link.copy}，再打开 ${link.label} 粘贴搜索` : `在 ${link.label} 打开`}
+          onClick={() => {
+            if (!link.copy) return;
+            void navigator.clipboard?.writeText(link.copy).then(
+              () => setCopied(link.copy!),
+              () => setCopied(""),
+            );
+          }}
+          className="rounded-full border border-ink-200 px-2 py-0.5 text-[11px] font-medium text-ink-600 hover:border-brand-400 hover:text-brand-700"
+        >
+          {link.label} ↗
+        </a>
+      ))}
+      {copied && <span className="text-[11px] text-emerald-700">已复制 {copied}，在 speedDIAL 搜索框粘贴</span>}
+    </div>
+  );
+}
 
 /** One staff quote: every option with cost and margin, and a customer-safe text to copy. */
 export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
@@ -75,6 +106,7 @@ export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
                     <div className="font-medium text-ink-900">{[o.brand, o.label].filter(Boolean).join(" ")}</div>
                     {o.partNumber && <div className="font-mono text-xs text-ink-500">#{o.partNumber}</div>}
                     {o.core !== null && <div className="text-xs text-amber-700">核心件押金 {money(o.core)}</div>}
+                    <ProductLinks links={optionLinks(quote, o)} />
                   </td>
                   <td className="px-3 py-2">{o.quantity}</td>
                   <td className="px-3 py-2 text-right">{money(o.unitPrice)}</td>

@@ -37,6 +37,8 @@ export interface StaffQuoteOption {
 export interface StaffQuote {
   id: string;
   kind: StaffQuoteKind;
+  /** Where the options come from; decides the link buttons. */
+  supplier?: "worldpac" | "dt" | "partner_tires" | "shop";
   vehicle: string;
   service: string;
   position: string;
@@ -150,6 +152,7 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
   return withText({
     id,
     kind: "labor",
+    supplier: "worldpac",
     vehicle,
     service: job.serviceName,
     position: job.position,
@@ -222,9 +225,10 @@ export interface TireQuoteSource {
   name: string;
   /** How the customer price was set, e.g. "零售价 = MSRP". */
   retailRule: string;
+  supplier: "dt" | "partner_tires";
 }
 
-const PARTNER_LIST: TireQuoteSource = { name: "合作轮胎价目表", retailRule: "零售价" };
+const PARTNER_LIST: TireQuoteSource = { name: "合作轮胎价目表", retailRule: "零售价", supplier: "partner_tires" };
 
 /** New tires: installed price per tire for the customer; cost, eco fee and mounting shown apart. */
 export function buildTireQuote(
@@ -263,6 +267,7 @@ export function buildTireQuote(
   return withText({
     id,
     kind: "tires",
+    supplier: source.supplier,
     vehicle,
     service: `新轮胎（含安装）· ${size}`,
     position: "",
