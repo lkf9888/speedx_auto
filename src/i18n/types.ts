@@ -1,5 +1,5 @@
 import type { PriceGuideJob, PriceGuideSystem } from "@/lib/repair-price-guide";
-import type { RepairServiceSlug } from "@/lib/site-routes";
+import type { RepairLandingSlug, RepairServiceSlug } from "@/lib/site-routes";
 
 export interface LocalizedFaqItem {
   question: string;
@@ -101,6 +101,31 @@ export interface PriceGuideCopy {
   linkLabel: string;
 }
 
+/** Paid-social landing page. {placeholders} are filled from the price data. */
+export interface RepairLandingCopy {
+  metaTitle: string;
+  metaDescription: string;
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  highlights: Array<{ value: string; label: string }>;
+  priceTitle: string;
+  priceRows: Array<{ label: string; price: string }>;
+  pointsTitle: string;
+  points: Array<{ title: string; body: string }>;
+  stepsTitle: string;
+  steps: string[];
+  trustTitle: string;
+  trust: string[];
+  note: string;
+  ctaTitle: string;
+  ctaBody: string;
+  whatsappText: string;
+  /** Label of the large WhatsApp button. */
+  whatsappLabel: string;
+  learnMoreLabel: string;
+}
+
 export interface AutoRepairCopy {
   /** Shorter lead paragraph shown on the page; `summary` stays the fuller text for metadata and schema. */
   heroSummary?: string;
@@ -158,4 +183,5 @@ export interface AutoRepairCopy {
   lastUpdated: string;
   services: Record<RepairServiceSlug, RepairServiceCopy>;
   priceGuide: PriceGuideCopy;
+  landing: Record<RepairLandingSlug, RepairLandingCopy>;
 }

@@ -129,6 +129,13 @@ export function priceGuideValues(): Record<string, string> {
     oilCar: usd(FLAT_PRICES.oil.standard.regular),
     oilCarPremium: usd(FLAT_PRICES.oil.premium.regular),
     oilLarge: formatRange(FLAT_PRICES.oil.standard.large, FLAT_PRICES.oil.premium.large),
+    frontPadsFrom: usd(jobRange("frontPads").low),
+    tireUpTo18: usd(FLAT_PRICES.tirePerWheel.up_to_18),
+    tireOver18: usd(FLAT_PRICES.tirePerWheel.over_18),
+    tireRunFlat: usd(FLAT_PRICES.tirePerWheel.run_flat),
+    tireOffRoad: usd(FLAT_PRICES.tirePerWheel.off_road),
+    acR134a: usd(FLAT_PRICES.acRecharge.r134a),
+    acR1234yf: usd(FLAT_PRICES.acRecharge.r1234yf),
   };
 }
 

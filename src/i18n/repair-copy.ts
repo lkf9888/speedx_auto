@@ -8,6 +8,11 @@ import {
   zhCNPriceGuide,
   zhTWPriceGuide,
 } from "@/i18n/repair-price-guide-copy";
+import {
+  enRepairLanding,
+  zhCNRepairLanding,
+  zhTWRepairLanding,
+} from "@/i18n/repair-landing-copy";
 import type { AutoRepairCopy } from "@/i18n/types";
 
 export const enAutoRepair: AutoRepairCopy = {
@@ -246,6 +251,7 @@ export const enAutoRepair: AutoRepairCopy = {
   lastUpdated: "Updated October 13, 2026",
   services: enRepairServices,
   priceGuide: enPriceGuide,
+  landing: enRepairLanding,
 };
 
 export const zhCNAutoRepair: AutoRepairCopy = {
@@ -440,9 +446,10 @@ export const zhCNAutoRepair: AutoRepairCopy = {
   lastUpdated: "更新于 2026 年 10 月 13 日",
   services: zhCNRepairServices,
   priceGuide: zhCNPriceGuide,
+  landing: zhCNRepairLanding,
 };
 
-const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide"> = {
+const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide" | "landing"> = {
   metaTitle: "列治文車房 · 汽車維修與 Tesla 電動車維修",
   metaDescription:
     "列治文車房，近溫哥華機場：保養、煞車、故障診斷、避震轉向、Tesla 電動車維修。工時費按行業標準工時收費。粵語、普通話、英語服務。",
@@ -637,4 +644,5 @@ export const zhTWAutoRepair: AutoRepairCopy = {
   ...zhTWHub,
   services: zhTWRepairServices,
   priceGuide: zhTWPriceGuide,
+  landing: zhTWRepairLanding,
 };

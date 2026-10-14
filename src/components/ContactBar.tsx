@@ -21,6 +21,8 @@ interface ContactBarProps {
   theme?: "light" | "dark";
   /** Anchor of the AI estimate assistant; adds the prominent quote button above the contact buttons. */
   quoteHref?: string;
+  /** Prefilled WhatsApp message, so the shop can tell which page or ad the chat came from. */
+  whatsappText?: string;
 }
 
 export function ContactBar({
@@ -32,7 +34,11 @@ export function ContactBar({
   variant = "inline",
   theme = "light",
   quoteHref,
+  whatsappText,
 }: ContactBarProps) {
+  const whatsappHref = whatsappText
+    ? `${whatsappLink}?text=${encodeURIComponent(whatsappText)}`
+    : whatsappLink;
   const [copyStatus, setCopyStatus] = useState<"success" | "failure" | null>(
     null,
   );
@@ -101,7 +107,7 @@ export function ContactBar({
               <WeChatIcon /> {dict.cta.contactWeChat}
             </button>
             <a
-              href={whatsappLink}
+              href={whatsappHref}
               target="_blank"
               rel="noopener noreferrer"
               className={`${stickyButton} bg-[#e9f8ef] text-[#137333]`}
@@ -145,7 +151,7 @@ export function ContactBar({
         <span className="font-bold">{company.wechatId}</span>
       </button>
       <a
-        href={whatsappLink}
+        href={whatsappHref}
         target="_blank"
         rel="noopener noreferrer"
         className={ghost}

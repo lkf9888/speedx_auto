@@ -16,6 +16,18 @@ export const repairServiceSlugs = [
 
 export type RepairServiceSlug = (typeof repairServiceSlugs)[number];
 
+/**
+ * Paid-social landing pages at /<locale>/lp/<slug>. They are noindex and stay
+ * out of routePaths, so the sitemap and hreflang catalog never list them.
+ */
+export const repairLandingSlugs = ["winter-tires", "tesla-ev"] as const;
+
+export type RepairLandingSlug = (typeof repairLandingSlugs)[number];
+
+export function landingPath(locale: Locale, slug: RepairLandingSlug): string {
+  return `/${locale}/lp/${slug}`;
+}
+
 export const routePaths = {
   home: "",
   hosting: "/hosting",
