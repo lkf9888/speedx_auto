@@ -29,6 +29,7 @@ describe("StaffLoginMenu", () => {
     expect(items.map((item) => item.getAttribute("href"))).toEqual([
       "https://carwash.speedxrental.com",
       "https://gps.speedxrental.com",
+      "https://repair.speedxrental.com",
     ]);
     expect(
       screen.getByRole("button", { name: /Staff Login/i }),

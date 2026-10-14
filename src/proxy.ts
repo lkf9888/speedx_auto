@@ -13,7 +13,29 @@ function detectLocaleFromAcceptLanguage(accept: string | null): string {
   return defaultLocale;
 }
 
+/** The staff repair workbench is served only on its own subdomain (behind Cloudflare Access). */
+const WORKBENCH_HOST = process.env.WORKBENCH_HOST || "repair.speedxrental.com";
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+function workbenchRoute(request: NextRequest): NextResponse | null {
+  const { pathname } = request.nextUrl;
+  const host = (request.headers.get("host") ?? "").toLowerCase();
+  const isWorkbenchPath = pathname === "/workbench" || pathname.startsWith("/workbench/");
+  if (host.split(":")[0] === WORKBENCH_HOST) {
+    if (pathname === "/") return NextResponse.rewrite(new URL("/workbench", request.url));
+    if (isWorkbenchPath) return NextResponse.next();
+    return new NextResponse(null, { status: 404 });
+  }
+  if (isWorkbenchPath) {
+    return LOCAL_HOST.test(host) ? NextResponse.next() : new NextResponse(null, { status: 404 });
+  }
+  return null;
+}
+
 export default function proxy(request: NextRequest) {
+  const workbench = workbenchRoute(request);
+  if (workbench) return workbench;
+
   const { pathname } = request.nextUrl;
 
   const pathnameHasLocale = locales.some(

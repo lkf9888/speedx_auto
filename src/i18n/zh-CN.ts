@@ -29,6 +29,10 @@ export const zhCN: Dictionary = {
           name: "车队定位",
           description: "车辆实时位置与历史轨迹",
         },
+        repair: {
+          name: "维修工作台",
+          description: "内部报价：进价、毛利与完整零件选项",
+        },
       },
     },
   },

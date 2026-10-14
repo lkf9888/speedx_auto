@@ -6,11 +6,12 @@
  * entry points. Adding a system here is enough to surface it in the staff menu —
  * remember to add matching copy under `nav.staff.apps` in every locale.
  */
-export const staffAppKeys = ["carwash", "gps"] as const;
+export const staffAppKeys = ["carwash", "gps", "repair"] as const;
 
 export type StaffAppKey = (typeof staffAppKeys)[number];
 
 export const staffAppUrls: Record<StaffAppKey, string> = {
   carwash: "https://carwash.speedxrental.com",
   gps: "https://gps.speedxrental.com",
+  repair: "https://repair.speedxrental.com",
 };

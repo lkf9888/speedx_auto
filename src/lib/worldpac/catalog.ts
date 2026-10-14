@@ -6,6 +6,9 @@
  * wholesalePrice, dcDirectUnitPrice, corePrice). Sanitizing happens here so
  * nothing downstream — including the model — can see what the shop pays.
  *
+ * The one exception is the staff section at the end (quoteServiceForStaff),
+ * used only by the internal repair workbench behind Cloudflare Access.
+ *
  * None of these calls touch speedDIAL's vehicle or search history endpoints,
  * so chatbot lookups do not clutter the shop's own speedDIAL history.
  */
@@ -566,16 +569,33 @@ export function representativeOptions(options: PartOption[], max = 3): PartOptio
   return [...new Set(picks)].slice(0, max);
 }
 
-export async function quoteService(
+/**
+ * Labor time and the raw parts response for one service. Shared by the public
+ * quote (sanitized to list price below) and the staff workbench quote.
+ */
+interface ServiceData {
+  status: "ok";
+  serviceName: string;
+  position: string;
+  laborHours: number;
+  laborNote: string;
+  primaryPartName: string;
+  otherPartNames: string[];
+  partsNote: string;
+  hasPartCategory: boolean;
+  /** Raw response, account prices included: only sanitizePartQuotes or staffPartQuotes may read it. */
+  pna: PnaResponse | null;
+  positionId: number | null;
+}
+
+type NotOk = Exclude<ServiceQuote, { status: "ok" }>;
+
+async function loadServiceData(
   api: CatalogApi,
   vehicle: VehicleRef,
   serviceId: number,
   position: string | null,
-): Promise<ServiceQuote> {
-  const cacheKey = `${vehicleCacheKey(vehicle)}|${serviceId}|${position ?? ""}`;
-  const cached = quoteCache.get(cacheKey);
-  if (cached) return cached;
-
+): Promise<ServiceData | NotOk> {
   const attrs = attributePayload(vehicle);
   const list = await api.post<LaborListResponse>("labor-ops-list", {
     refinedVehAttrIDs: attrs,
@@ -628,12 +648,12 @@ export async function quoteService(
   const applications = labor.applications ?? [];
   const primary = pickPrimaryCategory(serviceName, applications);
 
-  let partOptions: PartOption[] = [];
+  let pna: PnaResponse | null = null;
   let partsNote = "";
   if (primary?.categoryName && isSoldByVolume(primary.categoryName)) {
     partsNote = `${primary.categoryName} is billed by the amount used, so it is not included in this estimate; the shop confirms it.`;
   } else if (primary?.categoryCode) {
-    const pna = await api.post<PnaResponse>("pna360_cat", {
+    pna = await api.post<PnaResponse>("pna360_cat", {
       attributes: attrs,
       partTypes: [
         {
@@ -645,27 +665,15 @@ export async function quoteService(
         },
       ],
     });
-    partOptions = representativeOptions(
-      filterRealisticOptions(sanitizePartQuotes(pna, operation.positionID ?? operation.position?.id ?? null)),
-    );
   }
 
-  // No part price usually means the catalog needs the trim/engine first (e.g. brake pads).
-  if (partOptions.length === 0 && !partsNote && primary?.categoryCode) {
-    const refined = await refineVehicle(api, vehicle);
-    if (refined.status === "needs_details") {
-      return { status: "need_details", questions: refined.questions };
-    }
-  }
-
-  const quote: ServiceQuote = {
+  return {
     status: "ok",
     serviceName,
     position: positionLabel(operation),
     laborHours: Math.round(hours * 100) / 100,
     laborNote: (labor.applicationNote ?? "").slice(0, 400),
     primaryPartName: primary?.categoryName ?? "",
-    partOptions,
     otherPartNames: [
       ...new Set(
         applications
@@ -674,7 +682,165 @@ export async function quoteService(
       ),
     ].slice(0, 6),
     partsNote,
+    hasPartCategory: Boolean(primary?.categoryCode),
+    pna,
+    positionId: operation.positionID ?? operation.position?.id ?? null,
+  };
+}
+
+/** A part needs a priced option, or the catalog wants the trim/engine first (e.g. brake pads). */
+async function detailsNeededForParts(api: CatalogApi, vehicle: VehicleRef): Promise<NotOk | null> {
+  const refined = await refineVehicle(api, vehicle);
+  return refined.status === "needs_details" ? { status: "need_details", questions: refined.questions } : null;
+}
+
+export async function quoteService(
+  api: CatalogApi,
+  vehicle: VehicleRef,
+  serviceId: number,
+  position: string | null,
+): Promise<ServiceQuote> {
+  const cacheKey = `${vehicleCacheKey(vehicle)}|${serviceId}|${position ?? ""}`;
+  const cached = quoteCache.get(cacheKey);
+  if (cached) return cached;
+
+  const data = await loadServiceData(api, vehicle, serviceId, position);
+  if (data.status !== "ok") return data;
+  const partOptions = data.pna
+    ? representativeOptions(filterRealisticOptions(sanitizePartQuotes(data.pna, data.positionId)))
+    : [];
+  if (partOptions.length === 0 && !data.partsNote && data.hasPartCategory) {
+    const ask = await detailsNeededForParts(api, vehicle);
+    if (ask) return ask;
+  }
+
+  const quote: ServiceQuote = {
+    status: "ok",
+    serviceName: data.serviceName,
+    position: data.position,
+    laborHours: data.laborHours,
+    laborNote: data.laborNote,
+    primaryPartName: data.primaryPartName,
+    partOptions,
+    otherPartNames: data.otherPartNames,
+    partsNote: data.partsNote,
   };
   quoteCache.set(cacheKey, quote);
   return quote;
+}
+
+// ------------------------------------------------------------- staff quotes
+//
+// Staff only. The workbench (repair.speedxrental.com, behind Cloudflare Access
+// and a verified Access token) shows account prices on purpose. Nothing on the
+// public site imports these.
+
+/** Price-like fields WorldPac returns per part; which one is the shop's cost is configurable. */
+export const ACCOUNT_PRICE_FIELDS = [
+  "listPrice",
+  "unitPrice",
+  "jobberPrice",
+  "wholesalePrice",
+  "dcDirectUnitPrice",
+  "corePrice",
+] as const;
+
+export interface StaffPartOption extends PartOption {
+  /** Every price-like number on the part, by WorldPac field name. */
+  prices: Record<string, number>;
+  partNumber: string;
+  brand: string;
+  availability: string;
+  qtyAvailable: number | null;
+  /** Other scalar fields, so staff can see what WorldPac sends while we learn the data. */
+  fields: Record<string, string | number>;
+}
+
+const PART_NUMBER_FIELDS = ["partNumber", "partNo", "productNumber", "itemNumber", "mfgPartNumber", "catalogNumber"];
+const BRAND_FIELDS = ["brandName", "brand", "manufacturerName", "manufacturer", "lineDescription", "mfgName"];
+
+function firstString(q: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = q[key];
+    if (typeof value === "string" && value.trim()) return value.trim().slice(0, 80);
+    if (typeof value === "number") return String(value);
+  }
+  return "";
+}
+
+export function staffPartQuotes(response: PnaResponse, positionId: number | null): StaffPartOption[] {
+  const apps = new Map((response.applications ?? []).map((a) => [String(a.appID), a]));
+  const all = (response.quotes ?? []).flatMap((q) => q.productQuotes ?? []);
+  const matchesPosition = (q: Record<string, unknown>) => {
+    if (positionId === null || positionId < 0) return true;
+    const pos = q.position as { id?: number } | undefined;
+    return pos?.id === undefined || pos.id === positionId || pos.id === -1;
+  };
+  const inPosition = all.filter(matchesPosition);
+  const source = inPosition.length > 0 ? inPosition : all;
+  const options: StaffPartOption[] = [];
+  for (const q of source) {
+    const listPrice = Number(q.listPrice);
+    if (!Number.isFinite(listPrice) || listPrice <= 0) continue;
+    const app = apps.get(String(q.appID));
+    const quantity = Number(app?.qtyPerCar);
+    const prices: Record<string, number> = {};
+    const fields: Record<string, string | number> = {};
+    for (const [key, value] of Object.entries(q)) {
+      if (typeof value === "number" && Number.isFinite(value) && /price|cost|core/i.test(key)) {
+        prices[key] = Math.round(value * 100) / 100;
+      } else if ((typeof value === "string" && value.length <= 80) || typeof value === "number") {
+        if (Object.keys(fields).length < 30) fields[key] = value;
+      }
+    }
+    const qty = Number(q.qtyAvailable);
+    options.push({
+      description: String(q.partDescription ?? "").slice(0, 120),
+      series: String(q.seriesDescription ?? "").slice(0, 80),
+      listPrice: Math.round(listPrice * 100) / 100,
+      quantity: Number.isInteger(quantity) && quantity > 0 && quantity <= 8 ? quantity : 1,
+      inStockLocally: /local/i.test(String(q.availability ?? "")) && qty > 0,
+      note: String(app?.applicationNote ?? "").slice(0, 160),
+      prices,
+      partNumber: firstString(q, PART_NUMBER_FIELDS),
+      brand: firstString(q, BRAND_FIELDS),
+      availability: String(q.availability ?? "").slice(0, 60),
+      qtyAvailable: Number.isFinite(qty) ? qty : null,
+      fields,
+    });
+  }
+  return options
+    .filter((o) => !BULK_PACKAGING.test(o.description))
+    .sort((a, b) => a.listPrice * a.quantity - b.listPrice * b.quantity)
+    .slice(0, 15);
+}
+
+export type StaffServiceQuote =
+  | (Omit<Extract<ServiceQuote, { status: "ok" }>, "partOptions"> & { partOptions: StaffPartOption[] })
+  | NotOk;
+
+export async function quoteServiceForStaff(
+  api: CatalogApi,
+  vehicle: VehicleRef,
+  serviceId: number,
+  position: string | null,
+): Promise<StaffServiceQuote> {
+  const data = await loadServiceData(api, vehicle, serviceId, position);
+  if (data.status !== "ok") return data;
+  const partOptions = data.pna ? staffPartQuotes(data.pna, data.positionId) : [];
+  if (partOptions.length === 0 && !data.partsNote && data.hasPartCategory) {
+    const ask = await detailsNeededForParts(api, vehicle);
+    if (ask) return ask;
+  }
+  return {
+    status: "ok",
+    serviceName: data.serviceName,
+    position: data.position,
+    laborHours: data.laborHours,
+    laborNote: data.laborNote,
+    primaryPartName: data.primaryPartName,
+    partOptions,
+    otherPartNames: data.otherPartNames,
+    partsNote: data.partsNote,
+  };
 }

@@ -3,7 +3,7 @@ import { decodeVehicleKey, describeVehicle, type CatalogApi } from "@/lib/worldp
 import { WorldpacError } from "@/lib/worldpac/client";
 import { detectCustomerLanguage, safetyWarning, SYSTEM_PROMPT, turnContext } from "./prompt";
 import { matchScript } from "./script";
-import { runTool, statusForTool, TOOLS, type ChatEvent } from "./tools";
+import { runTool, statusForTool, TOOLS, type ChatEvent, type ToolOutcome } from "./tools";
 
 /**
  * Model for the chat and the follow-up summary. Override with
@@ -48,10 +48,59 @@ export interface ChatRequest {
   vehicleKey: string | null;
 }
 
-export interface ChatResult {
+export interface ChatResult<E = ChatEvent> {
   text: string;
-  events: ChatEvent[];
+  events: E[];
 }
+
+/**
+ * How a chat behaves: the public estimate assistant and the staff workbench
+ * share the loop below and differ only here (model, instructions, tools).
+ */
+export interface ChatProfile<E extends { type: string }> {
+  model: string;
+  effort: "low" | "medium" | "high";
+  system: string;
+  tools: Anthropic.Beta.BetaTool[];
+  /** Per-turn system note (language, known vehicle, date…). */
+  turnContext(request: ChatRequest, earlierCustomerMessages: string[], vehicle: { key: string; label: string } | null): string;
+  runTool(
+    api: CatalogApi,
+    name: string,
+    input: Record<string, unknown>,
+    newEstimateId: () => string,
+    cardLocale: "en" | "zh-CN" | "zh-TW",
+    knownVehicleKey: string | null,
+  ): Promise<{ content: string; isError: boolean; events: E[] }>;
+  statusEvent(toolName: string): E;
+  /** Fixed text shown above the reply (public: safety warning). */
+  preface?(message: string, language: string): string | null;
+  /** What the model is told when a lookup fails. */
+  toolFailure(catalogDown: boolean): string;
+}
+
+export const PUBLIC_PROFILE: ChatProfile<ChatEvent> = {
+  model: MODEL,
+  effort: "low",
+  system: SYSTEM_PROMPT,
+  tools: TOOLS,
+  turnContext: (request, earlier, vehicle) => turnContext(request.locale, vehicle, request.message, earlier),
+  runTool: async (api, name, input, newEstimateId, cardLocale, knownVehicleKey): Promise<ToolOutcome> => {
+    const outcome = await runTool(api, name, input, newEstimateId, cardLocale, knownVehicleKey);
+    return {
+      ...outcome,
+      events: outcome.events.map((event) =>
+        event.type === "estimate" ? { ...event, estimate: { ...event.estimate, lang: cardLocale } } : event,
+      ),
+    };
+  },
+  statusEvent: (name) => ({ type: "status", status: statusForTool(name) }),
+  preface: (message, language) => safetyWarning(message, language),
+  toolFailure: (catalogDown) =>
+    catalogDown
+      ? "The parts catalog is temporarily unavailable. Offer to have the team confirm the price by WhatsApp or phone."
+      : "Lookup failed. Offer to have the team confirm by WhatsApp or phone.",
+};
 
 const SAFE_LABEL = /[^A-Za-z0-9 .,/()+-]/g;
 
@@ -73,13 +122,14 @@ function knownVehicle(vehicleKey: string | null) {
   return { key: vehicleKey, label: describeVehicle(vehicle).replace(SAFE_LABEL, "").slice(0, 100) };
 }
 
-export async function runChat(
+export async function runChat<E extends { type: string } = ChatEvent>(
   client: MessagesClient,
   api: CatalogApi,
   request: ChatRequest,
-  onEvent: (event: ChatEvent) => void,
+  onEvent: (event: E) => void,
   newEstimateId: () => string,
-): Promise<ChatResult> {
+  profile: ChatProfile<E> = PUBLIC_PROFILE as unknown as ChatProfile<E>,
+): Promise<ChatResult<E>> {
   const earlierCustomerMessages = request.history.filter((t) => t.role === "user").map((t) => t.text).reverse();
   const language = detectCustomerLanguage(request.message, request.locale, earlierCustomerMessages);
   // Cards are labelled in the customer's language, which can differ from the page's.
@@ -89,29 +139,23 @@ export async function runChat(
   const messages: Anthropic.Beta.BetaMessageParam[] = [
     ...request.history.map((turn) => ({ role: turn.role, content: turn.text })),
     { role: "user", content: request.message },
-    { role: "system", content: turnContext(
-        request.locale,
-        knownVehicle(request.vehicleKey),
-        request.message,
-        earlierCustomerMessages,
-      ),
-    },
+    { role: "system", content: profile.turnContext(request, earlierCustomerMessages, knownVehicle(request.vehicleKey)) },
   ];
-  const events: ChatEvent[] = [];
-  const emit = (event: ChatEvent) => {
+  const events: E[] = [];
+  const emit = (event: E) => {
     events.push(event);
     onEvent(event);
   };
 
   for (let step = 0; step < MAX_STEPS; step += 1) {
     const response = await client.beta.messages.create({
-      model: MODEL,
+      model: profile.model,
       max_tokens: 8000,
-      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-      tools: TOOLS,
+      system: [{ type: "text", text: profile.system, cache_control: { type: "ephemeral" } }],
+      tools: profile.tools,
       messages,
-      output_config: { effort: "low" },
-      ...fallbackOptions(MODEL),
+      output_config: { effort: profile.effort },
+      ...fallbackOptions(profile.model),
     });
 
     if (response.stop_reason === "refusal") {
@@ -125,7 +169,7 @@ export async function runChat(
       (block): block is Anthropic.Beta.BetaToolUseBlock => block.type === "tool_use",
     );
     if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
-      const warning = safetyWarning(request.message, language);
+      const warning = profile.preface?.(request.message, language) ?? null;
       const answer = matchScript(
         toPlainText(
           response.content
@@ -143,12 +187,13 @@ export async function runChat(
     for (const use of toolUses) {
       // The vehicle confirmed so far (earlier turns or this one), so rules that
       // depend on it don't rely on the model remembering to pass it along.
-      const knownVehicleKey =
-        [...events].reverse().find((e): e is Extract<ChatEvent, { type: "vehicle" }> => e.type === "vehicle")?.vehicle.key ??
-        request.vehicleKey;
-      emit({ type: "status", status: statusForTool(use.name) });
+      const lastVehicle = [...events].reverse().find((e) => e.type === "vehicle") as
+        | { vehicle?: { key?: string } }
+        | undefined;
+      const knownVehicleKey = lastVehicle?.vehicle?.key ?? request.vehicleKey;
+      emit(profile.statusEvent(use.name));
       try {
-        const outcome = await runTool(
+        const outcome = await profile.runTool(
           api,
           use.name,
           (use.input ?? {}) as Record<string, unknown>,
@@ -156,9 +201,7 @@ export async function runChat(
           cardLocale,
           knownVehicleKey,
         );
-        outcome.events
-          .map((event) => (event.type === "estimate" ? { ...event, estimate: { ...event.estimate, lang: cardLocale } } : event))
-          .forEach(emit);
+        outcome.events.forEach(emit);
         results.push({
           type: "tool_result",
           tool_use_id: use.id,
@@ -166,10 +209,7 @@ export async function runChat(
           is_error: outcome.isError,
         });
       } catch (error) {
-        const message =
-          error instanceof WorldpacError
-            ? "The parts catalog is temporarily unavailable. Offer to have the team confirm the price by WhatsApp or phone."
-            : "Lookup failed. Offer to have the team confirm by WhatsApp or phone.";
+        const message = profile.toolFailure(error instanceof WorldpacError);
         if (!(error instanceof WorldpacError)) console.error("repair-chat tool error", error);
         else console.error("repair-chat worldpac error", error.kind, error.message);
         results.push({ type: "tool_result", tool_use_id: use.id, content: message, is_error: true });

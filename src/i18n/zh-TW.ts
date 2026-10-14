@@ -29,6 +29,10 @@ export const zhTW: Dictionary = {
           name: "車隊定位",
           description: "車輛即時位置與歷史軌跡",
         },
+        repair: {
+          name: "維修工作台",
+          description: "內部報價：進價、毛利與完整零件選項",
+        },
       },
     },
   },

@@ -28,6 +28,10 @@ export const en = {
           name: "Fleet GPS",
           description: "Live vehicle location and trip history",
         },
+        repair: {
+          name: "Repair Workbench",
+          description: "Internal quotes with parts cost and margin",
+        },
       },
     },
   },
