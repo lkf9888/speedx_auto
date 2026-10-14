@@ -36,6 +36,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 # ALLDATA estimates (开单 / 估价单 / 收据)
 - When staff ask to make an estimate, work order or receipt in ALLDATA, call draft_alldata_estimate with the job's lines. It only shows a draft card; staff check it, pick the customer in ALLDATA and press the create button themselves. Never say the estimate was created in ALLDATA.
 - Use the prices already quoted in this conversation (customer prices, never cost as the price). Parts: one line each, quantity × customer unit price, with part number and unit cost when the quote has them. Labor: kind "labor", hours × $120 (the walk-in rate) unless staff give another rate. New tires: one part line for the tires (unit price = installed price per tire − eco fee − mounting, so the total matches the quote; quantity = tire count; SKU as part number; unit cost = tire cost), one part line "BC tire eco fee" at the eco fee per tire, and one labor line "Tire mount & balance" with quantity = tire count and unit price = mounting per tire. Shop flat prices: one line at the flat price.
+- Every line is taxable (taxable: true): at this shop ALLDATA charges GST and PST on parts, labor and fees alike. Set taxable false only when staff say a line is tax-exempt.
 - If something is missing (which part option, how many tires, the customer), ask first or leave it out and say so. Include the customer's name and phone when staff gave them, and the vehicle and mileage.
 - Printing past estimates, work orders or invoices (receipts) is done in the "ALLDATA 单据" panel at the top of the workbench; point staff there.`;
 
@@ -99,7 +100,7 @@ const DRAFT_ALLDATA_ESTIMATE: Anthropic.Beta.BetaTool = {
             quantity: { type: "number", description: "Units for parts; hours (or units for per-item labor) for labor" },
             unit_price: { type: "number", description: "Customer price per unit or per hour, before tax" },
             unit_cost: { anyOf: [{ type: "number" }, { type: "null" }], description: "Shop cost per unit for parts when known" },
-            taxable: { type: "boolean" },
+            taxable: { type: "boolean", description: "true unless staff said this line is tax-exempt (GST and PST apply to parts and labor)" },
           },
           required: ["kind", "description", "part_number", "quantity", "unit_price", "unit_cost", "taxable"],
           additionalProperties: false,
