@@ -16,14 +16,17 @@ function brakesCatalog(onPost: (path: string, data: Record<string, unknown>) => 
     async post<T>(path: string, data: unknown) {
       const d = data as Record<string, unknown>;
       if (path === "category/details") {
-        if (!d.categoryCode) return { replacementParts: [{ code: "BR", description: "Brake" }] } as T;
-        return {
-          laborOperations: [{ acaPartTerminologyID: 1684, description: "Brake Pads R&R" }],
-          replacementParts: [
-            { code: "N1896", description: "Disc Brake Rotor" },
-            { code: "N1010", description: "Brake Pad Set" },
-          ],
-        } as T;
+        // speedDIAL's three levels: systems, their subcategories, then the part types.
+        if (!d.categoryCode) return { replacementParts: [{ code: "B", description: "Brake" }, { code: "E", description: "Engine" }] } as T;
+        if (d.categoryCode === "B") {
+          return { laborOperations: [{ acaPartTerminologyID: 1684, description: "Brake Pads R&R" }], replacementParts: [{ code: "BA", description: "Brake" }] } as T;
+        }
+        if (d.categoryCode === "E") return { replacementParts: [{ code: "EA", description: "Belts & Cooling" }] } as T;
+        if (d.categoryCode === "BA") {
+          return { partTypes: [{ code: "N1896", description: "Disc Brake Rotor" }, { code: "N1010", description: "Brake Pad Set" }] } as T;
+        }
+        if (d.categoryCode === "EA") return { partTypes: [{ code: "N2000", description: "Water Pump" }] } as T;
+        throw new Error(`unexpected category ${String(d.categoryCode)}`);
       }
       return onPost(path, d) as T;
     },

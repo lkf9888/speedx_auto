@@ -443,13 +443,17 @@ export interface PartType {
 
 interface VehicleCatalog {
   services: ServiceMatch[];
-  partTypes: PartType[];
+  /** Subcategories under each system; their part types are loaded on demand. */
+  subcategories: PartType[];
 }
 
 const catalogCache = new TtlCache<VehicleCatalog>(WEEK_MS, 500);
 
 interface CategoryResponse {
+  /** At the root: systems. Under a system: its subcategories. */
   replacementParts?: Array<{ code?: string; description?: string }>;
+  /** Under a subcategory: the part types speedDIAL can price (pna360_cat category codes). */
+  partTypes?: Array<{ code?: string; description?: string }>;
   laborOperations?: Array<{ acaPartTerminologyID?: number; description?: string }>;
 }
 
@@ -477,19 +481,19 @@ async function vehicleCatalog(api: CatalogApi, vehicle: VehicleRef): Promise<Veh
           services: (detail.laborOperations ?? [])
             .filter((op) => Number.isInteger(op.acaPartTerminologyID) && op.description)
             .map((op) => ({ serviceId: op.acaPartTerminologyID!, name: op.description!, system: system.description! })),
-          partTypes: (detail.replacementParts ?? [])
+          subcategories: (detail.replacementParts ?? [])
             .filter((p) => p.code && p.description)
             .map((p) => ({ code: p.code!, name: p.description!, system: system.description! })),
         };
       }),
     );
     const services = new Map<number, ServiceMatch>();
-    const partTypes = new Map<string, PartType>();
+    const subcategories = new Map<string, PartType>();
     for (const group of perSystem) {
       for (const service of group.services) services.set(service.serviceId, service);
-      for (const part of group.partTypes) partTypes.set(part.code, part);
+      for (const sub of group.subcategories) subcategories.set(sub.code, sub);
     }
-    return { services: [...services.values()], partTypes: [...partTypes.values()] };
+    return { services: [...services.values()], subcategories: [...subcategories.values()] };
   });
 }
 
@@ -937,13 +941,41 @@ export type StaffPartsLookup =
  * cars whose labor guide has no rotor job, a strut when the strut job's part
  * list only has the mount). Same account prices as quoteServiceForStaff.
  */
+const partTypeCache = new TtlCache<PartType[]>(WEEK_MS, 2000);
+const SUBCATEGORIES_TO_OPEN = 6;
+
+/** Part types under the subcategories that best match the query (speedDIAL's third catalog level). */
+async function partTypesFor(api: CatalogApi, vehicle: VehicleRef, query: string): Promise<PartType[]> {
+  const { subcategories } = await vehicleCatalog(api, vehicle);
+  const ranked = subcategories
+    .map((sub) => ({ sub, score: Math.max(scoreService(query, sub.name), scoreService(query, `${sub.system} ${sub.name}`) * 0.8) }))
+    .sort((a, b) => b.score - a.score);
+  const picked = (ranked.some((r) => r.score > 0) ? ranked.filter((r) => r.score > 0) : ranked).slice(0, SUBCATEGORIES_TO_OPEN);
+  const lists = await Promise.all(
+    picked.map(({ sub }) =>
+      partTypeCache.getOrLoad(`${vehicleCacheKey(vehicle)}|${sub.code}`, async () => {
+        const detail = await api.post<CategoryResponse>("category/details", {
+          attributes: attributePayload(vehicle),
+          baseVehicleID: String(vehicle.baseVehicleId),
+          categoryType: "replacementParts",
+          categoryCode: sub.code,
+        });
+        return (detail.partTypes ?? [])
+          .filter((p) => p.code && p.description)
+          .map((p) => ({ code: p.code!, name: p.description!, system: sub.name }));
+      }),
+    ),
+  );
+  return lists.flat();
+}
+
 export async function staffPartsByName(
   api: CatalogApi,
   vehicle: VehicleRef,
   query: string,
   position: string | null,
 ): Promise<StaffPartsLookup> {
-  const { partTypes } = await vehicleCatalog(api, vehicle);
+  const partTypes = await partTypesFor(api, vehicle, query);
   const scored = partTypes
     .map((part) => ({ part, score: Math.max(scoreService(query, part.name), scoreService(query, `${part.system} ${part.name}`) * 0.6) }))
     .filter((p) => p.score > 0)
