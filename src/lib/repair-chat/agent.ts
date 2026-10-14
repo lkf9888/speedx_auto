@@ -46,6 +46,8 @@ export interface ChatRequest {
   message: string;
   locale: string;
   vehicleKey: string | null;
+  /** Content blocks (photos, PDFs, file text) placed before the message; only the staff workbench sets this. */
+  attachments?: Anthropic.Beta.BetaContentBlockParam[];
 }
 
 export interface ChatResult<E = ChatEvent> {
@@ -138,7 +140,12 @@ export async function runChat<E extends { type: string } = ChatEvent>(
   // replayed, so nothing in the prefix can be invalidated between requests.
   const messages: Anthropic.Beta.BetaMessageParam[] = [
     ...request.history.map((turn) => ({ role: turn.role, content: turn.text })),
-    { role: "user", content: request.message },
+    {
+      role: "user",
+      content: request.attachments?.length
+        ? [...request.attachments, { type: "text", text: request.message }]
+        : request.message,
+    },
     { role: "system", content: profile.turnContext(request, earlierCustomerMessages, knownVehicle(request.vehicleKey)) },
   ];
   const events: E[] = [];

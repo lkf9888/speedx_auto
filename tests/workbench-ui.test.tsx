@@ -24,7 +24,10 @@ async function ask(text: string) {
   await userEvent.type(screen.getByLabelText("问一个报价"), `${text}{Enter}`);
 }
 
-const titles = () => screen.getAllByTestId("conversation").map((b) => within(b).getAllByText(/./)[0].textContent);
+/** The open conversation only: the conversation list repeats the last reply as a preview. */
+const chat = () => within(screen.getByRole("main"));
+
+const titles = () => screen.getAllByTestId("conversation").map((b) => within(b).getByTestId("conversation-title").textContent);
 
 describe("workbench conversations", () => {
   beforeEach(() => {
@@ -38,29 +41,29 @@ describe("workbench conversations", () => {
   it("keeps each conversation's messages and vehicle apart", async () => {
     render(<Workbench email="staff@example.com" />);
     await ask("2019 Camry 前刹车片");
-    expect(await screen.findByText(/答复：2019 Camry 前刹车片/)).toBeInTheDocument();
+    expect(await chat().findByText(/答复：2019 Camry 前刹车片/)).toBeInTheDocument();
     expect(screen.getByText("当前车辆：2019 Toyota Camry LE")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "+ 新会话" }));
-    expect(screen.queryByText(/答复：2019 Camry/)).not.toBeInTheDocument();
+    expect(chat().queryByText(/答复：2019 Camry/)).not.toBeInTheDocument();
     expect(screen.queryByText(/当前车辆/)).not.toBeInTheDocument();
     await ask("225/65R17 四季胎");
     // The second conversation doesn't carry the first one's vehicle.
-    expect(await screen.findByText("答复：225/65R17 四季胎（车辆 无）")).toBeInTheDocument();
+    expect(await chat().findByText("答复：225/65R17 四季胎（车辆 无）")).toBeInTheDocument();
 
     await userEvent.click(screen.getAllByTestId("conversation").find((b) => b.textContent?.includes("2019 Camry"))!);
-    expect(screen.getByText(/答复：2019 Camry 前刹车片/)).toBeInTheDocument();
+    expect(chat().getByText(/答复：2019 Camry 前刹车片/)).toBeInTheDocument();
     await ask("后刹车片呢");
-    expect(await screen.findByText("答复：后刹车片呢（车辆 k-camry）")).toBeInTheDocument();
+    expect(await chat().findByText("答复：后刹车片呢（车辆 k-camry）")).toBeInTheDocument();
   });
 
   it("restores conversations after a reload and lets staff delete one", async () => {
     const first = render(<Workbench email="staff@example.com" />);
     await ask("2019 Camry 前刹车片");
-    await screen.findByText(/答复：2019 Camry/);
+    await chat().findByText(/答复：2019 Camry/);
     await userEvent.click(screen.getByRole("button", { name: "+ 新会话" }));
     await ask("2018 Civic LX 换机油");
-    await screen.findByText(/答复：2018 Civic/);
+    await chat().findByText(/答复：2018 Civic/);
     first.unmount();
 
     render(<Workbench email="staff@example.com" />);
@@ -72,7 +75,7 @@ describe("workbench conversations", () => {
   it("lets staff rename a conversation, keeps the name after a reload, and Escape cancels", async () => {
     const { unmount } = render(<Workbench email="a@speedx.test" />);
     await ask("2019 Camry 前刹车片");
-    await screen.findByText(/答复：2019 Camry/);
+    await chat().findByText(/答复：2019 Camry/);
 
     await userEvent.click(screen.getByRole("button", { name: "重命名会话 2019 Camry 前刹车片" }));
     await userEvent.keyboard("{Escape}");
@@ -89,10 +92,55 @@ describe("workbench conversations", () => {
     expect(titles()).toEqual(["张先生 Camry"]);
   });
 
+  it("sends attached photos and files with the message, shows them in the chat, and keeps only names after a reload", async () => {
+    const server = fakeServer();
+    vi.stubGlobal("fetch", server);
+    const { unmount } = render(<Workbench email="staff@example.com" />);
+    const photo = new File([new Uint8Array([1, 2, 3])], "vin.jpg", { type: "image/jpeg" });
+    const sheet = new File(["part,qty\nACT2076,1"], "list.csv", { type: "text/csv" });
+    await userEvent.upload(screen.getByTestId("file-input"), [photo, sheet]);
+    expect(await screen.findByText("vin.jpg")).toBeInTheDocument();
+    expect(screen.getByText("list.csv")).toBeInTheDocument();
+
+    // Files alone are enough to send.
+    await userEvent.click(screen.getByRole("button", { name: "查询" }));
+    await chat().findByText(/答复：/);
+    const body = JSON.parse(String(server.mock.calls[0][1]?.body));
+    expect(body.message).toBe("");
+    expect(body.attachments).toEqual([
+      { name: "vin.jpg", mediaType: "image/jpeg", data: "AQID" },
+      { name: "list.csv", mediaType: "text/csv", data: "part,qty\nACT2076,1" },
+    ]);
+    expect(within(screen.getByTestId("sent-files")).getByText("list.csv")).toBeInTheDocument();
+
+    // The next question carries a note about the earlier files, not the files themselves.
+    await ask("这个 VIN 的车？");
+    await chat().findByText(/答复：这个 VIN/);
+    const second = JSON.parse(String(server.mock.calls[1][1]?.body));
+    expect(second.attachments).toBeUndefined();
+    expect(second.history[0].text).toContain("[附件：vin.jpg、list.csv]");
+
+    unmount();
+    render(<Workbench email="staff@example.com" />);
+    expect(within(screen.getByTestId("sent-files")).getByText("list.csv")).toBeInTheDocument();
+    expect(window.localStorage.getItem("speedx.workbench.conversations.v1:staff@example.com")).not.toContain("AQID");
+  });
+
+  it("refuses unsupported files with a note and lets staff remove a picked file", async () => {
+    render(<Workbench email="staff@example.com" />);
+    await userEvent.upload(screen.getByTestId("file-input"), new File(["x"], "setup.exe", { type: "application/x-msdownload" }), { applyAccept: false });
+    expect(await screen.findByRole("alert")).toHaveTextContent("不支持这种文件");
+
+    await userEvent.upload(screen.getByTestId("file-input"), new File(["hello"], "note.txt", { type: "text/plain" }));
+    await userEvent.click(await screen.findByRole("button", { name: "移除 note.txt" }));
+    expect(screen.queryByText("note.txt")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查询" })).toBeDisabled();
+  });
+
   it("keeps one staff member's conversations separate from another's on the same browser", async () => {
     const first = render(<Workbench email="a@example.com" />);
     await ask("2019 Camry 前刹车片");
-    await screen.findByText(/答复：2019 Camry/);
+    await chat().findByText(/答复：2019 Camry/);
     first.unmount();
     render(<Workbench email="b@example.com" />);
     expect(titles()).toEqual(["新会话"]);
@@ -114,10 +162,10 @@ describe("workbench conversations", () => {
     expect(await screen.findByRole("status")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "+ 新会话" }));
     await ask("快的问题");
-    expect(await screen.findByText("答复：快的问题")).toBeInTheDocument();
+    expect(await chat().findByText("答复：快的问题")).toBeInTheDocument();
     release();
     await userEvent.click(screen.getAllByTestId("conversation").find((b) => b.textContent?.includes("慢的问题"))!);
-    expect(await screen.findByText("答复：慢的问题")).toBeInTheDocument();
+    expect(await chat().findByText("答复：慢的问题")).toBeInTheDocument();
   });
 });
 

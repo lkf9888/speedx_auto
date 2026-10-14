@@ -10,6 +10,7 @@ import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 import type { CatalogApi } from "@/lib/worldpac/catalog";
 import { getWorldpacClient } from "@/lib/worldpac/client";
 import { staffUser, type StaffUser } from "./access";
+import { attachmentBlocks, parseAttachments, type WorkbenchAttachment } from "./attachments";
 import { WORKBENCH_PROFILE, type WorkbenchEvent } from "./assistant";
 
 const MAX_HISTORY = 40;
@@ -26,13 +27,17 @@ export interface WorkbenchBody {
   history: ChatTurn[];
   message: string;
   vehicleKey: string | null;
+  attachments: WorkbenchAttachment[];
 }
 
 export function parseWorkbenchBody(raw: unknown): WorkbenchBody | null {
   if (!raw || typeof raw !== "object") return null;
   const body = raw as Record<string, unknown>;
   if (typeof body.message !== "string") return null;
-  const message = body.message.trim();
+  const attachments = parseAttachments(body.attachments);
+  if (!attachments) return null;
+  // Files alone are a valid message ("what is this?").
+  const message = body.message.trim() || (attachments.length ? "请看附件。" : "");
   if (!message || message.length > MAX_MESSAGE) return null;
   if (!Array.isArray(body.history) || body.history.length > MAX_HISTORY) return null;
   const history: ChatTurn[] = [];
@@ -43,7 +48,7 @@ export function parseWorkbenchBody(raw: unknown): WorkbenchBody | null {
   }
   while (history.length > 0 && history[0].role !== "user") history.shift();
   const vehicleKey = typeof body.vehicleKey === "string" && body.vehicleKey.length <= 2000 ? body.vehicleKey : null;
-  return { history, message, vehicleKey };
+  return { history, message, vehicleKey, attachments };
 }
 
 export interface WorkbenchDeps {
@@ -81,7 +86,12 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
   }
   if (!body) return Response.json({ error: "invalid" }, { status: 400, headers: NO_STORE });
   if (deps.limiter.check(user.email)) return Response.json({ error: "busy" }, { status: 429, headers: NO_STORE });
-  deps.log({ email: user.email, at: new Date().toISOString(), message: body.message.slice(0, 300) });
+  deps.log({
+    email: user.email,
+    at: new Date().toISOString(),
+    message: body.message.slice(0, 300),
+    ...(body.attachments.length ? { attachments: body.attachments.map((a) => a.name) } : {}),
+  });
 
   const request_ = body;
   const encoder = new TextEncoder();
@@ -92,7 +102,13 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
         const result = await runChat<WorkbenchEvent>(
           deps.client(),
           deps.catalog(),
-          { history: request_.history, message: request_.message, locale: "zh-CN", vehicleKey: request_.vehicleKey },
+          {
+            history: request_.history,
+            message: request_.message,
+            locale: "zh-CN",
+            vehicleKey: request_.vehicleKey,
+            attachments: request_.attachments.length ? attachmentBlocks(request_.attachments) : undefined,
+          },
           send,
           () => `W-${randomBytes(4).toString("hex").toUpperCase()}`,
           WORKBENCH_PROFILE,

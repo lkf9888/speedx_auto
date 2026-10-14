@@ -229,4 +229,44 @@ describe("workbench chat endpoint", () => {
     expect(lines.at(-2)).toEqual({ type: "message", text: "OK" });
     expect(log).toHaveBeenCalledWith(expect.objectContaining({ email: "staff@example.com", message: "2019 Camry LE front pads" }));
   });
+
+  const withFiles = (message: string, attachments: unknown) =>
+    new Request("https://repair.speedxrental.com/api/workbench/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ history: [], message, vehicleKey: null, attachments }),
+    });
+
+  it("passes attached photos, PDFs and text files to the model before the message", async () => {
+    const create = vi.fn(async () => ({ stop_reason: "end_turn", content: [{ type: "text", text: "OK" }] }) as never);
+    const log = vi.fn();
+    const d = { ...deps({ email: "staff@example.com" }, log), client: () => ({ beta: { messages: { create } } }) };
+    const files = [
+      { name: "vin.jpg", mediaType: "image/jpeg", data: "QUJD" },
+      { name: "invoice.pdf", mediaType: "application/pdf", data: "QUJD" },
+      { name: "list.csv", mediaType: "text/csv", data: "part,qty\nACT2076,1" },
+    ];
+    const response = await handleWorkbenchChat(withFiles("", files), d);
+    expect(response.status).toBe(200);
+    await response.text();
+
+    const sent = (create.mock.calls[0] as unknown as [{ messages: Array<{ role: string; content: unknown }> }])[0].messages;
+    const user = sent.find((m) => m.role === "user")!.content as Array<{ type: string; text?: string; source?: { media_type: string } }>;
+    expect(user.map((b) => b.type)).toEqual(["text", "image", "text", "document", "text", "text", "text"]);
+    expect(user[1].source?.media_type).toBe("image/jpeg");
+    expect(user[3].source?.media_type).toBe("application/pdf");
+    expect(user[5].text).toContain("ACT2076");
+    expect(user.at(-1)?.text).toBe("请看附件。");
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({ attachments: ["vin.jpg", "invoice.pdf", "list.csv"] }));
+  });
+
+  it("rejects unsupported, oversized or too many attachments", async () => {
+    const who = deps({ email: "staff@example.com" });
+    const bad = async (attachments: unknown) => (await handleWorkbenchChat(withFiles("看看", attachments), who)).status;
+    expect(await bad([{ name: "a.exe", mediaType: "application/x-msdownload", data: "QUJD" }])).toBe(400);
+    expect(await bad([{ name: "a.jpg", mediaType: "image/jpeg", data: "not base64!" }])).toBe(400);
+    expect(await bad([{ name: "a.jpg", mediaType: "image/jpeg", data: "A".repeat(7 * 1024 * 1024) }])).toBe(400);
+    expect(await bad(Array.from({ length: 5 }, () => ({ name: "a.jpg", mediaType: "image/jpeg", data: "QUJD" })))).toBe(400);
+    expect(await bad("nope")).toBe(400);
+  });
 });
