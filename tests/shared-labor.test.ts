@@ -29,10 +29,10 @@ function catalog(hours: Record<number, number>): CatalogApi {
   };
 }
 
-const together = (other: number) => ({ service_id: other, position: "Front" });
+const together = (other: number) => ({ done_with_service_id: other, done_with_position: "Front" });
 
 async function publicCard(api: CatalogApi, vehicle: VehicleRef, serviceId: number, other: number | null): Promise<EstimateCard> {
-  const out = await runTool(api, "get_estimate", { vehicle_key: encodeVehicleKey(vehicle), service_id: serviceId, position: "Front", done_with: other ? together(other) : null }, () => "E-1", "zh-CN", null);
+  const out = await runTool(api, "get_estimate", { vehicle_key: encodeVehicleKey(vehicle), service_id: serviceId, position: "Front", ...(other ? together(other) : { done_with_service_id: 0, done_with_position: "" }) }, () => "E-1", "zh-CN", null);
   const event = out.events.find((e) => e.type === "estimate") as { type: "estimate"; estimate: EstimateCard };
   return event.estimate;
 }
@@ -65,9 +65,32 @@ describe("jobs done together (public assistant)", () => {
 describe("jobs done together (workbench)", () => {
   it("shows the halved hours on the staff card too", async () => {
     const api = catalog({ [PADS]: 0.9, [ROTORS]: 1.2 });
-    const out = await runWorkbenchTool(api, "get_estimate", { vehicle_key: encodeVehicleKey(car()), service_id: PADS, position: "Front", done_with: together(ROTORS) }, () => "W-1", null);
+    const out = await runWorkbenchTool(api, "get_estimate", { vehicle_key: encodeVehicleKey(car()), service_id: PADS, position: "Front", ...together(ROTORS) }, () => "W-1", null);
     const quote = (out.events[0] as { type: "quote"; quote: StaffQuote }).quote;
     expect(quote.labor).toMatchObject({ hours: 0.45, walkIn: 54 });
     expect(quote.notes.join(" ")).toContain("同时施工，工时按一半（原 0.9 h → 0.45 h）");
+  });
+});
+
+describe("tool schemas", () => {
+  // The Messages API refuses a request whose strict tools have more than 16 union-typed
+  // (nullable / anyOf) parameters in total; one over the limit takes the whole chat down.
+  function unions(schema: unknown): number {
+    if (!schema || typeof schema !== "object") return 0;
+    const s = schema as Record<string, unknown>;
+    let n = Array.isArray(s.anyOf) || Array.isArray(s.type) ? 1 : 0;
+    for (const v of Object.values(s)) {
+      if (Array.isArray(v)) v.forEach((x) => (n += unions(x)));
+      else if (v && typeof v === "object") n += unions(v);
+    }
+    return n;
+  }
+  const strictUnions = (tools: Array<{ strict?: boolean; input_schema: unknown }>) => tools.filter((t) => t.strict).reduce((sum, t) => sum + unions(t.input_schema), 0);
+
+  it("stay under the API's limit of 16 union-typed parameters", async () => {
+    const { TOOLS } = await import("@/lib/repair-chat/tools");
+    const { WORKBENCH_TOOLS } = await import("@/lib/workbench/assistant");
+    expect(strictUnions(TOOLS as never)).toBeLessThanOrEqual(16);
+    expect(strictUnions(WORKBENCH_TOOLS as never)).toBeLessThanOrEqual(16);
   });
 });

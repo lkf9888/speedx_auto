@@ -128,24 +128,14 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
         vehicle_key: { type: "string" },
         service_id: { type: "integer" },
         position: { anyOf: [{ type: "string" }, { type: "null" }], description: "e.g. Front or Rear, when asked" },
-        done_with: {
-          anyOf: [
-            {
-              type: "object",
-              properties: {
-                service_id: { type: "integer" },
-                position: { anyOf: [{ type: "string" }, { type: "null" }] },
-              },
-              required: ["service_id", "position"],
-              additionalProperties: false,
-            },
-            { type: "null" },
-          ],
+        done_with_service_id: {
+          type: "integer",
           description:
-            "The other job when two are done at the same time in the same place (front pads + front rotors on the same axle). Quote both, each pointing at the other; the shop charges the longer job's labor in full and the shorter one's at half. Null otherwise.",
+            "When two jobs are done at the same time in the same place (front pads + front rotors on the same axle): the other job's service_id. Quote both, each pointing at the other; the shop charges the longer job's labor in full and the shorter one's at half. 0 otherwise.",
         },
+        done_with_position: { type: "string", description: "The other job's position (e.g. Front), or empty" },
       },
-      required: ["vehicle_key", "service_id", "position", "done_with"],
+      required: ["vehicle_key", "service_id", "position", "done_with_service_id", "done_with_position"],
       additionalProperties: false,
     },
   },
@@ -419,7 +409,7 @@ export async function runTool(
       const quoted = await quoteService(api, vehicle, serviceId, position);
       let quote = quoted;
       if (quoted.status === "ok") {
-        const shared = await sharedLabor(api, vehicle, serviceId, quoted.laborHours, readDoneWith(input.done_with));
+        const shared = await sharedLabor(api, vehicle, serviceId, quoted.laborHours, readDoneWith(input));
         if (shared?.halved) {
           quote = {
             ...quoted,

@@ -1016,13 +1016,15 @@ export interface SharedLabor {
   otherHours: number;
 }
 
-/** Read get_estimate's done_with input. */
-export function readDoneWith(raw: unknown): DoneWith | null {
-  if (!raw || typeof raw !== "object") return null;
-  const r = raw as Record<string, unknown>;
-  const serviceId = Number(r.service_id);
+/**
+ * Read get_estimate's done_with_service_id / done_with_position. Plain fields
+ * (0 and "" for none), not a nullable object: the API caps union-typed
+ * parameters across strict tools at 16.
+ */
+export function readDoneWith(input: Record<string, unknown>): DoneWith | null {
+  const serviceId = Number(input.done_with_service_id);
   if (!Number.isInteger(serviceId) || serviceId <= 0) return null;
-  const position = typeof r.position === "string" && r.position.trim() ? r.position : null;
+  const position = typeof input.done_with_position === "string" && input.done_with_position.trim() ? input.done_with_position : null;
   return { serviceId, position };
 }
 
