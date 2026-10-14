@@ -107,7 +107,7 @@ function catalog(): CatalogApi {
         {
           productQuotes: [
             { appID: "x", partDescription: "Pads A", seriesDescription: "PRO", listPrice: 159.05, unitPrice: 78.86, jobberPrice: 101.11, corePrice: 0, availability: "Local", qtyAvailable: 4, partNumber: "PA-1", position: { id: 22 } },
-            { appID: "x", partDescription: "Pads B", seriesDescription: "OE", listPrice: 185.84, unitPrice: 120.5, availability: "DC", qtyAvailable: 0, position: { id: 22 } },
+            { appID: "x", partDescription: "Pads B", seriesDescription: "OE", listPrice: 185.84, unitPrice: 120.5, availability: "DC", qtyAvailable: 0, manufacturerPart: "AD2076", position: { id: 22 } },
           ],
         },
       ],
@@ -133,7 +133,7 @@ describe("staff quotes", () => {
     expect(q.labor).toEqual({ hours: 1.1, rate: 120, walkIn: 132, referral: 105.6 });
     expect(q.options.map((o) => [o.label, o.partNumber, o.unitCost, o.customerTotal, o.referralTotal, o.profit])).toEqual([
       ["Pads A", "PA-1", 78.86, 291.05, 264.65, 212.19],
-      ["Pads B", "", 120.5, 317.84, 291.44, 197.34],
+      ["Pads B", "AD2076", 120.5, 317.84, 291.44, 197.34],
     ]);
     expect(q.options[0].margin).toBeCloseTo(0.729, 3);
     expect(q.options[0].stock).toContain("本地有货");

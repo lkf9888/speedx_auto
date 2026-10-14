@@ -756,7 +756,7 @@ export interface StaffPartOption extends PartOption {
   fields: Record<string, string | number>;
 }
 
-const PART_NUMBER_FIELDS = ["partNumber", "partNo", "productNumber", "itemNumber", "mfgPartNumber", "catalogNumber"];
+const PART_NUMBER_FIELDS = ["manufacturerPart", "partNumber", "partNo", "productNumber", "itemNumber", "mfgPartNumber", "catalogNumber"];
 const BRAND_FIELDS = ["brandName", "brand", "manufacturerName", "manufacturer", "lineDescription", "mfgName"];
 
 function firstString(q: Record<string, unknown>, keys: string[]): string {
