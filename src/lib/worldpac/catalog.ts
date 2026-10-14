@@ -435,15 +435,27 @@ async function refineVehicleOptions(api: CatalogApi, vehicle: VehicleRef) {
 
 // ------------------------------------------------------------------- services
 
-const serviceCache = new TtlCache<ServiceMatch[]>(WEEK_MS, 500);
+export interface PartType {
+  code: string;
+  name: string;
+  system: string;
+}
+
+interface VehicleCatalog {
+  services: ServiceMatch[];
+  partTypes: PartType[];
+}
+
+const catalogCache = new TtlCache<VehicleCatalog>(WEEK_MS, 500);
 
 interface CategoryResponse {
   replacementParts?: Array<{ code?: string; description?: string }>;
   laborOperations?: Array<{ acaPartTerminologyID?: number; description?: string }>;
 }
 
-async function allServices(api: CatalogApi, vehicle: VehicleRef): Promise<ServiceMatch[]> {
-  return serviceCache.getOrLoad(vehicleCacheKey(vehicle), async () => {
+/** Every labor operation and every part type speedDIAL lists for the vehicle, by system. */
+async function vehicleCatalog(api: CatalogApi, vehicle: VehicleRef): Promise<VehicleCatalog> {
+  return catalogCache.getOrLoad(vehicleCacheKey(vehicle), async () => {
     const base = {
       attributes: attributePayload(vehicle),
       baseVehicleID: String(vehicle.baseVehicleId),
@@ -461,19 +473,28 @@ async function allServices(api: CatalogApi, vehicle: VehicleRef): Promise<Servic
           categoryType: "replacementParts",
           categoryCode: system.code,
         });
-        return (detail.laborOperations ?? [])
-          .filter((op) => Number.isInteger(op.acaPartTerminologyID) && op.description)
-          .map((op) => ({
-            serviceId: op.acaPartTerminologyID!,
-            name: op.description!,
-            system: system.description!,
-          }));
+        return {
+          services: (detail.laborOperations ?? [])
+            .filter((op) => Number.isInteger(op.acaPartTerminologyID) && op.description)
+            .map((op) => ({ serviceId: op.acaPartTerminologyID!, name: op.description!, system: system.description! })),
+          partTypes: (detail.replacementParts ?? [])
+            .filter((p) => p.code && p.description)
+            .map((p) => ({ code: p.code!, name: p.description!, system: system.description! })),
+        };
       }),
     );
-    const unique = new Map<number, ServiceMatch>();
-    for (const service of perSystem.flat()) unique.set(service.serviceId, service);
-    return [...unique.values()];
+    const services = new Map<number, ServiceMatch>();
+    const partTypes = new Map<string, PartType>();
+    for (const group of perSystem) {
+      for (const service of group.services) services.set(service.serviceId, service);
+      for (const part of group.partTypes) partTypes.set(part.code, part);
+    }
+    return { services: [...services.values()], partTypes: [...partTypes.values()] };
   });
+}
+
+async function allServices(api: CatalogApi, vehicle: VehicleRef): Promise<ServiceMatch[]> {
+  return (await vehicleCatalog(api, vehicle)).services;
 }
 
 /** Name of a labor-guide operation, for cards that can't be priced. */
@@ -903,4 +924,46 @@ export async function quoteServiceForStaff(
     otherPartNames: data.otherPartNames,
     partsNote: data.partsNote,
   };
+}
+
+// ------------------------------------------------------------- parts only
+
+export type StaffPartsLookup =
+  | { status: "ok"; partName: string; options: StaffPartOption[] }
+  | { status: "not_found"; similar: string[] };
+
+/**
+ * Staff only: price a part type with no labor operation behind it (rotors on
+ * cars whose labor guide has no rotor job, a strut when the strut job's part
+ * list only has the mount). Same account prices as quoteServiceForStaff.
+ */
+export async function staffPartsByName(
+  api: CatalogApi,
+  vehicle: VehicleRef,
+  query: string,
+  position: string | null,
+): Promise<StaffPartsLookup> {
+  const { partTypes } = await vehicleCatalog(api, vehicle);
+  const scored = partTypes
+    .map((part) => ({ part, score: Math.max(scoreService(query, part.name), scoreService(query, `${part.system} ${part.name}`) * 0.6) }))
+    .filter((p) => p.score > 0)
+    .sort((a, b) => b.score - a.score || a.part.name.length - b.part.name.length);
+  if (scored.length === 0) return { status: "not_found", similar: [] };
+  const best = scored[0].part;
+  const pna = await api.post<PnaResponse>("pna360_cat", {
+    attributes: attributePayload(vehicle),
+    partTypes: [{ requestedQuantity: 0, orderType: "ST", categoryCode: best.code, baseVehicleID: vehicle.baseVehicleId, positionID: -1 }],
+  });
+  const wanted = position ? normalize(position) : "";
+  const quotes = (pna.quotes ?? []).map((q) => ({
+    ...q,
+    productQuotes: (q.productQuotes ?? []).filter((pq) => {
+      if (!wanted) return true;
+      const label = normalize(String((pq.position as { description?: string } | undefined)?.description ?? ""));
+      return !label || label.includes(wanted) || wanted.includes(label);
+    }),
+  }));
+  const options = staffPartQuotes({ ...pna, quotes }, null);
+  if (options.length === 0) return { status: "not_found", similar: scored.slice(0, 6).map((p) => p.part.name) };
+  return { status: "ok", partName: best.name, options };
 }

@@ -164,6 +164,72 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
   });
 }
 
+/** A shop flat price that needs no vehicle (mounting the customer's own tires). */
+export function buildFlatQuote(
+  service: string,
+  rows: Array<{ label: string; quantity: number; unitPrice: number }>,
+  note: string,
+  id: string,
+  now = new Date(),
+): StaffQuote {
+  const options = rows.map((r) =>
+    finish({
+      label: r.label,
+      brand: "",
+      partNumber: "",
+      quantity: r.quantity,
+      unitPrice: r.unitPrice,
+      unitCost: null,
+      core: null,
+      stock: "",
+      customerTotal: money(r.unitPrice * r.quantity),
+      referralTotal: money(r.unitPrice * r.quantity),
+      costTotal: null,
+      prices: {},
+      fields: {},
+    }),
+  );
+  return withText({ id, kind: "flat", supplier: "shop", vehicle: "—", service, position: "", labor: null, costField: "", options, notes: [note, "店内一口价，没有单独的进价数据。"], createdAt: now.toISOString() });
+}
+
+/** Parts priced with no labor operation behind them: staff add the labor. */
+export function buildPartsQuote(vehicle: string, partName: string, position: string, parts: StaffPartOption[], id: string, env: NodeJS.ProcessEnv = process.env, now = new Date()): StaffQuote {
+  const field = costField(env);
+  const options = parts.map((p) => {
+    const cost = p.prices[field];
+    const unitCost = typeof cost === "number" && cost > 0 ? cost : null;
+    const listTotal = money(p.listPrice * p.quantity);
+    return finish({
+      label: p.description,
+      brand: p.brand || p.series,
+      partNumber: p.partNumber,
+      quantity: p.quantity,
+      unitPrice: p.listPrice,
+      unitCost,
+      core: typeof p.prices.corePrice === "number" && p.prices.corePrice > 0 ? p.prices.corePrice : null,
+      stock: p.inStockLocally ? `本地有货（${p.qtyAvailable ?? "?"}）` : p.availability || "未知",
+      customerTotal: listTotal,
+      referralTotal: listTotal,
+      costTotal: unitCost === null ? null : money(unitCost * p.quantity),
+      prices: p.prices,
+      fields: p.fields,
+    });
+  });
+  return withText({
+    id,
+    kind: "labor",
+    supplier: "worldpac",
+    vehicle,
+    service: `${partName}（只查零件）`,
+    position,
+    labor: null,
+    costField: field,
+    options,
+    notes: ["只含零件标价，不含工时：工时库没有对应的项目，工时请人工确认后再加。", "毛利 = 零件标价 − 进价。"],
+    createdAt: now.toISOString(),
+  });
+}
+
 /** Flat-price and team-quote cards from the shared tools, shown to staff as quotes. */
 export function fromPublicCard(card: EstimateCard, reason = ""): StaffQuote {
   const kind: StaffQuoteKind = card.kind === "team_quote" ? "team_quote" : card.kind === "tires" ? "tires" : "flat";
