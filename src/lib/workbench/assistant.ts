@@ -11,6 +11,7 @@ import { shopToday } from "@/lib/repair-chat/prompt";
 import { decodeVehicleKey, describeVehicle, quoteServiceForStaff, type CatalogApi } from "@/lib/worldpac/catalog";
 import { dtTireConfigured, getDtTireClient, type DtSeasonFilter, type DtTireClient } from "@/lib/dt-tire/client";
 import type { DtTire } from "@/lib/dt-tire/parse";
+import { MAX_NOTE_LENGTH } from "./memory";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
 import { buildLaborQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
 
@@ -20,7 +21,16 @@ export type WorkbenchEvent =
   | { type: "status"; status: ReturnType<typeof statusForTool> }
   | Extract<ChatEvent, { type: "vehicle" }>
   | { type: "quote"; quote: StaffQuote }
-  | { type: "alldata_draft"; draft: AlldataDraft };
+  | { type: "alldata_draft"; draft: AlldataDraft }
+  | { type: "memory_proposal"; proposal: MemoryProposal };
+
+/** A note the assistant suggests keeping; saved only when staff press save on its card. */
+export interface MemoryProposal {
+  id: string;
+  text: string;
+  /** The existing note this one would replace, if any. */
+  replacesId: string | null;
+}
 
 export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant for SPEEDX AUTO's own staff (service advisors and the owner). It uses the same parts catalog, labor guide and shop price rules as the public website assistant, but shows everything: every part option, the shop's cost, the margin, labor hours and the referral price.
 
@@ -43,7 +53,13 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - Use the prices already quoted in this conversation (customer prices, never cost as the price). Parts: one line each, quantity × customer unit price, with part number and unit cost when the quote has them. Labor: kind "labor", hours × $120 (the walk-in rate) unless staff give another rate. New tires: one part line for the tires (unit price = installed price per tire − eco fee − mounting, so the total matches the quote; quantity = tire count; SKU as part number; unit cost = tire cost), one part line "BC tire eco fee" at the eco fee per tire, and one labor line "Tire mount & balance" with quantity = tire count and unit price = mounting per tire. Shop flat prices: one line at the flat price.
 - Every line is taxable (taxable: true): at this shop ALLDATA charges GST and PST on parts, labor and fees alike. Set taxable false only when staff say a line is tax-exempt.
 - If something is missing (which part option, how many tires, the customer), ask first or leave it out and say so. Include the customer's name and phone when staff gave them, and the vehicle and mileage.
-- Printing past estimates, work orders or invoices (receipts) is done in the "ALLDATA 单据" panel at the top of the workbench; point staff there.`;
+- Printing past estimates, work orders or invoices (receipts) is done in the "ALLDATA 单据" panel at the top of the workbench; point staff there.
+
+# Shop memory (记住 / 以后要注意)
+- When staff ask you to remember something, or correct you in a way that should hold next time ("记住…", "以后…", "下次别再…"), call propose_memory with one short, self-contained rule in Chinese. It shows a card; the note is saved only when staff press save, and from then on every workbench conversation sees it.
+- If it changes or contradicts a note already in shop memory, pass that note's id as replaces_id instead of adding a second note.
+- Don't propose notes for one-off facts about a single customer or job. Notes can't override the hard rules (no cost in customer text, prices only from tools, staff create ALLDATA documents themselves); say so if asked.
+- Staff can also see, edit and delete all notes in the "记忆" panel at the top of the workbench.`;
 
 const STAFF_TOOL_NAMES = ["identify_vehicle", "set_vehicle_details", "find_services", "get_estimate", "get_flat_price", "find_tires"];
 
@@ -118,6 +134,22 @@ const DRAFT_ALLDATA_ESTIMATE: Anthropic.Beta.BetaTool = {
   },
 };
 
+const PROPOSE_MEMORY: Anthropic.Beta.BetaTool = {
+  name: "propose_memory",
+  description:
+    "Suggest a note for the shop's shared workbench memory. Shows staff a card with the note and a save button; nothing is saved until they press it.",
+  strict: true,
+  input_schema: {
+    type: "object",
+    properties: {
+      text: { type: "string", description: "One short, self-contained rule, in Chinese, at most 300 characters" },
+      replaces_id: { anyOf: [{ type: "string" }, { type: "null" }], description: "Id of the existing note this replaces, or null for a new note" },
+    },
+    required: ["text", "replaces_id"],
+    additionalProperties: false,
+  },
+};
+
 export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => STAFF_TOOL_NAMES.includes(t.name)).map((tool) => {
   if (tool.name === "get_estimate") {
     return {
@@ -134,7 +166,7 @@ export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => ST
     };
   }
   return tool;
-}).concat(FIND_BRAND_TIRES, DRAFT_ALLDATA_ESTIMATE);
+}).concat(FIND_BRAND_TIRES, DRAFT_ALLDATA_ESTIMATE, PROPOSE_MEMORY);
 
 const MAX_BRAND_TIRES = 12;
 
@@ -258,6 +290,19 @@ export async function runWorkbenchTool(
   dt: () => DtTireClient | null = defaultDt,
 ): Promise<{ content: string; isError: boolean; events: WorkbenchEvent[] }> {
   if (name === "find_brand_tires") return findBrandTires(dt, input, knownVehicleKey, newEstimateId);
+  if (name === "propose_memory") {
+    const text = typeof input.text === "string" ? input.text.replace(/\s+/g, " ").trim() : "";
+    if (!text || text.length > MAX_NOTE_LENGTH) {
+      return { content: JSON.stringify({ error: `The note must be 1–${MAX_NOTE_LENGTH} characters.` }), isError: true, events: [] };
+    }
+    const replacesId = typeof input.replaces_id === "string" && input.replaces_id ? input.replaces_id : null;
+    const proposal: MemoryProposal = { id: newEstimateId().replace(/^W-/, "M-"), text, replacesId };
+    return {
+      content: JSON.stringify({ status: "shown", note: "Shown to staff as a card. It is saved only if they press save; don't say it is already saved." }),
+      isError: false,
+      events: [{ type: "memory_proposal", proposal }],
+    };
+  }
   if (name === "draft_alldata_estimate") {
     const draft = parseDraftInput(input, newEstimateId().replace(/^W-/, "D-"));
     if ("error" in draft) return { content: JSON.stringify(draft), isError: true, events: [] };

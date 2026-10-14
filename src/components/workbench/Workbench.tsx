@@ -4,8 +4,10 @@ import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } fro
 import { ACCEPTED_TYPES, attachmentKind, MAX_ATTACHMENTS } from "@/lib/workbench/attachments";
 import { prepareAttachment, type PreparedAttachment } from "@/lib/workbench/prepare-attachment";
 import type { AlldataCreated, AlldataDraft } from "@/lib/workbench/alldata-draft";
+import type { MemoryProposal } from "@/lib/workbench/assistant";
 import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
+import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
 import { StaffQuoteCard } from "./StaffQuoteCard";
 
@@ -15,6 +17,8 @@ interface Turn {
   quotes: StaffQuote[];
   /** ALLDATA estimate drafts from this reply. */
   drafts?: AlldataDraft[];
+  /** Notes the assistant suggested keeping in the shared memory. */
+  memories?: Array<MemoryProposal & { saved?: boolean }>;
   /** Shown but not sent back to the assistant (errors). */
   localOnly?: boolean;
   /** Files the staff member attached; only names and types are kept, never the data. */
@@ -115,6 +119,7 @@ export function Workbench({ email }: { email: string }) {
   const [pending, setPending] = useState<Record<string, string>>({});
   const [input, setInput] = useState("");
   const [showDocuments, setShowDocuments] = useState(false);
+  const [showMemory, setShowMemory] = useState(false);
   /** The conversation whose title is being edited, and the text typed so far. */
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   /** Files picked for the next message, and a note about files that were refused. */
@@ -160,6 +165,15 @@ export function Workbench({ email }: { email: string }) {
     update(conversationId, (c) => ({
       ...c,
       turns: c.turns.map((t) => (t.drafts?.some((d) => d.id === draftId) ? { ...t, drafts: t.drafts.map((d) => (d.id === draftId ? { ...d, created } : d)) } : t)),
+    }));
+  }
+
+  function markMemorySaved(conversationId: string, proposalId: string) {
+    update(conversationId, (c) => ({
+      ...c,
+      turns: c.turns.map((t) =>
+        t.memories?.some((m) => m.id === proposalId) ? { ...t, memories: t.memories.map((m) => (m.id === proposalId ? { ...m, saved: true } : m)) } : t,
+      ),
     }));
   }
 
@@ -233,6 +247,7 @@ export function Workbench({ email }: { email: string }) {
 
     const quotes: StaffQuote[] = [];
     const drafts: AlldataDraft[] = [];
+    const memories: MemoryProposal[] = [];
     let reply = "";
     let failure: keyof typeof ERRORS | null = null;
     let nextVehicle = vehicle;
@@ -268,6 +283,7 @@ export function Workbench({ email }: { email: string }) {
               | { type: "vehicle"; vehicle: { key: string; label: string } }
               | { type: "quote"; quote: StaffQuote }
               | { type: "alldata_draft"; draft: AlldataDraft }
+              | { type: "memory_proposal"; proposal: MemoryProposal }
               | { type: "message"; text: string }
               | { type: "error"; code: "busy" | "unavailable" }
               | { type: "done" };
@@ -275,6 +291,7 @@ export function Workbench({ email }: { email: string }) {
             else if (event.type === "vehicle") nextVehicle = event.vehicle;
             else if (event.type === "quote") quotes.push(event.quote);
             else if (event.type === "alldata_draft") drafts.push(event.draft);
+            else if (event.type === "memory_proposal") memories.push(event.proposal);
             else if (event.type === "message") reply = event.text;
             else if (event.type === "error") failure = event.code;
           }
@@ -284,15 +301,15 @@ export function Workbench({ email }: { email: string }) {
     } catch {
       failure = "unavailable";
     }
-    if (!failure && !reply && quotes.length === 0 && drafts.length === 0) failure = "empty";
+    if (!failure && !reply && quotes.length === 0 && drafts.length === 0 && memories.length === 0) failure = "empty";
     update(id, (c) => ({
       ...c,
       vehicle: nextVehicle,
       turns: [
         ...c.turns,
         failure
-          ? { role: "assistant", text: ERRORS[failure], quotes, drafts, localOnly: true, at: Date.now() }
-          : { role: "assistant", text: reply, quotes, drafts, at: Date.now() },
+          ? { role: "assistant", text: ERRORS[failure], quotes, drafts, memories, localOnly: true, at: Date.now() }
+          : { role: "assistant", text: reply, quotes, drafts, memories, at: Date.now() },
       ],
     }));
     setPending((p) => {
@@ -432,6 +449,15 @@ export function Workbench({ email }: { email: string }) {
             </div>
             <button
               type="button"
+              onClick={() => setShowMemory((v) => !v)}
+              aria-expanded={showMemory}
+              aria-label="工作台记忆"
+              className="shrink-0 rounded-full border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-semibold text-[#54656f] hover:bg-[#f5f6f6]"
+            >
+              记忆
+            </button>
+            <button
+              type="button"
               onClick={() => setShowDocuments((v) => !v)}
               aria-expanded={showDocuments}
               aria-label="ALLDATA 单据"
@@ -469,6 +495,7 @@ export function Workbench({ email }: { email: string }) {
                 松开鼠标，把文件发给助手
               </div>
             )}
+            {showMemory && <MemoryPanel onClose={() => setShowMemory(false)} />}
             {showDocuments && <AlldataDocuments onClose={() => setShowDocuments(false)} />}
             {active.turns.length === 0 && (
               <section className="mx-auto max-w-2xl rounded-lg bg-white/95 p-4 text-sm leading-6 text-[#3b4a54] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
@@ -519,6 +546,14 @@ export function Workbench({ email }: { email: string }) {
                   ))}
                   {turn.drafts?.map((draft) => (
                     <AlldataDraftCard key={draft.id} draft={draft} onCreated={(created) => markCreated(active.id, draft.id, created)} />
+                  ))}
+                  {turn.memories?.map((proposal) => (
+                    <MemoryProposalCard
+                      key={proposal.id}
+                      proposal={proposal}
+                      saved={Boolean(proposal.saved)}
+                      onSaved={() => markMemorySaved(active.id, proposal.id)}
+                    />
                   ))}
                 </div>
               ),

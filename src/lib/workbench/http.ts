@@ -12,6 +12,7 @@ import { getWorldpacClient } from "@/lib/worldpac/client";
 import { staffUser, type StaffUser } from "./access";
 import { attachmentBlocks, parseAttachments, type WorkbenchAttachment } from "./attachments";
 import { WORKBENCH_PROFILE, type WorkbenchEvent } from "./assistant";
+import { getMemoryStore, memoryPrompt, type MemoryNote, type MemoryStore } from "./memory";
 
 const MAX_HISTORY = 40;
 const MAX_MESSAGE = 2000;
@@ -58,6 +59,18 @@ export interface WorkbenchDeps {
   limiter: RateLimiter;
   configured: () => boolean;
   log: (entry: Record<string, unknown>) => void;
+  /** The shared notes, or null when they aren't set up. */
+  memory?: () => MemoryStore | null;
+}
+
+/** The shared notes; a memory outage never blocks a quote. */
+async function loadNotes(deps: WorkbenchDeps): Promise<MemoryNote[]> {
+  try {
+    return (await deps.memory?.()?.list()) ?? [];
+  } catch (error) {
+    console.error("workbench memory unavailable", error instanceof Error ? error.message.slice(0, 200) : "unknown");
+    return [];
+  }
 }
 
 let anthropic: MessagesClient | null = null;
@@ -70,6 +83,7 @@ const defaultDeps: WorkbenchDeps = {
   limiter: new RateLimiter({ perIpWindowMs: 10 * 60 * 1000, perIpWindowMax: 80, perIpDailyMax: 600, globalDailyMax: 3000 }),
   configured: () => Boolean(process.env.ANTHROPIC_API_KEY && process.env.WORLDPAC_USERNAME && process.env.WORLDPAC_PASSWORD),
   log: (entry) => console.info("workbench", JSON.stringify(entry)),
+  memory: () => getMemoryStore(),
 };
 
 const NO_STORE = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
@@ -94,6 +108,8 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
   });
 
   const request_ = body;
+  const notes = await loadNotes(deps);
+  const profile = notes.length ? { ...WORKBENCH_PROFILE, system: `${WORKBENCH_PROFILE.system}\n\n${memoryPrompt(notes)}` } : WORKBENCH_PROFILE;
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -111,7 +127,7 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
           },
           send,
           () => `W-${randomBytes(4).toString("hex").toUpperCase()}`,
-          WORKBENCH_PROFILE,
+          profile,
         );
         send({ type: "message", text: result.text });
       } catch (error) {

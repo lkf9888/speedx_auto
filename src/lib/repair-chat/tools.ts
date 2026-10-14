@@ -537,6 +537,6 @@ export async function runTool(
 export function statusForTool(name: string): StatusKey {
   if (name === "find_services") return "services";
   if (["get_estimate", "get_flat_price", "find_tires", "find_brand_tires", "draft_alldata_estimate", "request_team_quote"].includes(name)) return "estimate";
-  if (name === "request_appointment") return "thinking";
+  if (name === "request_appointment" || name === "propose_memory") return "thinking";
   return "vehicle";
 }

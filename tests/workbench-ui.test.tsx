@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Workbench } from "@/components/workbench/Workbench";
@@ -278,5 +278,61 @@ describe("ALLDATA in the workbench", () => {
     expect(row).toHaveTextContent("#954 · 发票");
     await userEvent.click(within(row).getByRole("button", { name: "发票 / 收据 PDF" }));
     expect(requests.at(-1)).toEqual({ op: "openPdf", args: { documentId: 444, documentType: "Invoice" } });
+  });
+});
+
+describe("workbench memory", () => {
+  let saved: Array<{ id: string; text: string }> = [];
+  const memoryCalls: Array<{ method: string; body: Record<string, unknown> | null }> = [];
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    saved = [{ id: "m1", text: "Toyota 先查 VIN" }];
+    memoryCalls.length = 0;
+    const note = (n: { id: string; text: string }) => ({ ...n, createdBy: "a@x", createdAt: "2026-10-14T20:00:00Z", updatedBy: "a@x", updatedAt: "2026-10-14T20:00:00Z" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/workbench/memory") {
+          const method = init?.method ?? "GET";
+          const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : null;
+          memoryCalls.push({ method, body });
+          if (method === "POST") saved.push({ id: `m${saved.length + 1}`, text: String(body!.text) });
+          if (method === "DELETE") saved = saved.filter((n) => n.id !== body!.id);
+          return Response.json({ notes: saved.map(note) }, { status: method === "POST" ? 201 : 200 });
+        }
+        return ndjson([
+          { type: "memory_proposal", proposal: { id: "M-1", text: "米其林冬季胎先问客人能不能接受带钉胎", replacesId: null } },
+          { type: "message", text: "好的，确认后保存。" },
+          { type: "done" },
+        ]);
+      }),
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("saves a suggested note only when staff press save, and remembers that it was saved", async () => {
+    const view = render(<Workbench email="staff@example.com" />);
+    await ask("记住：米其林冬季胎先问客人能不能接受带钉胎");
+    const card = await screen.findByTestId("memory-proposal");
+    expect(memoryCalls).toEqual([]);
+    await userEvent.click(within(card).getByRole("button", { name: "保存到记忆" }));
+    expect(await within(card).findByText(/已保存/)).toBeInTheDocument();
+    expect(memoryCalls).toEqual([{ method: "POST", body: { text: "米其林冬季胎先问客人能不能接受带钉胎" } }]);
+    view.unmount();
+    render(<Workbench email="staff@example.com" />);
+    expect(screen.getByText(/已保存/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存到记忆" })).not.toBeInTheDocument();
+  });
+
+  it("lists, adds and deletes notes in the memory panel", async () => {
+    render(<Workbench email="staff@example.com" />);
+    await userEvent.click(screen.getByRole("button", { name: "工作台记忆" }));
+    expect(await screen.findByText("Toyota 先查 VIN")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("新增记忆"), "BMW 机油用 LL-01{Enter}");
+    expect(await screen.findByText("BMW 机油用 LL-01")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "删除记忆 1" }));
+    await waitFor(() => expect(screen.queryByText("Toyota 先查 VIN")).not.toBeInTheDocument());
+    expect(screen.getAllByTestId("memory-note")).toHaveLength(1);
   });
 });
