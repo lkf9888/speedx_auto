@@ -60,7 +60,7 @@ let handler: Handler;
 
 beforeAll(async () => {
   const chromeStub = {
-    runtime: { id: "ext", getManifest: () => ({ version: "1.0.0" }), onMessage: { addListener: (h: Handler) => (handler = h) } },
+    runtime: { id: "ext", getManifest: () => ({ version: "1.0.1" }), onMessage: { addListener: (h: Handler) => (handler = h) } },
     tabs: {
       query: async () => [{ id: 7, status: "complete" }],
       create: async ({ url }: { url: string }) => {
@@ -71,6 +71,10 @@ beforeAll(async () => {
     },
     scripting: {
       executeScript: async ({ args }: { args: [string, string, unknown, string] }) => {
+        // Chrome refuses arguments that don't survive JSON (undefined, functions).
+        if (args.some((a) => a === undefined) || JSON.stringify(JSON.parse(JSON.stringify(args))) !== JSON.stringify(args)) {
+          throw new Error("Value is unserializable");
+        }
         const [method, path, body, contentType] = args;
         const call = { method, path, body, contentType };
         alldata.calls.push(call);
@@ -118,7 +122,7 @@ describe("ALLDATA extension", () => {
   it("only answers the workbench pages", async () => {
     expect((await ask("status", {}, "https://evil.example/")).error?.code).toBe("ignored");
     alldata.respond = () => ({ status: 200, json: {} });
-    expect((await ask("status", {})).result).toEqual({ version: "1.0.0", signedIn: true });
+    expect((await ask("status", {})).result).toEqual({ version: "1.0.1", signedIn: true });
     expect((await ask("status", {}, "http://localhost:3000/workbench")).ok).toBe(true);
     expect((await ask("deleteEverything", {})).error?.code).toBe("bad_request");
   });

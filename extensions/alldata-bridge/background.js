@@ -75,15 +75,15 @@ async function alldataTab() {
   return tab.id;
 }
 
-/** Runs inside the ALLDATA page: one same-origin request, as the Shop Manager app makes it. */
+/** Runs inside the ALLDATA page: one same-origin request, as the Shop Manager app makes it. `body` is null for none. */
 async function pageRequest(method, path, body, contentType) {
   const headers = { Accept: "application/json, text/plain, */*" };
-  if (body !== undefined) headers["Content-Type"] = contentType;
+  if (body !== null) headers["Content-Type"] = contentType;
   const response = await fetch(path, {
     method,
     headers,
     credentials: "include",
-    body: body === undefined ? undefined : contentType === "application/json" ? JSON.stringify(body) : body,
+    body: body === null ? undefined : contentType === "application/json" ? JSON.stringify(body) : body,
   });
   const text = await response.text();
   let json = null;
@@ -95,8 +95,9 @@ async function pageRequest(method, path, body, contentType) {
   return { status: response.status, json, text: json ? "" : text.slice(0, 300) };
 }
 
-async function request(method, path, body, contentType = "application/json") {
+async function request(method, path, body = null, contentType = "application/json") {
   const tabId = await alldataTab();
+  // executeScript only passes JSON-serializable arguments: no undefined.
   const [run] = await chrome.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
