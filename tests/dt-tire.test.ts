@@ -97,6 +97,12 @@ describe("DT staff tire options", () => {
     expect(brandTireOptions(tires, "any", 17, now).map((o) => o.sku)).toEqual(["1001", "1002", "1003"]);
   });
 
+  it("drops the other brands DT appends after a brand search", () => {
+    const michelin = brandTireOptions(tires, "winter", 17, now, "michelin");
+    expect(michelin.map((o) => o.brand)).toEqual(["Michelin"]);
+    expect(brandTireOptions(tires, "any", 17, now, "BFGoodrich").map((o) => o.sku)).toEqual(["1003"]);
+  });
+
   it("charges the bigger-rim and off-road mounting prices", () => {
     const [winter] = brandTireOptions(tires, "winter", 17, now);
     const [winterBig] = brandTireOptions(tires, "winter", 20, now);

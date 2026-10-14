@@ -148,11 +148,17 @@ function dtStock(tire: DtTire): string {
   return `DT 本地 ${tire.localStock || "0"} / 其他仓 ${tire.warehouseStock || "0"}`;
 }
 
-/** DT rows priced at MSRP, installed; rows without an MSRP can't be quoted and are dropped. */
-export function brandTireOptions(tires: DtTire[], season: string, rim: number, now = new Date()): StaffTireOption[] {
+const brandKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * DT rows priced at MSRP, installed; rows without an MSRP can't be quoted and are dropped.
+ * With a brand, DT appends other brands' "related products" after its matches, so those are dropped too.
+ */
+export function brandTireOptions(tires: DtTire[], season: string, rim: number, now = new Date(), brand?: string): StaffTireOption[] {
   const wanted = DT_SEASONS[season] ?? DT_SEASONS.any;
   return tires
     .filter((t) => t.msrp !== null && t.msrp > 0)
+    .filter((t) => !brand || brandKey(t.brand) === brandKey(brand))
     .filter((t) => !wanted.label || wanted.label.test(t.season))
     .slice(0, MAX_BRAND_TIRES)
     .map((t) => ({
@@ -186,7 +192,7 @@ async function findBrandTires(
   const countRaw = Number(input.count);
   const count = Number.isInteger(countRaw) && countRaw >= 1 && countRaw <= 6 ? countRaw : 4;
   const page = await client.searchBySize({ size, season: DT_SEASONS[season].filter, brand });
-  const options = brandTireOptions(page.tires, season, parsed.rim);
+  const options = brandTireOptions(page.tires, season, parsed.rim, new Date(), brand);
   if (options.length === 0) {
     return { content: JSON.stringify({ status: "not_found", note: `DT Tire Hub has no ${brand ?? ""} ${season} tire in ${size} with a price.`.replace(/\s+/g, " ") }), isError: false, events: [] };
   }
