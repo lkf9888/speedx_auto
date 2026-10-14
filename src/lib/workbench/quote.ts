@@ -211,21 +211,42 @@ export interface StaffTireOption {
   mounting: number;
   /** Shop cost per tire, when the markup is configured. */
   cost: number | null;
+  /** Supplier SKU, when the supplier gives one. */
+  sku?: string;
+  /** Supplier stock, e.g. "本地 51 / 其他仓 99+". */
+  stock?: string;
 }
 
+export interface TireQuoteSource {
+  /** Shown to staff only, never in the customer text. */
+  name: string;
+  /** How the customer price was set, e.g. "零售价 = MSRP". */
+  retailRule: string;
+}
+
+const PARTNER_LIST: TireQuoteSource = { name: "合作轮胎价目表", retailRule: "零售价" };
+
 /** New tires: installed price per tire for the customer; cost, eco fee and mounting shown apart. */
-export function buildTireQuote(vehicle: string, size: string, options: StaffTireOption[], count: number, id: string, now = new Date()): StaffQuote {
+export function buildTireQuote(
+  vehicle: string,
+  size: string,
+  options: StaffTireOption[],
+  count: number,
+  id: string,
+  now = new Date(),
+  source: TireQuoteSource = PARTNER_LIST,
+): StaffQuote {
   const rows = options.map((o) => {
     const perTire = Math.round(o.retail + o.eco) + o.mounting;
     return finish({
       label: `${o.pattern} ${o.size} ${o.load}`.trim(),
       brand: o.brand,
-      partNumber: "",
+      partNumber: o.sku ?? "",
       quantity: count,
       unitPrice: perTire,
       unitCost: o.cost === null ? null : money(o.cost),
       core: null,
-      stock: o.season,
+      stock: [o.season, o.stock].filter(Boolean).join(" · "),
       customerTotal: perTire * count,
       referralTotal: perTire * count,
       // Eco fee is passed through, so it counts against profit like cost.
@@ -235,8 +256,8 @@ export function buildTireQuote(vehicle: string, size: string, options: StaffTire
     });
   });
   const notes = [
-    `客户每条价 = 零售价 + 环保费（取整）+ 换胎工钱；表中“进价”为轮胎拿货价。`,
-    options.some((o) => o.cost === null) ? "未配置 TIRE_MARKUP，无法显示轮胎进价。" : "",
+    `来源：${source.name}。客户每条价 = ${source.retailRule} + 环保费（取整）+ 换胎工钱；表中“进价”为轮胎拿货价。`,
+    options.some((o) => o.cost === null) ? (source === PARTNER_LIST ? "未配置 TIRE_MARKUP，无法显示轮胎进价。" : "部分轮胎没有拿货价。") : "",
     "毛利 = 客户总价 − 轮胎进价 − 环保费，换胎工钱计入毛利。",
   ].filter(Boolean);
   return withText({

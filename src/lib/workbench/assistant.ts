@@ -9,6 +9,8 @@ import { runTool as runPublicTool, statusForTool, TOOLS, type ChatEvent } from "
 import { ecoFee, loadTireList, mountingPerTire, sizeKey } from "@/lib/repair-chat/tires";
 import { shopToday } from "@/lib/repair-chat/prompt";
 import { decodeVehicleKey, describeVehicle, quoteServiceForStaff, type CatalogApi } from "@/lib/worldpac/catalog";
+import { dtTireConfigured, getDtTireClient, type DtSeasonFilter, type DtTireClient } from "@/lib/dt-tire/client";
+import type { DtTire } from "@/lib/dt-tire/parse";
 import { buildLaborQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
 
 export const WORKBENCH_MODEL = process.env.WORKBENCH_MODEL || "claude-sonnet-5-5";
@@ -22,13 +24,37 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 
 # How to work
 - Identify the vehicle (VIN, or year/make/model) with identify_vehicle; record trim/engine with set_vehicle_details when staff give them or a tool asks.
-- For repairs, find_services then get_estimate. For oil changes, mounting the customer's own tires and A/C recharges, get_flat_price. For new tires, find_tires.
+- For repairs, find_services then get_estimate. For oil changes, mounting the customer's own tires and A/C recharges, get_flat_price.
+- New tires come from two suppliers. find_tires is the partner price list (good-value brands). find_brand_tires searches DT Tire Hub live for international brands (Michelin, Bridgestone, Continental, Goodyear, Pirelli, Toyo, Yokohama…), sold at MSRP. If staff name an international brand or ask for "大牌/名牌", use find_brand_tires; if they just ask for tires of a size, run both and compare.
 - Each result is shown to staff as a quote card with the full table. In your reply, summarise in a few lines: the cheapest sensible option, the best-margin option, stock, and anything the labor note says is not included. Point out thin margins (under 25%) or items out of stock.
 - Never invent a price, cost or labor time; use only tool results. If a figure is missing (for example no cost on a part), say so.
 - Staff may ask in Chinese or English; reply in the language of their message. Be brief and practical: short lines, "•" bullets, no headings or bold.
 - If staff ask for text to send a customer, write it with customer prices only, never cost or margin (the card's "copy for customer" button does the same).`;
 
 const STAFF_TOOL_NAMES = ["identify_vehicle", "set_vehicle_details", "find_services", "get_estimate", "get_flat_price", "find_tires"];
+
+const FIND_BRAND_TIRES: Anthropic.Beta.BetaTool = {
+  name: "find_brand_tires",
+  description:
+    "Live search of DT Tire Hub (the shop's supplier for international tire brands) by sidewall size. Returns tires in stock first, cheapest first, with the dealer cost, MSRP (the customer's price), stock at DT's local and other warehouses, and the installed price per tire. Shown to staff as a card.",
+  strict: true,
+  input_schema: {
+    type: "object",
+    properties: {
+      size: { type: "string", description: "Tire size from the sidewall, e.g. 225/65R17, LT245/75R16, 33x12.50R18" },
+      season: {
+        type: "string",
+        enum: ["all_season", "all_weather", "winter", "summer", "any"],
+        description: "all_season (no snowflake), all_weather (snowflake, on-road year-round), winter, summer, or any",
+      },
+      brand: { anyOf: [{ type: "string" }, { type: "null" }], description: "One brand name if staff asked for it (e.g. Michelin), else null" },
+      count: { anyOf: [{ type: "integer" }, { type: "null" }], description: "How many tires; null means 4" },
+      vehicle_key: { anyOf: [{ type: "string" }, { type: "null" }], description: "When the vehicle was identified" },
+    },
+    required: ["size", "season", "brand", "count", "vehicle_key"],
+    additionalProperties: false,
+  },
+};
 
 export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => STAFF_TOOL_NAMES.includes(t.name)).map((tool) => {
   if (tool.name === "get_estimate") {
@@ -46,7 +72,76 @@ export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => ST
     };
   }
   return tool;
-});
+}).concat(FIND_BRAND_TIRES);
+
+const MAX_BRAND_TIRES = 12;
+
+/** Our season names → DT's filter, plus the season label each row must carry (DT's filters overlap). */
+const DT_SEASONS: Record<string, { filter: DtSeasonFilter; label: RegExp | null }> = {
+  all_season: { filter: "SUMMER", label: /^all[- ]season/i },
+  all_weather: { filter: "AW", label: /^all[- ]weather/i },
+  winter: { filter: "WINTER", label: /^winter/i },
+  summer: { filter: "SUMMER", label: /^summer/i },
+  any: { filter: "ALL", label: null },
+};
+
+const SEASON_ZH: Record<string, string> = { "all-season": "四季", "all-weather": "全天候", winter: "冬季", summer: "夏季" };
+
+function dtStock(tire: DtTire): string {
+  return `DT 本地 ${tire.localStock || "0"} / 其他仓 ${tire.warehouseStock || "0"}`;
+}
+
+/** DT rows priced at MSRP, installed; rows without an MSRP can't be quoted and are dropped. */
+export function brandTireOptions(tires: DtTire[], season: string, rim: number, now = new Date()): StaffTireOption[] {
+  const wanted = DT_SEASONS[season] ?? DT_SEASONS.any;
+  return tires
+    .filter((t) => t.msrp !== null && t.msrp > 0)
+    .filter((t) => !wanted.label || wanted.label.test(t.season))
+    .slice(0, MAX_BRAND_TIRES)
+    .map((t) => ({
+      brand: t.brand,
+      pattern: [t.model, t.studding && /stud/i.test(t.studding) ? "(带钉)" : ""].filter(Boolean).join(" "),
+      size: t.size,
+      load: t.serviceDescription,
+      season: SEASON_ZH[t.season.toLowerCase()] ?? t.season,
+      retail: t.msrp!,
+      eco: ecoFee(now),
+      mounting: mountingPerTire({ category: /terrain|mud|rugged/i.test(t.performance) ? "off_road" : "all_season" }, rim),
+      cost: t.cost,
+      sku: t.sku,
+      stock: dtStock(t),
+    }));
+}
+
+async function findBrandTires(
+  dt: () => DtTireClient | null,
+  input: Record<string, unknown>,
+  knownVehicleKey: string | null,
+  newEstimateId: () => string,
+): Promise<{ content: string; isError: boolean; events: WorkbenchEvent[] }> {
+  const size = typeof input.size === "string" ? input.size.trim().slice(0, 40) : "";
+  const parsed = sizeKey(size);
+  if (!parsed) return { content: JSON.stringify({ error: "Could not read a tire size." }), isError: true, events: [] };
+  const client = dt();
+  if (!client) return { content: JSON.stringify({ status: "not_configured", note: "DT Tire Hub sign-in is not set up on the server (DT_TIRE_USERNAME / DT_TIRE_PASSWORD)." }), isError: false, events: [] };
+  const season = typeof input.season === "string" && DT_SEASONS[input.season] ? input.season : "any";
+  const brand = typeof input.brand === "string" && input.brand.trim() ? input.brand.trim().slice(0, 40) : undefined;
+  const countRaw = Number(input.count);
+  const count = Number.isInteger(countRaw) && countRaw >= 1 && countRaw <= 6 ? countRaw : 4;
+  const page = await client.searchBySize({ size, season: DT_SEASONS[season].filter, brand });
+  const options = brandTireOptions(page.tires, season, parsed.rim);
+  if (options.length === 0) {
+    return { content: JSON.stringify({ status: "not_found", note: `DT Tire Hub has no ${brand ?? ""} ${season} tire in ${size} with a price.`.replace(/\s+/g, " ") }), isError: false, events: [] };
+  }
+  const key = typeof input.vehicle_key === "string" && input.vehicle_key ? input.vehicle_key : knownVehicleKey;
+  const decoded = key ? decodeVehicleKey(key) : null;
+  const quote = buildTireQuote(decoded ? describeVehicle(decoded) : "—", size.toUpperCase(), options, count, newEstimateId(), new Date(), {
+    name: "DT Tire Hub（实时）",
+    retailRule: "MSRP",
+  });
+  if (page.total !== null && page.total > page.tires.length) quote.notes.push(`DT 共有 ${page.total} 款，这里只列有货优先、价格从低到高的前 ${options.length} 款；要看某个品牌可直接说品牌名。`);
+  return quoteOutcome(quote);
+}
 
 function tireMarkup(env: NodeJS.ProcessEnv = process.env): number | null {
   const value = Number(env.TIRE_MARKUP);
@@ -84,13 +179,17 @@ const quoteOutcome = (quote: StaffQuote) => ({
   events: [{ type: "quote", quote } as WorkbenchEvent],
 });
 
+const defaultDt = () => (dtTireConfigured() ? getDtTireClient() : null);
+
 export async function runWorkbenchTool(
   api: CatalogApi,
   name: string,
   input: Record<string, unknown>,
   newEstimateId: () => string,
   knownVehicleKey: string | null,
+  dt: () => DtTireClient | null = defaultDt,
 ): Promise<{ content: string; isError: boolean; events: WorkbenchEvent[] }> {
+  if (name === "find_brand_tires") return findBrandTires(dt, input, knownVehicleKey, newEstimateId);
   if (name === "get_estimate") {
     const vehicle = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;
     if (!vehicle) return { content: JSON.stringify({ error: "Unknown vehicle_key. Call identify_vehicle first." }), isError: true, events: [] };
