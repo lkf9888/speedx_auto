@@ -11,6 +11,7 @@ import { shopToday } from "@/lib/repair-chat/prompt";
 import { decodeVehicleKey, describeVehicle, quoteServiceForStaff, type CatalogApi } from "@/lib/worldpac/catalog";
 import { dtTireConfigured, getDtTireClient, type DtSeasonFilter, type DtTireClient } from "@/lib/dt-tire/client";
 import type { DtTire } from "@/lib/dt-tire/parse";
+import { getTatoClient, type FleetCar, type FleetTrip, type TatoClient } from "@/lib/tato/client";
 import { MAX_NOTE_LENGTH } from "./memory";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
 import { buildLaborQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
@@ -54,6 +55,10 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - Every line is taxable (taxable: true): at this shop ALLDATA charges GST and PST on parts, labor and fees alike. Set taxable false only when staff say a line is tax-exempt.
 - If something is missing (which part option, how many tires, the customer), ask first or leave it out and say so. Include the customer's name and phone when staff gave them, and the vehicle and mileage.
 - Printing past estimates, work orders or invoices (receipts) is done in the "ALLDATA 单据" panel at the top of the workbench; point staff there.
+
+# Our own fleet (TATO)
+- SPEEDX runs a Turo fleet, and many of those cars are repaired in this shop. When staff give a plate, a car's nickname, or say it's one of our cars (我们的车 / 车队 / 出租车), call find_fleet_car first. With exactly one match that has a VIN, pass the VIN to identify_vehicle instead of asking for year/make/model.
+- When planning the repair, use the car's trips: say when it's free before the next pickup, and warn if the job won't fit in that gap. If the car belongs to a revenue-share owner (owner is not null), say so: the repair is charged to that owner.
 
 # Shop memory (记住 / 以后要注意)
 - When staff ask you to remember something, or correct you in a way that should hold next time ("记住…", "以后…", "下次别再…"), call propose_memory with one short, self-contained rule in Chinese. It shows a card; the note is saved only when staff press save, and from then on every workbench conversation sees it.
@@ -150,6 +155,69 @@ const PROPOSE_MEMORY: Anthropic.Beta.BetaTool = {
   },
 };
 
+const FIND_FLEET_CAR: Anthropic.Beta.BetaTool = {
+  name: "find_fleet_car",
+  description:
+    "Look up one of SPEEDX's own Turo fleet cars in TATO by plate, nickname, model or VIN: year, make, model, VIN, status, owner, and when it is out on trips (current trip and upcoming bookings).",
+  strict: true,
+  input_schema: {
+    type: "object",
+    properties: { query: { type: "string", description: "Plate (e.g. XC829X), nickname, model or VIN" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+};
+
+const vancouver = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Vancouver",
+  month: "short",
+  day: "numeric",
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const shopTime = (iso: string) => vancouver.format(new Date(iso));
+
+/** What the model reads about one fleet car: the car, then its schedule in shop time. Guests are never named. */
+export function describeFleetCar(car: FleetCar, trips: FleetTrip[] | null, now = new Date()): string {
+  const head = [
+    `${car.plate}${car.nickname ? ` "${car.nickname}"` : ""}: ${[car.year, car.brand, car.model].filter(Boolean).join(" ")}`,
+    car.vin ? `VIN ${car.vin}` : "no VIN on file",
+    `status ${car.status || "unknown"}`,
+    car.owner ? `owner ${car.owner} (revenue-share; repairs are charged to them)` : "SPEEDX's own car",
+  ].join(" · ");
+  if (trips === null) return `${head}\nTrips: not loaded.`;
+  if (trips.length === 0) return `${head}\nTrips: none booked; free now.`;
+  const current = trips.find((t) => t.status === "ongoing" || (Date.parse(t.pickup) <= now.getTime() && Date.parse(t.return) > now.getTime()));
+  const upcoming = trips.filter((t) => t !== current && Date.parse(t.pickup) > now.getTime());
+  const lines = [head];
+  if (current) lines.push(`On a trip now, back ${shopTime(current.return)}.`);
+  else lines.push(upcoming.length ? `Free now until the next pickup ${shopTime(upcoming[0].pickup)}.` : "Free now; nothing booked.");
+  if (upcoming.length) lines.push(`Upcoming trips: ${upcoming.slice(0, 5).map((t) => `${shopTime(t.pickup)} → ${shopTime(t.return)}`).join("; ")}`);
+  return lines.join("\n");
+}
+
+async function findFleetCar(tato: () => TatoClient | null, input: Record<string, unknown>) {
+  const query = typeof input.query === "string" ? input.query.trim() : "";
+  if (!query) return { content: JSON.stringify({ error: "Give a plate, nickname, model or VIN." }), isError: true, events: [] as WorkbenchEvent[] };
+  const client = tato();
+  if (!client) {
+    return { content: JSON.stringify({ status: "not_configured", note: "TATO is not connected (TATO_API_TOKEN)." }), isError: false, events: [] as WorkbenchEvent[] };
+  }
+  const cars = await client.findCars(query);
+  if (cars.length === 0) return { content: JSON.stringify({ status: "not_found", note: `No fleet car matches "${query}".` }), isError: false, events: [] as WorkbenchEvent[] };
+  const shown = cars.slice(0, 5);
+  // Trips only for a clear answer; a list of candidates first needs staff to pick one.
+  const trips = shown.length === 1 ? await client.upcomingTrips(shown[0].id).catch(() => null) : null;
+  const text = shown.map((car) => describeFleetCar(car, shown.length === 1 ? trips : null)).join("\n\n");
+  return {
+    content: JSON.stringify({ status: "ok", matches: cars.length, cars: text, ...(cars.length > 1 ? { note: "Several cars match; ask staff which one." } : {}) }),
+    isError: false,
+    events: [] as WorkbenchEvent[],
+  };
+}
+
 export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => STAFF_TOOL_NAMES.includes(t.name)).map((tool) => {
   if (tool.name === "get_estimate") {
     return {
@@ -166,7 +234,7 @@ export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => ST
     };
   }
   return tool;
-}).concat(FIND_BRAND_TIRES, DRAFT_ALLDATA_ESTIMATE, PROPOSE_MEMORY);
+}).concat(FIND_BRAND_TIRES, DRAFT_ALLDATA_ESTIMATE, PROPOSE_MEMORY, FIND_FLEET_CAR);
 
 const MAX_BRAND_TIRES = 12;
 
@@ -288,7 +356,9 @@ export async function runWorkbenchTool(
   newEstimateId: () => string,
   knownVehicleKey: string | null,
   dt: () => DtTireClient | null = defaultDt,
+  tato: () => TatoClient | null = getTatoClient,
 ): Promise<{ content: string; isError: boolean; events: WorkbenchEvent[] }> {
+  if (name === "find_fleet_car") return findFleetCar(tato, input);
   if (name === "find_brand_tires") return findBrandTires(dt, input, knownVehicleKey, newEstimateId);
   if (name === "propose_memory") {
     const text = typeof input.text === "string" ? input.text.replace(/\s+/g, " ").trim() : "";
