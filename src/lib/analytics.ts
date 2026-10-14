@@ -1,6 +1,7 @@
 import type { Locale } from "@/lib/site-routes";
 import { readConsent } from "@/lib/consent";
 import { queueGoogleCommand } from "@/lib/google-tag";
+import { trackMetaEvent } from "@/lib/meta-pixel";
 
 // Verified in the SpeedX Google Ads account. These public labels are not credentials.
 const contactConversionDestinations = {
@@ -52,6 +53,7 @@ export function emitContactClick(event: ContactClickEvent): void {
   // A button click is observation only, never a confirmed lead or sale. Do not
   // send Ads conversions before consent, or replay earlier clicks afterward.
   if (readConsent() !== "granted" || event.method === "email") return;
+  trackMetaEvent("Contact", { content_category: event.intent, content_name: event.method });
   const conversion = {
     send_to: contactConversionDestinations[event.method],
     value: 0,

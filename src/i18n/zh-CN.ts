@@ -53,7 +53,7 @@ export const zhCN: Dictionary = {
   consent: {
     title: "您的隐私选择",
     description:
-      "请选择是否允许 SPEEDX AUTO 使用 Google 衡量 Cookie，以了解联系按钮的点击情况。",
+      "请选择是否允许 SPEEDX AUTO 使用 Google 和 Meta（Facebook、Instagram）衡量 Cookie，以了解广告和联系按钮的点击情况。",
     accept: "接受",
     decline: "拒绝",
     privacyLink: "隐私详情",
@@ -66,15 +66,19 @@ export const zhCN: Dictionary = {
     title: "隐私与数据衡量选择",
     intro:
       "本页面说明 SPEEDX AUTO 使用的有限网站衡量功能，以及您可以作出的选择。",
-    lastUpdated: "更新于 2026 年 10 月 11 日",
+    lastUpdated: "更新于 2026 年 10 月 13 日",
     sections: [
       {
         title: "您的选择",
-        body: "首次访问时，您可以接受或拒绝 Google 衡量存储。默认状态为拒绝。您的选择仅适用于本网站，不代表您同意我们主动联系您。",
+        body: "首次访问时，您可以接受或拒绝 Google 和 Meta 衡量存储。默认状态为拒绝。您的选择仅适用于本网站，不代表您同意我们主动联系您。",
       },
       {
         title: "Google 数据衡量",
         body: "网站会保留现有 Google Ads 目标；配置有效的媒体资源 ID 后，也可使用 Google Analytics 4。Consent Mode v2 会先将广告和分析存储设为拒绝，之后仅根据您的选择更新。",
+      },
+      {
+        title: "Meta（Facebook 和 Instagram）数据衡量",
+        body: "如果您选择接受，网站会加载 Meta Pixel，让 SPEEDX AUTO 衡量来自 Facebook 和 Instagram 广告的访问。它会记录页面浏览和联系按钮点击（只包括联系方式和页面类型），不会把您的姓名、电话或聊天内容发送给 Meta。如果您选择拒绝，Meta Pixel 不会加载。",
       },
       {
         title: "联系按钮点击事件",

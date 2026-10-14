@@ -52,7 +52,7 @@ export const en = {
   consent: {
     title: "Your privacy choices",
     description:
-      "Choose whether SPEEDX AUTO may use Google measurement cookies to understand contact-button activity.",
+      "Choose whether SPEEDX AUTO may use Google and Meta (Facebook, Instagram) measurement cookies to understand ad and contact-button activity.",
     accept: "Accept",
     decline: "Decline",
     privacyLink: "Privacy details",
@@ -65,15 +65,19 @@ export const en = {
     title: "Privacy and Measurement Choices",
     intro:
       "This page explains the limited website measurement used by SPEEDX AUTO and the choices available to you.",
-    lastUpdated: "Updated October 11, 2026",
+    lastUpdated: "Updated October 13, 2026",
     sections: [
       {
         title: "Your choice",
-        body: "On your first visit, you can accept or decline Google measurement storage. The default is denied. Your choice applies to this website and is not treated as permission to contact you.",
+        body: "On your first visit, you can accept or decline Google and Meta measurement storage. The default is denied. Your choice applies to this website and is not treated as permission to contact you.",
       },
       {
         title: "Google measurement",
         body: "The site keeps its Google Ads destination and can also use Google Analytics 4 when a valid property ID is configured. Consent Mode v2 starts with ad and analytics storage denied and updates only after your choice.",
+      },
+      {
+        title: "Meta (Facebook and Instagram) measurement",
+        body: "If you accept, the site loads the Meta Pixel so SPEEDX AUTO can measure visits from its Facebook and Instagram ads. It records page views and contact-button clicks (the method and page type only). It does not send your name, phone number, or chat messages to Meta. If you decline, the Meta Pixel does not load.",
       },
       {
         title: "Contact-click events",

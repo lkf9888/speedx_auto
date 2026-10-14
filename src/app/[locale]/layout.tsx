@@ -7,6 +7,7 @@ import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
 import { AnalyticsScripts } from "@/components/AnalyticsScripts";
 import { ConsentBanner } from "@/components/ConsentBanner";
+import { MetaPixel } from "@/components/MetaPixel";
 import { buildPageMetadata } from "@/lib/seo";
 import "../globals.css";
 
@@ -61,6 +62,7 @@ export default async function LocaleLayout({
     <html lang={locale} className={`${inter.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-white text-ink-900">
         <AnalyticsScripts />
+        <MetaPixel />
         <Nav locale={locale as Locale} dict={dict} />
         <main className="flex-1">{children}</main>
         <Footer locale={locale as Locale} dict={dict} />

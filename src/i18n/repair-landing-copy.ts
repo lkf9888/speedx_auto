@@ -10,17 +10,17 @@ type LandingSet = Record<RepairLandingSlug, RepairLandingCopy>;
 
 export const enRepairLanding: LandingSet = {
   "winter-tires": {
-    metaTitle: "Winter Tire Change in Richmond from {tireUpTo18} a Tire",
+    metaTitle: "Winter Tire Change from {tireUpTo18} a Tire + Free Brake Check",
     metaDescription:
-      "Winter tire changes from {tireUpTo18} per tire at SPEEDX AUTO in Richmond, BC, near YVR. Book by WhatsApp. English, Cantonese and Mandarin spoken.",
+      "Winter tire changes from {tireUpTo18} per tire, with a free brake check, at SPEEDX AUTO in Richmond, BC, near YVR. Book by WhatsApp. English, Cantonese and Mandarin spoken.",
     eyebrow: "Winter tire season",
     title: "Winter tires on, from {tireUpTo18} a tire",
     subtitle:
-      "From October 1 to March 31, most BC highways require winter tires or chains. Book your tire change at our Richmond shop near YVR, and ask us to check your brakes while the wheels are off.",
+      "From October 1 to March 31, most BC highways require winter tires or chains. Book your tire change at our Richmond shop near YVR, and we check your brakes for free while the wheels are off.",
     highlights: [
       { value: "{tireUpTo18}", label: "per tire, up to 18 in." },
       { value: "{tireOver18}", label: "per tire, over 18 in." },
-      { value: "{frontPadsFrom}", label: "front brake pads, from" },
+      { value: "Free", label: "brake check with your tire change" },
     ],
     priceTitle: "Tire change prices",
     priceRows: [
@@ -37,7 +37,7 @@ export const enRepairLanding: LandingSet = {
       },
       {
         title: "Brakes for the wet season",
-        body: "Squealing, grinding, or a soft pedal? We measure the pads and rotors and quote before any work. Front pads on most 2015–2020 cars run {frontPads}.",
+        body: "The brake check is free with your tire change: we measure the pads and rotors and tell you what we see. If anything needs work, we quote first. Front pads on most 2015–2020 cars run {frontPads}.",
       },
       {
         title: "Need new tires?",
@@ -48,7 +48,7 @@ export const enRepairLanding: LandingSet = {
     steps: [
       "WhatsApp us your car and tire size",
       "Pick a time at our Richmond shop",
-      "We change the tires and check anything you asked about",
+      "We change the tires and check your brakes for free",
     ],
     trustTitle: "SPEEDX AUTO",
     trust: [
@@ -57,7 +57,7 @@ export const enRepairLanding: LandingSet = {
       "Mon–Sat 10 AM–6:30 PM, appointments required",
       "The same shop maintains our own 100+ vehicle rental fleet",
     ],
-    note: "Prices before tax. Tire change prices cover the work; tires are extra. Vehicles with V8 or larger engines, or that sold new above $120,000, are quoted by the team. Brake work is quoted before we start.",
+    note: "Prices before tax. Tire change prices cover the work; tires are extra. Vehicles with V8 or larger engines, or that sold new above $120,000, are quoted by the team. The brake check is free with a tire change; any brake repair is quoted before we start.",
     ctaTitle: "Book your tire change",
     ctaBody: "Message us your car and tire size on WhatsApp, or call the shop.",
     whatsappText: "Hi SPEEDX AUTO, I'd like to book a winter tire change. My car: ",
@@ -127,15 +127,15 @@ export const enRepairLanding: LandingSet = {
 
 export const zhCNRepairLanding: LandingSet = {
   "winter-tires": {
-    metaTitle: "列治文换冬季胎 每条 {tireUpTo18} 起",
-    metaDescription: "SPEEDX AUTO 列治文车间换冬季胎每条 {tireUpTo18} 起，靠近温哥华机场。WhatsApp 预约，普通话、粤语、英语服务。",
+    metaTitle: "列治文换冬季胎 每条 {tireUpTo18} 起 免费检查刹车",
+    metaDescription: "SPEEDX AUTO 列治文车间换冬季胎每条 {tireUpTo18} 起，免费检查刹车，靠近温哥华机场。WhatsApp 预约，普通话、粤语、英语服务。",
     eyebrow: "冬季胎季节",
     title: "换冬季胎，每条 {tireUpTo18} 起",
-    subtitle: "每年 10 月 1 日至 3 月 31 日，BC 省大部分高速公路要求使用冬季胎或携带防滑链。到我们靠近 YVR 的列治文车间换胎，拆轮子的时候可以顺便让我们看看刹车。",
+    subtitle: "每年 10 月 1 日至 3 月 31 日，BC 省大部分高速公路要求使用冬季胎或携带防滑链。到我们靠近 YVR 的列治文车间换胎，拆轮子时免费帮您检查刹车。",
     highlights: [
       { value: "{tireUpTo18}", label: "每条，18 寸及以下" },
       { value: "{tireOver18}", label: "每条，18 寸以上" },
-      { value: "{frontPadsFrom}", label: "前刹车片起" },
+      { value: "免费", label: "换胎时检查刹车" },
     ],
     priceTitle: "换胎价格",
     priceRows: [
@@ -147,14 +147,14 @@ export const zhCNRepairLanding: LandingSet = {
     pointsTitle: "车在店里的时候",
     points: [
       { title: "为什么要换冬季胎", body: "气温低于约 7 °C 时，冬季胎在湿冷路面上的抓地力比四季胎好，而且 BC 省大部分高速公路从 10 月 1 日起要求使用。" },
-      { title: "雨季更要注意刹车", body: "刹车有尖叫、摩擦声，或者踏板变软？我们会测量刹车片和刹车盘，开工前先报价。多数 2015–2020 年车型换前刹车片 {frontPads}。" },
+      { title: "雨季更要注意刹车", body: "换胎时免费检查刹车：测量刹车片和刹车盘，告诉您实际情况。需要维修的话先报价再开工。多数 2015–2020 年车型换前刹车片 {frontPads}。" },
       { title: "需要买新胎？", body: "我们可以报价新冬季胎（含安装）。请发送轮胎侧面的尺寸，例如 215/55R17。" },
     ],
     stepsTitle: "怎么预约",
-    steps: ["WhatsApp 发送车型和轮胎尺寸", "约好到列治文车间的时间", "换胎，顺便检查您提到的问题"],
+    steps: ["WhatsApp 发送车型和轮胎尺寸", "约好到列治文车间的时间", "换胎，并免费检查刹车"],
     trustTitle: "SPEEDX AUTO 速驰汽车",
     trust: ["列治文 2980 Number 3 Road，靠近 YVR", "普通话、粤语、英语都可以", "周一至周六 10:00–18:30，需要预约", "自营 100 多辆租车车队，也由这个车间维护"],
-    note: "以上为税前价格。换胎价格只含工钱，轮胎另计。V8 及以上发动机、或新车价超过 12 万加元的车辆，由团队单独报价。刹车维修开工前先报价。",
+    note: "以上为税前价格。换胎价格只含工钱，轮胎另计。V8 及以上发动机、或新车价超过 12 万加元的车辆，由团队单独报价。换胎时检查刹车免费，刹车维修开工前先报价。",
     ctaTitle: "预约换胎",
     ctaBody: "WhatsApp 发送车型和轮胎尺寸，或直接致电车间。",
     whatsappText: "你好 SPEEDX AUTO，我想预约换冬季胎。我的车是：",
@@ -201,15 +201,15 @@ export const zhCNRepairLanding: LandingSet = {
 
 export const zhTWRepairLanding: LandingSet = {
   "winter-tires": {
-    metaTitle: "列治文換冬季胎 每條 {tireUpTo18} 起",
-    metaDescription: "SPEEDX AUTO 列治文車房換冬季胎每條 {tireUpTo18} 起，鄰近溫哥華機場。WhatsApp 預約，粵語、普通話、英語服務。",
+    metaTitle: "列治文換冬季胎 每條 {tireUpTo18} 起 免費檢查煞車",
+    metaDescription: "SPEEDX AUTO 列治文車房換冬季胎每條 {tireUpTo18} 起，免費檢查煞車，鄰近溫哥華機場。WhatsApp 預約，粵語、普通話、英語服務。",
     eyebrow: "冬季胎季節",
     title: "換冬季胎，每條 {tireUpTo18} 起",
-    subtitle: "每年 10 月 1 日至 3 月 31 日，BC 省大部分高速公路要求使用冬季胎或攜帶防滑鏈。到我們鄰近 YVR 的列治文車房換胎，拆輪的時候可以順便讓我們看看煞車。",
+    subtitle: "每年 10 月 1 日至 3 月 31 日，BC 省大部分高速公路要求使用冬季胎或攜帶防滑鏈。到我們鄰近 YVR 的列治文車房換胎，拆輪時免費幫您檢查煞車。",
     highlights: [
       { value: "{tireUpTo18}", label: "每條，18 吋或以下" },
       { value: "{tireOver18}", label: "每條，18 吋以上" },
-      { value: "{frontPadsFrom}", label: "前煞車片起" },
+      { value: "免費", label: "換胎時檢查煞車" },
     ],
     priceTitle: "換胎價錢",
     priceRows: [
@@ -221,14 +221,14 @@ export const zhTWRepairLanding: LandingSet = {
     pointsTitle: "車在店內的時候",
     points: [
       { title: "為甚麼要換冬季胎", body: "氣溫低於約 7 °C 時，冬季胎在濕冷路面上的抓地力比四季胎好，而且 BC 省大部分高速公路由 10 月 1 日起要求使用。" },
-      { title: "雨季更要留意煞車", body: "煞車有尖叫、磨擦聲，或者腳踏變軟？我們會量度煞車片和煞車碟，開工前先報價。大部分 2015–2020 年車款換前煞車片 {frontPads}。" },
+      { title: "雨季更要留意煞車", body: "換胎時免費檢查煞車：量度煞車片和煞車碟，告訴您實際情況。需要維修的話先報價再開工。大部分 2015–2020 年車款換前煞車片 {frontPads}。" },
       { title: "需要買新胎？", body: "我們可以報價新冬季胎（連安裝）。請傳送輪胎側面的尺寸，例如 215/55R17。" },
     ],
     stepsTitle: "怎樣預約",
-    steps: ["WhatsApp 傳送車款和輪胎尺寸", "約好到列治文車房的時間", "換胎，順便檢查您提到的問題"],
+    steps: ["WhatsApp 傳送車款和輪胎尺寸", "約好到列治文車房的時間", "換胎，並免費檢查煞車"],
     trustTitle: "SPEEDX AUTO 速馳汽車",
     trust: ["列治文 2980 Number 3 Road，鄰近 YVR", "粵語、普通話、英語都可以", "週一至週六 10:00–18:30，須預約", "自營 100 多部租車車隊，亦由這個車房保養"],
-    note: "以上為未連稅價錢。換胎價錢只計工錢，輪胎另計。V8 或以上引擎、或新車價超過 12 萬加元的車輛，由團隊另行報價。煞車維修開工前先報價。",
+    note: "以上為未連稅價錢。換胎價錢只計工錢，輪胎另計。V8 或以上引擎、或新車價超過 12 萬加元的車輛，由團隊另行報價。換胎時檢查煞車免費，煞車維修開工前先報價。",
     ctaTitle: "預約換胎",
     ctaBody: "WhatsApp 傳送車款和輪胎尺寸，或直接致電車房。",
     whatsappText: "你好 SPEEDX AUTO，我想預約換冬季胎。我部車是：",
