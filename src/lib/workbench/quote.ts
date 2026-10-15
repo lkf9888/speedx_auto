@@ -275,7 +275,7 @@ export interface TireQuoteSource {
   supplier: "dt" | "partner_tires";
 }
 
-const PARTNER_LIST: TireQuoteSource = { name: "合作轮胎价目表", retailRule: "零售价", supplier: "partner_tires" };
+const PARTNER_LIST: TireQuoteSource = { name: "合作轮胎价目表 + Wheel Mart（实时，每行注明）", retailRule: "零售价（拿货价 × 店里的加价倍率）", supplier: "partner_tires" };
 
 /** New tires: installed price per tire for the customer; cost, eco fee and mounting shown apart. */
 export function buildTireQuote(
@@ -329,7 +329,7 @@ export function buildTireQuote(
 const SOURCES: Record<NonNullable<StaffQuote["supplier"]>, string> = {
   worldpac: "WorldPac speedDIAL (labor guide and the shop's WorldPac account prices)",
   dt: "DT Tire Hub, live",
-  partner_tires: "the partner tire price list",
+  partner_tires: "the partner tire price list and Wheel Mart Canada (live stock; each row says which)",
   shop: "the shop's own flat prices",
 };
 

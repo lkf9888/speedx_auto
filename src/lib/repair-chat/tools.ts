@@ -33,6 +33,8 @@ import {
   type VehicleSize,
 } from "./flat-price";
 import { dtTireConfigured, getDtTireClient, type DtTireClient } from "@/lib/dt-tire/client";
+import { getWheelmartClient, type WheelmartClient } from "@/lib/wheelmart/client";
+import { liveWheelmartListings } from "@/lib/wheelmart/listings";
 import { cachedDtSearch, DT_SEASONS, isStudded, pickDtTires } from "@/lib/dt-tire/options";
 import { ecoFee, findTires, loadTireList, mountingPerTire, seasonsForSize, sizeKey, type TireOption, type TireSeason } from "./tires";
 import {
@@ -445,6 +447,8 @@ export async function runTool(
   knownVehicleKey: string | null = null,
   /** DT Tire Hub for international brands; null when it isn't set up. */
   dt: () => DtTireClient | null = () => (dtTireConfigured() ? getDtTireClient() : null),
+  /** Wheel Mart Canada (value brands, live stock); null when it isn't set up. */
+  wheelmart: () => WheelmartClient | null = getWheelmartClient,
 ): Promise<ToolOutcome> {
   switch (name) {
     case "identify_vehicle": {
@@ -588,8 +592,12 @@ export async function runTool(
       } else if (input.new_price_over_120k === true) {
         return teamQuote(vehicle, serviceName, "Premium vehicle: no posted tire price.", newEstimateId);
       }
-      const listings = loadTireList();
-      if (!listings) return teamQuote(vehicle, serviceName, "Tire price list not loaded.", newEstimateId);
+      const list = loadTireList();
+      // The local wholesaler's live stock, priced the same way; only tires it has enough of.
+      // A load index and speed rating must be known, so the assistant can check it's no downgrade.
+      const live = (await liveWheelmartListings(wheelmart(), size)).filter((l) => l.onHand >= count && /\d[A-Z]\b/.test(l.load));
+      if (!list && live.length === 0) return teamQuote(vehicle, serviceName, "Tire price list not loaded.", newEstimateId);
+      const listings = [...(list ?? []), ...live.map(({ category, brand, size: s, pattern, load, price }) => ({ category, brand, size: s, pattern, load, price }))];
       const options = findTires(listings, size, season, count);
       if (options.length === 0) {
         const available = seasonsForSize(listings, size);

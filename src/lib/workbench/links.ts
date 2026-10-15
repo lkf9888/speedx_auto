@@ -20,6 +20,7 @@ export interface ProductLink {
 
 export const SPEEDDIAL_URL = "https://speeddial.worldpac.com/";
 const DT_SEARCH = "https://dttirehub.ca/touchettestorefront/touchette/en/tireSearch/tire-size/search";
+const WHEELMART_SEARCH = "https://wheelmartcanada.ca/product/tires";
 
 const q = encodeURIComponent;
 
@@ -46,6 +47,11 @@ export function optionLinks(quote: Pick<StaffQuote, "kind" | "supplier" | "servi
     if (part) links.push({ label: "DT 搜索", url: `${DT_SEARCH}?${new URLSearchParams({ tireSize: size, sku: part, season: "ALL", sort: "relevance" })}` });
     links.push({ label: "Amazon 搜索", url: `https://www.amazon.ca/s?k=${q([option.brand, model, size].filter(Boolean).join(" "))}` });
     return links;
+  }
+  // Only Wheel Mart rows carry a SKU on the partner tire card; its search takes the size digits.
+  if (quote.kind === "tires" && quote.supplier === "partner_tires" && part) {
+    const digits = tireSize(`${option.label} ${quote.service}`).replace(/\D/g, "");
+    if (digits) return [{ label: "Wheel Mart 搜索", url: `${WHEELMART_SEARCH}?${new URLSearchParams({ "ProductSearch[size]": digits })}` }];
   }
   return [];
 }

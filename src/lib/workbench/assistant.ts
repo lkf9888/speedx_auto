@@ -6,7 +6,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ChatProfile } from "@/lib/repair-chat/agent";
 import { runTool as runPublicTool, statusForTool, TOOLS, type ChatEvent } from "@/lib/repair-chat/tools";
-import { ecoFee, loadTireList, mountingPerTire, sizeKey } from "@/lib/repair-chat/tires";
+import { ecoFee, loadTireList, mountingPerTire, sizeKey, type TireListing } from "@/lib/repair-chat/tires";
 import { shopToday } from "@/lib/repair-chat/prompt";
 import {
   applyVehicleDetails,
@@ -25,6 +25,8 @@ import { dtTireConfigured, getDtTireClient, type DtTireClient } from "@/lib/dt-t
 import type { DtTire } from "@/lib/dt-tire/parse";
 import { cachedDtSearch, DT_SEASONS, pickDtTires } from "@/lib/dt-tire/options";
 import { getTatoClient, type FleetCar, type FleetTrip, type TatoClient } from "@/lib/tato/client";
+import { getWheelmartClient, type WheelmartClient } from "@/lib/wheelmart/client";
+import { liveWheelmartListings, tireMarkup } from "@/lib/wheelmart/listings";
 import { MAX_NOTE_LENGTH } from "./memory";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
 import { buildFlatQuote, buildLaborQuote, buildPartsQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
@@ -287,7 +289,7 @@ export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => ST
     return {
       ...tool,
       description:
-        "Staff view of new tires the shop sells, by sidewall size (e.g. 225/65R17) and season: every matching tire with the customer's installed price per tire, the tire cost, eco fee and mounting. Shown to staff as a card.",
+        "Staff view of the value-brand tires the shop sells, by sidewall size (e.g. 225/65R17) and season: the partner price list plus Wheel Mart Canada's live stock (each row says which, with Wheel Mart's stock on hand). Every matching tire with the customer's installed price per tire, the tire cost, eco fee and mounting. Shown to staff as a card.",
     };
   }
   return tool;
@@ -371,34 +373,49 @@ async function findBrandTires(
   return quoteOutcome(quote);
 }
 
-function tireMarkup(env: NodeJS.ProcessEnv = process.env): number | null {
-  const value = Number(env.TIRE_MARKUP);
-  return Number.isFinite(value) && value > 1 ? value : null;
-}
-
-function staffTires(size: string, season: string, now = new Date()): StaffTireOption[] | null {
+/**
+ * Every matching tire for staff: the partner price list (cost worked back
+ * from the markup) and Wheel Mart's live rows (real dealer cost and stock).
+ * Null when neither source is available.
+ */
+async function staffTires(size: string, season: string, wheelmart: () => WheelmartClient | null, now = new Date()): Promise<StaffTireOption[] | null> {
   const listings = loadTireList();
-  if (!listings) return null;
+  const client = wheelmart();
+  const markup = tireMarkup();
+  if (!listings && !(client && markup)) return null;
   const wanted = sizeKey(size);
   if (!wanted) return [];
   const trailer = /^\s*ST/i.test(size);
-  const markup = tireMarkup();
-  return listings
-    .filter((l) => sizeKey(l.size)?.key === wanted.key)
-    .filter((l) => (trailer ? l.category === "trailer" : l.category !== "trailer"))
-    .filter((l) => trailer || season === "any" || l.category === season)
-    .map((l) => ({
-      brand: l.brand,
-      pattern: l.pattern,
-      size: l.size,
-      load: l.load,
-      season: l.category,
-      retail: l.price,
-      eco: ecoFee(now),
-      mounting: mountingPerTire(l, wanted.rim),
-      cost: markup ? l.price / markup : null,
-    }))
-    .sort((a, b) => a.retail - b.retail);
+  const fits = (l: TireListing) =>
+    sizeKey(l.size)?.key === wanted.key &&
+    (trailer ? l.category === "trailer" : l.category !== "trailer") &&
+    (trailer || season === "any" || l.category === season);
+  const fromList: StaffTireOption[] = (listings ?? []).filter(fits).map((l) => ({
+    brand: l.brand,
+    pattern: l.pattern,
+    size: l.size,
+    load: l.load,
+    season: l.category,
+    retail: l.price,
+    eco: ecoFee(now),
+    mounting: mountingPerTire(l, wanted.rim),
+    cost: markup ? l.price / markup : null,
+    stock: "价目表",
+  }));
+  const fromWheelmart: StaffTireOption[] = (await liveWheelmartListings(client, size, markup)).filter(fits).map((l) => ({
+    brand: l.brand,
+    pattern: l.pattern,
+    size: l.size,
+    load: l.load,
+    season: l.category,
+    retail: l.price,
+    eco: ecoFee(now),
+    mounting: mountingPerTire(l, wanted.rim),
+    cost: l.cost,
+    sku: l.sku,
+    stock: [`Wheel Mart 库存 ${l.onHand > 0 ? l.onHandText : "0（无货）"}`, l.remarks].filter(Boolean).join(" · "),
+  }));
+  return [...fromList, ...fromWheelmart].sort((a, b) => a.retail - b.retail);
 }
 
 const quoteOutcome = (quote: StaffQuote) => ({
@@ -479,6 +496,7 @@ export async function runWorkbenchTool(
   knownVehicleKey: string | null,
   dt: () => DtTireClient | null = defaultDt,
   tato: () => TatoClient | null = getTatoClient,
+  wheelmart: () => WheelmartClient | null = getWheelmartClient,
 ): Promise<{ content: string; isError: boolean; events: WorkbenchEvent[] }> {
   if (name === "find_fleet_car") return findFleetCar(tato, input);
   if (name === "find_brand_tires") return findBrandTires(dt, input, knownVehicleKey, newEstimateId);
@@ -543,8 +561,8 @@ export async function runWorkbenchTool(
     const season = typeof input.season === "string" ? input.season : "any";
     const count = readTireCount(input.count);
     if (typeof count !== "number") return { content: JSON.stringify(count), isError: true, events: [] };
-    const options = staffTires(size, season);
-    if (options === null) return { content: JSON.stringify({ status: "no_price_list", note: "The tire price list is not loaded on the server." }), isError: false, events: [] };
+    const options = await staffTires(size, season, wheelmart);
+    if (options === null) return { content: JSON.stringify({ status: "no_price_list", note: "Neither the tire price list nor Wheel Mart is set up on the server." }), isError: false, events: [] };
     if (options.length === 0) return { content: JSON.stringify({ status: "not_found", note: "No tire of that size and season on the price list." }), isError: false, events: [] };
     const key = typeof input.vehicle_key === "string" && input.vehicle_key ? input.vehicle_key : knownVehicleKey;
     const decoded = key ? decodeVehicleKey(key) : null;
