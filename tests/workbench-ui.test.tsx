@@ -2,6 +2,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Workbench } from "@/components/workbench/Workbench";
+import { ASSISTANT, type Turn } from "@/lib/workbench/conversation-types";
+import { ConversationStore, newTurnId } from "@/lib/workbench/conversations";
+import { handleConversation, handleConversationList } from "@/lib/workbench/conversations-http";
+import { historyFromTurns } from "@/lib/workbench/http";
+import { memoryKv } from "@/lib/workbench/kv";
 
 function ndjson(events: unknown[]) {
   return new Response(events.map((e) => JSON.stringify(e)).join("\n") + "\n", {
@@ -9,15 +14,77 @@ function ndjson(events: unknown[]) {
   });
 }
 
-/** Replies "答复：<question>" and reports a vehicle for questions mentioning Camry. */
-function fakeServer() {
-  return vi.fn(async (_url: string, init?: RequestInit) => {
-    const body = JSON.parse(String(init?.body)) as { message: string; vehicleKey: string | null };
-    const events: unknown[] = [];
-    if (body.message.includes("Camry")) events.push({ type: "vehicle", vehicle: { key: "k-camry", label: "2019 Toyota Camry LE" } });
-    events.push({ type: "message", text: `答复：${body.message}（车辆 ${body.vehicleKey ?? "无"}）` }, { type: "done" });
-    return ndjson(events);
+interface CloudOptions {
+  /** Extra events before the reply text (cards). */
+  events?: (message: string) => unknown[];
+  /** Hold a reply until the promise settles. */
+  delay?: (message: string) => Promise<void> | undefined;
+  /** Other endpoints (e.g. memory). */
+  other?: (url: string, init?: RequestInit) => Promise<Response> | undefined;
+}
+
+/**
+ * The workbench's cloud, for the page under test: the real conversation store
+ * and endpoints over an in-memory KV, plus a chat endpoint that saves turns the
+ * way the real one does and answers "答复：<question>（车辆 <key>）".
+ */
+function cloud(options: CloudOptions = {}) {
+  const store = new ConversationStore(memoryKv());
+  const chats: Array<{ conversationId: string; message: string; history: Array<{ role: string; text: string }>; attachments?: unknown[] }> = [];
+  let who = "staff@example.com";
+  const deps = { user: async () => ({ email: who }), store: () => store, log: () => {} };
+  const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+    const request = new Request(`https://repair.speedxrental.com${url}`, init);
+    if (url === "/api/workbench/conversations") return handleConversationList(request, deps);
+    const one = url.match(/^\/api\/workbench\/conversations\/([^/]+)$/);
+    if (one) return handleConversation(request, one[1], deps);
+    if (url === "/api/workbench/chat") {
+      const body = JSON.parse(String(init?.body)) as { conversationId: string; message: string; attachments?: Array<{ name: string; mediaType: string }> };
+      const stored = await store.get(body.conversationId);
+      chats.push({ conversationId: body.conversationId, message: body.message, history: historyFromTurns(stored?.turns ?? []), attachments: body.attachments });
+      const asker = who;
+      const question: Turn = {
+        id: newTurnId(),
+        role: "user",
+        text: body.message,
+        author: asker,
+        at: Date.now(),
+        quotes: [],
+        ...(body.attachments ? { attachments: body.attachments.map(({ name, mediaType }) => ({ name, mediaType })) } : {}),
+      };
+      await store.append(body.conversationId, asker, [question], undefined, body.message || body.attachments?.[0]?.name);
+      store.pending.set(body.conversationId, { by: asker, status: "thinking", since: Date.now() });
+      await options.delay?.(body.message);
+      const vehicle = body.message.includes("Camry") ? { key: "k-camry", label: "2019 Toyota Camry LE" } : (stored?.vehicle ?? null);
+      const extra = options.events?.(body.message) ?? [];
+      const text = `答复：${body.message}（车辆 ${vehicle?.key ?? "无"}）`;
+      const answer: Turn = {
+        id: newTurnId(),
+        role: "assistant",
+        author: ASSISTANT,
+        at: Date.now(),
+        text,
+        quotes: [],
+        ...(extra.some((e) => (e as { type: string }).type === "alldata_draft") ? { drafts: extra.filter((e) => (e as { type: string }).type === "alldata_draft").map((e) => (e as { draft: never }).draft) } : {}),
+        ...(extra.some((e) => (e as { type: string }).type === "memory_proposal") ? { memories: extra.filter((e) => (e as { type: string }).type === "memory_proposal").map((e) => (e as { proposal: never }).proposal) } : {}),
+      };
+      await store.append(body.conversationId, asker, [answer], vehicle);
+      store.pending.delete(body.conversationId);
+      return ndjson([...(vehicle ? [{ type: "vehicle", vehicle }] : []), ...extra, { type: "message", text }, { type: "saved", turns: [question, answer] }, { type: "done" }]);
+    }
+    const handled = options.other?.(url, init);
+    if (handled) return handled;
+    throw new Error(`unexpected ${url}`);
   });
+  return {
+    store,
+    chats,
+    fetchImpl,
+    /** Who the next requests come from. */
+    as(email: string) {
+      who = email;
+    },
+  };
 }
 
 async function ask(text: string) {
@@ -29,10 +96,18 @@ const chat = () => within(screen.getByRole("main"));
 
 const titles = () => screen.getAllByTestId("conversation").map((b) => within(b).getByTestId("conversation-title").textContent);
 
-describe("workbench conversations", () => {
+/** A fresh browser: nothing kept locally. */
+function newBrowser() {
+  window.localStorage.clear();
+}
+
+describe("shared workbench conversations", () => {
+  let server: ReturnType<typeof cloud>;
   beforeEach(() => {
-    window.localStorage.clear();
-    vi.stubGlobal("fetch", fakeServer());
+    newBrowser();
+    server = cloud();
+    vi.stubGlobal("fetch", server.fetchImpl);
+    vi.stubGlobal("confirm", () => true);
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -46,18 +121,19 @@ describe("workbench conversations", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "+ 新会话" }));
     expect(chat().queryByText(/答复：2019 Camry/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/当前车辆/)).not.toBeInTheDocument();
     await ask("225/65R17 四季胎");
     // The second conversation doesn't carry the first one's vehicle.
     expect(await chat().findByText("答复：225/65R17 四季胎（车辆 无）")).toBeInTheDocument();
 
     await userEvent.click(screen.getAllByTestId("conversation").find((b) => b.textContent?.includes("2019 Camry"))!);
-    expect(chat().getByText(/答复：2019 Camry 前刹车片/)).toBeInTheDocument();
+    expect(await chat().findByText(/答复：2019 Camry 前刹车片/)).toBeInTheDocument();
     await ask("后刹车片呢");
     expect(await chat().findByText("答复：后刹车片呢（车辆 k-camry）")).toBeInTheDocument();
+    // The server, not the page, supplies the history.
+    expect(server.chats.at(-1)!.history.map((t) => t.text)).toEqual(["2019 Camry 前刹车片", "答复：2019 Camry 前刹车片（车辆 k-camry）"]);
   });
 
-  it("restores conversations after a reload and lets staff delete one", async () => {
+  it("keeps conversations in the cloud: another browser sees them, and staff can delete one", async () => {
     const first = render(<Workbench email="staff@example.com" />);
     await ask("2019 Camry 前刹车片");
     await chat().findByText(/答复：2019 Camry/);
@@ -66,13 +142,39 @@ describe("workbench conversations", () => {
     await chat().findByText(/答复：2018 Civic/);
     first.unmount();
 
+    newBrowser();
     render(<Workbench email="staff@example.com" />);
-    expect(titles()).toEqual(["2018 Civic LX 换机油", "2019 Camry 前刹车片"]);
+    await waitFor(() => expect(titles()).toEqual(["2018 Civic LX 换机油", "2019 Camry 前刹车片"]));
+    expect(await chat().findByText(/答复：2018 Civic/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "删除会话 2018 Civic LX 换机油" }));
-    expect(titles()).toEqual(["2019 Camry 前刹车片"]);
+    await waitFor(() => expect(titles()).toEqual(["2019 Camry 前刹车片"]));
+    expect(await server.store.list()).toHaveLength(1);
   });
 
-  it("lets staff rename a conversation, keeps the name after a reload, and Escape cancels", async () => {
+  it("shows everyone's messages with who sent them, like a group chat", async () => {
+    server.as("kevin@speedx.ca");
+    const kevin = render(<Workbench email="kevin@speedx.ca" />);
+    await ask("2019 Camry 前刹车片");
+    await chat().findByText(/答复：2019 Camry/);
+    kevin.unmount();
+
+    newBrowser();
+    server.as("amy@speedx.ca");
+    render(<Workbench email="amy@speedx.ca" />);
+    const fromKevin = await screen.findByTestId("colleague-message");
+    expect(fromKevin).toHaveTextContent("kevin");
+    expect(fromKevin).toHaveTextContent("2019 Camry 前刹车片");
+    expect(within(screen.getAllByTestId("conversation")[0]).getByText(/答复：2019 Camry/)).toBeInTheDocument();
+
+    // Amy carries on in the same conversation; her own message is hers, Kevin's stays his.
+    await ask("后刹车片也报一下");
+    await chat().findByText(/答复：后刹车片也报一下/);
+    expect(screen.getAllByTestId("colleague-message")).toHaveLength(1);
+    const stored = await server.store.get(server.chats[0].conversationId);
+    expect(stored!.turns.filter((t) => t.role === "user").map((t) => t.author)).toEqual(["kevin@speedx.ca", "amy@speedx.ca"]);
+  });
+
+  it("lets staff rename a conversation for everyone, and Escape cancels", async () => {
     const { unmount } = render(<Workbench email="a@speedx.test" />);
     await ask("2019 Camry 前刹车片");
     await chat().findByText(/答复：2019 Camry/);
@@ -85,16 +187,15 @@ describe("workbench conversations", () => {
     const box = screen.getByLabelText("会话标题");
     await userEvent.clear(box);
     await userEvent.type(box, "张先生 Camry{enter}");
-    expect(titles()).toEqual(["张先生 Camry"]);
+    await waitFor(() => expect(titles()).toEqual(["张先生 Camry"]));
 
     unmount();
-    render(<Workbench email="a@speedx.test" />);
-    expect(titles()).toEqual(["张先生 Camry"]);
+    newBrowser();
+    render(<Workbench email="b@speedx.test" />);
+    await waitFor(() => expect(titles()).toEqual(["张先生 Camry"]));
   });
 
-  it("sends attached photos and files with the message, shows them in the chat, and keeps only names after a reload", async () => {
-    const server = fakeServer();
-    vi.stubGlobal("fetch", server);
+  it("sends attached photos and files, and stores only their names in the cloud", async () => {
     const { unmount } = render(<Workbench email="staff@example.com" />);
     const photo = new File([new Uint8Array([1, 2, 3])], "vin.jpg", { type: "image/jpeg" });
     const sheet = new File(["part,qty\nACT2076,1"], "list.csv", { type: "text/csv" });
@@ -105,25 +206,25 @@ describe("workbench conversations", () => {
     // Files alone are enough to send.
     await userEvent.click(screen.getByRole("button", { name: "查询" }));
     await chat().findByText(/答复：/);
-    const body = JSON.parse(String(server.mock.calls[0][1]?.body));
-    expect(body.message).toBe("");
-    expect(body.attachments).toEqual([
+    const sent = JSON.parse(String(server.fetchImpl.mock.calls.find(([url]) => url === "/api/workbench/chat")![1]?.body));
+    expect(sent.message).toBe("");
+    expect(sent.attachments).toEqual([
       { name: "vin.jpg", mediaType: "image/jpeg", data: "AQID" },
       { name: "list.csv", mediaType: "text/csv", data: "part,qty\nACT2076,1" },
     ]);
     expect(within(screen.getByTestId("sent-files")).getByText("list.csv")).toBeInTheDocument();
 
-    // The next question carries a note about the earlier files, not the files themselves.
+    // The next question's history names the earlier files instead of sending them again.
     await ask("这个 VIN 的车？");
     await chat().findByText(/答复：这个 VIN/);
-    const second = JSON.parse(String(server.mock.calls[1][1]?.body));
-    expect(second.attachments).toBeUndefined();
-    expect(second.history[0].text).toContain("[附件：vin.jpg、list.csv]");
+    expect(server.chats[1].attachments).toBeUndefined();
+    expect(server.chats[1].history[0].text).toContain("[附件：vin.jpg、list.csv]");
 
     unmount();
+    newBrowser();
     render(<Workbench email="staff@example.com" />);
-    expect(within(screen.getByTestId("sent-files")).getByText("list.csv")).toBeInTheDocument();
-    expect(window.localStorage.getItem("speedx.workbench.conversations.v1:staff@example.com")).not.toContain("AQID");
+    expect(within(await screen.findByTestId("sent-files")).getByText("list.csv")).toBeInTheDocument();
+    expect(JSON.stringify(await server.store.get(server.chats[0].conversationId))).not.toContain("AQID");
   });
 
   it("refuses unsupported files with a note and lets staff remove a picked file", async () => {
@@ -137,35 +238,42 @@ describe("workbench conversations", () => {
     expect(screen.getByRole("button", { name: "查询" })).toBeDisabled();
   });
 
-  it("keeps one staff member's conversations separate from another's on the same browser", async () => {
-    const first = render(<Workbench email="a@example.com" />);
-    await ask("2019 Camry 前刹车片");
-    await chat().findByText(/答复：2019 Camry/);
-    first.unmount();
-    render(<Workbench email="b@example.com" />);
-    expect(titles()).toEqual(["新会话"]);
+  it("uploads the conversations a browser kept before the move to the cloud, once", async () => {
+    window.localStorage.setItem(
+      "speedx.workbench.conversations.v1:staff@example.com",
+      JSON.stringify([
+        {
+          id: "cold0001",
+          title: "老会话 Sienna",
+          vehicle: null,
+          updatedAt: 1,
+          turns: [
+            { role: "user", text: "2016 Sienna 前刹车片", quotes: [], at: 1 },
+            { role: "assistant", text: "旧的答复", quotes: [], at: 2 },
+          ],
+        },
+      ]),
+    );
+    render(<Workbench email="staff@example.com" />);
+    await waitFor(() => expect(titles()).toContain("老会话 Sienna"));
+    expect((await server.store.get("cold0001"))!.turns[0]).toMatchObject({ author: "staff@example.com", text: "2016 Sienna 前刹车片" });
+    expect(window.localStorage.getItem("speedx.workbench.migrated.v1:staff@example.com")).toBeTruthy();
   });
 
   it("lets one conversation work while another is still waiting", async () => {
     let release!: () => void;
     const slow = new Promise<void>((r) => (release = r));
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        const { message } = JSON.parse(String(init?.body)) as { message: string };
-        if (message === "慢的问题") await slow;
-        return ndjson([{ type: "message", text: `答复：${message}` }, { type: "done" }]);
-      }),
-    );
+    server = cloud({ delay: (message) => (message === "慢的问题" ? slow : undefined) });
+    vi.stubGlobal("fetch", server.fetchImpl);
     render(<Workbench email="staff@example.com" />);
     await ask("慢的问题");
     expect(await screen.findByRole("status")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "+ 新会话" }));
     await ask("快的问题");
-    expect(await chat().findByText("答复：快的问题")).toBeInTheDocument();
+    expect(await chat().findByText("答复：快的问题（车辆 无）")).toBeInTheDocument();
     release();
     await userEvent.click(screen.getAllByTestId("conversation").find((b) => b.textContent?.includes("慢的问题"))!);
-    expect(await chat().findByText("答复：慢的问题")).toBeInTheDocument();
+    expect(await chat().findByText("答复：慢的问题（车辆 无）")).toBeInTheDocument();
   });
 });
 
@@ -214,10 +322,7 @@ describe("ALLDATA in the workbench", () => {
     requests.length = 0;
     const { resetBridge } = await import("@/lib/workbench/alldata-bridge");
     resetBridge();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ndjson([draftEvent, { type: "message", text: "草稿好了，请核对后创建。" }, { type: "done" }])),
-    );
+    vi.stubGlobal("fetch", cloud({ events: () => [draftEvent] }).fetchImpl);
   });
   afterEach(() => {
     if (fakeExtension) window.removeEventListener("message", fakeExtension);
@@ -249,10 +354,11 @@ describe("ALLDATA in the workbench", () => {
     await userEvent.click(within(card).getByRole("button", { name: "打开 PDF（打印 / 下载）" }));
     expect(requests.at(-1)).toEqual({ op: "openPdf", args: { documentId: 444, documentType: "Estimate" } });
 
-    // The created estimate survives a reload: no second create button.
+    // The created estimate is saved with the conversation: no second create button anywhere.
     view.unmount();
+    window.localStorage.clear();
     render(<Workbench email="staff@example.com" />);
-    expect(screen.getByText(/已在 ALLDATA 建好 Estimate #954/)).toBeInTheDocument();
+    expect(await screen.findByText(/已在 ALLDATA 建好 Estimate #954/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "在 ALLDATA 创建估价单" })).not.toBeInTheDocument();
   });
 
@@ -292,21 +398,18 @@ describe("workbench memory", () => {
     const note = (n: { id: string; text: string }) => ({ ...n, createdBy: "a@x", createdAt: "2026-10-14T20:00:00Z", updatedBy: "a@x", updatedAt: "2026-10-14T20:00:00Z" });
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/workbench/memory") {
+      cloud({
+        events: () => [{ type: "memory_proposal", proposal: { id: "M-1", text: "米其林冬季胎先问客人能不能接受带钉胎", replacesId: null } }],
+        other: (url, init) => {
+          if (url !== "/api/workbench/memory") return undefined;
           const method = init?.method ?? "GET";
           const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : null;
           memoryCalls.push({ method, body });
           if (method === "POST") saved.push({ id: `m${saved.length + 1}`, text: String(body!.text) });
           if (method === "DELETE") saved = saved.filter((n) => n.id !== body!.id);
-          return Response.json({ notes: saved.map(note) }, { status: method === "POST" ? 201 : 200 });
-        }
-        return ndjson([
-          { type: "memory_proposal", proposal: { id: "M-1", text: "米其林冬季胎先问客人能不能接受带钉胎", replacesId: null } },
-          { type: "message", text: "好的，确认后保存。" },
-          { type: "done" },
-        ]);
-      }),
+          return Promise.resolve(Response.json({ notes: saved.map(note) }, { status: method === "POST" ? 201 : 200 }));
+        },
+      }).fetchImpl,
     );
   });
   afterEach(() => vi.unstubAllGlobals());
@@ -320,8 +423,9 @@ describe("workbench memory", () => {
     expect(await within(card).findByText(/已保存/)).toBeInTheDocument();
     expect(memoryCalls).toEqual([{ method: "POST", body: { text: "米其林冬季胎先问客人能不能接受带钉胎" } }]);
     view.unmount();
+    window.localStorage.clear();
     render(<Workbench email="staff@example.com" />);
-    expect(screen.getByText(/已保存/)).toBeInTheDocument();
+    expect(await screen.findByText(/已保存/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "保存到记忆" })).not.toBeInTheDocument();
   });
 

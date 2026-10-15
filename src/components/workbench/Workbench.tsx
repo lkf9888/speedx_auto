@@ -1,48 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { ACCEPTED_TYPES, attachmentKind, MAX_ATTACHMENTS } from "@/lib/workbench/attachments";
 import { prepareAttachment, type PreparedAttachment } from "@/lib/workbench/prepare-attachment";
 import type { AlldataCreated, AlldataDraft } from "@/lib/workbench/alldata-draft";
 import type { MemoryProposal } from "@/lib/workbench/assistant";
+import {
+  ASSISTANT,
+  staffName,
+  type Conversation,
+  type ConversationSummary,
+  type PendingQuery,
+  type SentFile,
+  type Turn as SharedTurn,
+} from "@/lib/workbench/conversation-types";
 import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
 import { StaffQuoteCard } from "./StaffQuoteCard";
 
-interface Turn {
-  role: "user" | "assistant";
-  text: string;
-  quotes: StaffQuote[];
-  /** ALLDATA estimate drafts from this reply. */
-  drafts?: AlldataDraft[];
-  /** Notes the assistant suggested keeping in the shared memory. */
-  memories?: Array<MemoryProposal & { saved?: boolean }>;
-  /** Shown but not sent back to the assistant (errors). */
-  localOnly?: boolean;
-  /** Files the staff member attached; only names and types are kept, never the data. */
-  attachments?: SentFile[];
-  at?: number;
-}
-
-interface SentFile {
-  name: string;
-  mediaType: string;
-  /** Thumbnail, for this visit only. */
-  preview?: string;
-}
-
-type Vehicle = { key: string; label: string } | null;
-
-/** One conversation: its own messages and its own current vehicle. */
-export interface Conversation {
-  id: string;
-  title: string;
-  turns: Turn[];
-  vehicle: Vehicle;
-  updatedAt: number;
-}
+type Turn = SharedTurn;
 
 const STATUS: Record<string, string> = {
   thinking: "思考中…",
@@ -61,40 +39,33 @@ const ERRORS = {
   empty: "没有得到回复，请换个说法再试一次。",
 };
 
-const MAX_CONVERSATIONS = 30;
-const MAX_TURNS = 60;
+/** How often the page asks the server for other staff members' messages. */
+export const POLL_MS = 4000;
 
-function newConversation(): Conversation {
-  return { id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title: "", turns: [], vehicle: null, updatedAt: Date.now() };
+export function newConversationId(): string {
+  return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
-const storageKey = (email: string) => `speedx.workbench.conversations.v1:${email}`;
+/** Conversations this browser kept before they moved to the cloud; uploaded once. */
+const legacyKey = (email: string) => `speedx.workbench.conversations.v1:${email}`;
+const migratedKey = (email: string) => `speedx.workbench.migrated.v1:${email}`;
 
-/** Conversations saved in this browser; the list is never empty. */
-export function loadConversations(email: string): Conversation[] {
+function legacyConversations(email: string): unknown[] {
   try {
-    const raw = window.localStorage.getItem(storageKey(email));
-    const saved = raw ? (JSON.parse(raw) as Conversation[]) : [];
-    const valid = Array.isArray(saved) ? saved.filter((c) => c && typeof c.id === "string" && Array.isArray(c.turns)) : [];
-    return valid.length ? valid : [newConversation()];
+    if (window.localStorage.getItem(migratedKey(email))) return [];
+    const raw = window.localStorage.getItem(legacyKey(email));
+    const saved = raw ? (JSON.parse(raw) as Array<{ turns?: unknown[] }>) : [];
+    return Array.isArray(saved) ? saved.filter((c) => Array.isArray(c?.turns) && c.turns.length > 0) : [];
   } catch {
-    return [newConversation()];
+    return [];
   }
 }
 
-function saveConversations(email: string, conversations: Conversation[]) {
+function markMigrated(email: string) {
   try {
-    const trimmed = conversations
-      .slice(0, MAX_CONVERSATIONS)
-      .map((c) => ({
-        ...c,
-        turns: c.turns.slice(-MAX_TURNS).map((t) =>
-          t.attachments ? { ...t, attachments: t.attachments.map(({ name, mediaType }) => ({ name, mediaType })) } : t,
-        ),
-      }));
-    window.localStorage.setItem(storageKey(email), JSON.stringify(trimmed));
+    window.localStorage.setItem(migratedKey(email), String(Date.now()));
   } catch {
-    // Storage full or blocked: the conversations still work for this visit.
+    // Without storage the upload is simply offered again next time; it skips what's already there.
   }
 }
 
@@ -108,14 +79,25 @@ function timeLabel(at: number): string {
     : d.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
 }
 
-/** The staff repair workbench: the estimate assistant at full detail, in several conversations. */
+/** A colour per staff member, like WhatsApp group names. */
+const NAME_COLOURS = ["#1f7aec", "#c2185b", "#7b1fa2", "#00897b", "#e65100", "#5d4037", "#2e7d32", "#ad1457"];
+function nameColour(email: string): string {
+  let h = 0;
+  for (const ch of email) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return NAME_COLOURS[h % NAME_COLOURS.length];
+}
+
+/** The staff repair workbench: one shared, cloud-saved set of conversations for every staff member, like a WhatsApp group. */
 export function Workbench({ email }: { email: string }) {
-  // Render the saved conversations only after hydration; the server has no localStorage.
   const hydrated = useSyncExternalStore(noSubscribe, () => true, () => false);
-  const [conversations, setConversations] = useState<Conversation[]>(() =>
-    typeof window === "undefined" ? [newConversation()] : loadConversations(email),
-  );
-  const [activeId, setActiveId] = useState<string>(() => conversations[0].id);
+  const [summaries, setSummaries] = useState<ConversationSummary[]>([]);
+  const [serverPending, setServerPending] = useState<Record<string, PendingQuery>>({});
+  const [loaded, setLoaded] = useState<Record<string, Conversation>>({});
+  /** A conversation started here that has no message yet (it reaches the cloud with its first message). */
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [cloud, setCloud] = useState<"loading" | "ok" | "not_configured" | "error">("loading");
+  /** My own questions still streaming, by conversation. */
   const [pending, setPending] = useState<Record<string, string>>({});
   const [input, setInput] = useState("");
   const [showDocuments, setShowDocuments] = useState(false);
@@ -130,71 +112,154 @@ export function Workbench({ email }: { email: string }) {
   const [showList, setShowList] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const migrated = useRef(false);
 
-  const active = conversations.find((c) => c.id === activeId) ?? conversations[0];
-  const activePending = pending[active.id];
+  // updatedAt 0: only the server's clock says when a conversation changed, so a later change by anyone reloads it.
+  const fresh = (id: string): Conversation => ({ id, title: "", vehicle: null, createdBy: email, createdAt: Date.now(), updatedBy: email, updatedAt: 0, turns: [] });
+  const currentId = activeId ?? summaries[0]?.id ?? draftId ?? null;
+  const active: Conversation = (currentId && loaded[currentId]) || fresh(currentId ?? "c-none");
+  const activePending = currentId ? (pending[currentId] ?? serverPending[currentId]?.status) : undefined;
+  const pendingBy = currentId && !pending[currentId] ? serverPending[currentId]?.by : undefined;
+
+  /** The list and who is waiting on an answer; the open conversation too when someone else changed it. */
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch("/api/workbench/conversations");
+      if (response.status === 503) return setCloud("not_configured");
+      if (!response.ok) return setCloud("error");
+      const data = (await response.json()) as { conversations: ConversationSummary[]; pending: Record<string, PendingQuery> };
+      setCloud("ok");
+      setSummaries(data.conversations);
+      setServerPending(data.pending ?? {});
+      if (!migrated.current) {
+        migrated.current = true;
+        const legacy = legacyConversations(email);
+        if (legacy.length) {
+          const imported = await fetch("/api/workbench/conversations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ conversations: legacy }),
+          });
+          if (imported.ok) {
+            markMigrated(email);
+            void refresh();
+          }
+        } else {
+          markMigrated(email);
+        }
+      }
+    } catch {
+      setCloud("error");
+    }
+  }, [email]);
+
+  /** Merge the cloud's copy of a conversation into what this page shows. */
+  const mergeLoaded = useCallback((id: string, conversation: Conversation) => {
+    setLoaded((all) => {
+      // Keep thumbnails of files I sent this visit; the cloud copy only has their names.
+      const mine = all[id];
+      const previews = new Map((mine?.turns ?? []).flatMap((t) => (t.attachments ?? []).filter((a) => a.preview).map((a) => [`${t.id}|${a.name}`, a.preview!])));
+      const turns = conversation.turns.map((t) =>
+        t.attachments ? { ...t, attachments: t.attachments.map((a) => ({ ...a, preview: previews.get(`${t.id}|${a.name}`) })) } : t,
+      );
+      return { ...all, [id]: { ...conversation, turns } };
+    });
+  }, []);
 
   useEffect(() => {
-    if (hydrated) saveConversations(email, conversations);
-  }, [conversations, email, hydrated]);
+    if (!hydrated) return;
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [hydrated, refresh]);
+
+  // Load the open conversation, and again whenever the list says someone changed it.
+  const activeSummary = summaries.find((c) => c.id === currentId);
+  useEffect(() => {
+    if (!currentId || !activeSummary || pending[currentId]) return;
+    const mine = loaded[currentId];
+    if (mine && mine.updatedAt >= activeSummary.updatedAt) return;
+    let live = true;
+    fetch(`/api/workbench/conversations/${currentId}`)
+      .then((response) => (response.ok ? (response.json() as Promise<{ conversation: Conversation }>) : null))
+      .then((data) => {
+        if (live && data) mergeLoaded(currentId, data.conversation);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [currentId, activeSummary, loaded, pending, mergeLoaded]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "end", behavior: "instant" });
   }, [active.turns.length, activePending, active.id]);
 
-  function update(id: string, change: (c: Conversation) => Conversation) {
-    setConversations((list) => {
-      const next = list.map((c) => (c.id === id ? { ...change(c), updatedAt: Date.now() } : c));
-      return next.sort((a, b) => b.updatedAt - a.updatedAt);
-    });
+  function patchLocal(id: string, change: (c: Conversation) => Conversation) {
+    setLoaded((all) => ({ ...all, [id]: change(all[id] ?? fresh(id)) }));
   }
 
   function startConversation() {
-    // Reuse an empty conversation instead of piling them up.
-    const empty = conversations.find((c) => c.turns.length === 0);
-    if (empty) {
-      setActiveId(empty.id);
-      return;
-    }
-    const fresh = newConversation();
-    setConversations((list) => [fresh, ...list].slice(0, MAX_CONVERSATIONS));
-    setActiveId(fresh.id);
+    const id = newConversationId();
+    setDraftId(id);
+    setActiveId(id);
+    setLoaded((all) => ({ ...all, [id]: fresh(id) }));
   }
 
-  function markCreated(conversationId: string, draftId: string, created: AlldataCreated) {
-    update(conversationId, (c) => ({
+  async function markCreated(conversationId: string, draft: string, created: AlldataCreated) {
+    patchLocal(conversationId, (c) => ({
       ...c,
-      turns: c.turns.map((t) => (t.drafts?.some((d) => d.id === draftId) ? { ...t, drafts: t.drafts.map((d) => (d.id === draftId ? { ...d, created } : d)) } : t)),
+      turns: c.turns.map((t) => (t.drafts?.some((d) => d.id === draft) ? { ...t, drafts: t.drafts.map((d) => (d.id === draft ? { ...d, created } : d)) } : t)),
     }));
+    await fetch(`/api/workbench/conversations/${conversationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card: { kind: "draft", itemId: draft, created } }),
+    }).catch(() => null);
   }
 
-  function markMemorySaved(conversationId: string, proposalId: string) {
-    update(conversationId, (c) => ({
+  async function markMemorySaved(conversationId: string, proposalId: string) {
+    patchLocal(conversationId, (c) => ({
       ...c,
       turns: c.turns.map((t) =>
         t.memories?.some((m) => m.id === proposalId) ? { ...t, memories: t.memories.map((m) => (m.id === proposalId ? { ...m, saved: true } : m)) } : t,
       ),
     }));
+    await fetch(`/api/workbench/conversations/${conversationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card: { kind: "memory", itemId: proposalId } }),
+    }).catch(() => null);
   }
 
-  /** Save a new title without moving the conversation in the list; an empty title goes back to the first question. */
-  function renameConversation(id: string, title: string) {
-    const clean = title.trim().slice(0, 60);
-    setConversations((list) =>
-      list.map((c) =>
-        c.id === id ? { ...c, title: clean || c.turns.find((t) => t.role === "user")?.text.slice(0, 30) || "" } : c,
-      ),
-    );
+  /** Save a new title; an empty title goes back to the first question. */
+  async function renameConversation(id: string, title: string) {
     setRenaming(null);
+    const response = await fetch(`/api/workbench/conversations/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    }).catch(() => null);
+    if (response?.ok) {
+      const { conversation } = (await response.json()) as { conversation: Conversation };
+      patchLocal(id, (c) => ({ ...c, title: conversation.title, updatedAt: conversation.updatedAt }));
+      setSummaries((list) => list.map((c) => (c.id === id ? { ...c, title: conversation.title, updatedAt: conversation.updatedAt } : c)));
+    }
   }
 
-  function removeConversation(id: string) {
-    setConversations((list) => {
-      const rest = list.filter((c) => c.id !== id);
-      const next = rest.length ? rest : [newConversation()];
-      if (id === activeId) setActiveId(next[0].id);
-      return next;
-    });
+  async function removeConversation(id: string) {
+    if (!window.confirm("删除这个会话？所有员工都会看不到它。")) return;
+    const response = await fetch(`/api/workbench/conversations/${id}`, { method: "DELETE" }).catch(() => null);
+    if (response?.ok || response?.status === 404) {
+      setSummaries((list) => list.filter((c) => c.id !== id));
+      setLoaded((all) => {
+        const rest = { ...all };
+        delete rest[id];
+        return rest;
+      });
+      if (draftId === id) setDraftId(null);
+      setActiveId(null);
+    }
   }
 
   async function addFiles(picked: FileList | File[]) {
@@ -214,57 +279,45 @@ export function Workbench({ email }: { email: string }) {
 
   async function send(text: string) {
     const message = text.trim();
-    const id = active.id;
+    const id = currentId ?? newConversationId();
     const attached = files;
-    if ((!message && attached.length === 0) || pending[id]) return;
-    const history = active.turns
-      .filter((t) => !t.localOnly && (t.text.trim() || t.attachments?.length))
-      .slice(-40)
-      .map((t) => ({
-        role: t.role,
-        // Earlier files aren't sent again; the model is told they existed.
-        text: [t.text, t.attachments?.length ? `[附件：${t.attachments.map((a) => a.name).join("、")}]` : ""].filter(Boolean).join("\n"),
-      }));
-    const vehicle = active.vehicle;
-    update(id, (c) => ({
-      ...c,
-      title: c.title || (message || attached[0]?.name || "").slice(0, 30),
-      turns: [
-        ...c.turns,
-        {
-          role: "user",
-          text: message,
-          quotes: [],
-          at: Date.now(),
-          ...(attached.length ? { attachments: attached.map(({ name, mediaType, preview }) => ({ name, mediaType, preview })) } : {}),
-        },
-      ],
-    }));
+    if ((!message && attached.length === 0) || pending[id] || serverPending[id]) return;
+    if (!currentId) setActiveId(id);
+    const mine: Turn = {
+      id: `local-${Date.now()}`,
+      role: "user",
+      text: message,
+      author: email,
+      at: Date.now(),
+      quotes: [],
+      ...(attached.length ? { attachments: attached.map(({ name, mediaType, preview }) => ({ name, mediaType, preview })) } : {}),
+    };
+    patchLocal(id, (c) => ({ ...c, title: c.title || (message || attached[0]?.name || "").slice(0, 30), turns: [...c.turns, mine] }));
     setInput("");
     setFiles([]);
     setFileNotice("");
     setPending((p) => ({ ...p, [id]: "thinking" }));
 
+    let saved: Turn[] | null = null;
+    let failure: keyof typeof ERRORS | null = null;
+    let reply = "";
     const quotes: StaffQuote[] = [];
     const drafts: AlldataDraft[] = [];
     const memories: MemoryProposal[] = [];
-    let reply = "";
-    let failure: keyof typeof ERRORS | null = null;
-    let nextVehicle = vehicle;
+    let nextVehicle = active.vehicle;
     try {
       const response = await fetch("/api/workbench/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          history,
+          conversationId: id,
           message,
-          vehicleKey: vehicle?.key ?? null,
+          vehicleKey: active.vehicle?.key ?? null,
           ...(attached.length ? { attachments: attached.map(({ name, mediaType, data }) => ({ name, mediaType, data })) } : {}),
         }),
       });
       if (!response.ok || !response.body) {
-        failure =
-          response.status === 401 ? "unauthorized" : response.status === 429 ? "busy" : response.status === 400 ? "invalid" : "unavailable";
+        failure = response.status === 401 ? "unauthorized" : response.status === 429 ? "busy" : response.status === 400 ? "invalid" : "unavailable";
       } else {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -285,6 +338,7 @@ export function Workbench({ email }: { email: string }) {
               | { type: "alldata_draft"; draft: AlldataDraft }
               | { type: "memory_proposal"; proposal: MemoryProposal }
               | { type: "message"; text: string }
+              | { type: "saved"; turns: Turn[] }
               | { type: "error"; code: "busy" | "unavailable" }
               | { type: "done" };
             if (event.type === "status") setPending((p) => ({ ...p, [id]: event.status }));
@@ -293,6 +347,7 @@ export function Workbench({ email }: { email: string }) {
             else if (event.type === "alldata_draft") drafts.push(event.draft);
             else if (event.type === "memory_proposal") memories.push(event.proposal);
             else if (event.type === "message") reply = event.text;
+            else if (event.type === "saved") saved = event.turns;
             else if (event.type === "error") failure = event.code;
           }
           if (done) break;
@@ -301,22 +356,27 @@ export function Workbench({ email }: { email: string }) {
     } catch {
       failure = "unavailable";
     }
-    if (!failure && !reply && quotes.length === 0 && drafts.length === 0 && memories.length === 0) failure = "empty";
-    update(id, (c) => ({
-      ...c,
-      vehicle: nextVehicle,
-      turns: [
-        ...c.turns,
-        failure
-          ? { role: "assistant", text: ERRORS[failure], quotes, drafts, memories, localOnly: true, at: Date.now() }
-          : { role: "assistant", text: reply, quotes, drafts, memories, at: Date.now() },
-      ],
-    }));
+    const stored = saved as Turn[] | null;
+    patchLocal(id, (c) => {
+      const before = c.turns.filter((t) => t.id !== mine.id);
+      if (stored) {
+        // The cloud's copy of my question and the answer; keep my thumbnails.
+        const [question, answer] = stored;
+        return { ...c, vehicle: nextVehicle, turns: [...before, { ...question, attachments: mine.attachments }, answer] };
+      }
+      if (!failure && !reply && quotes.length === 0 && drafts.length === 0 && memories.length === 0) failure = "empty";
+      const answer: Turn = failure
+        ? { id: `local-a-${Date.now()}`, role: "assistant", author: ASSISTANT, text: ERRORS[failure], quotes, drafts, memories, localOnly: true, at: Date.now() }
+        : { id: `local-a-${Date.now()}`, role: "assistant", author: ASSISTANT, text: reply, quotes, drafts, memories, at: Date.now() };
+      return { ...c, vehicle: nextVehicle, turns: [...before, mine, answer] };
+    });
     setPending((p) => {
       const rest = { ...p };
       delete rest[id];
       return rest;
     });
+    if (draftId === id) setDraftId(null);
+    void refresh();
   }
 
   function onSubmit(event: FormEvent) {
@@ -333,11 +393,16 @@ export function Workbench({ email }: { email: string }) {
     return <div className="flex min-h-screen items-center justify-center text-sm text-ink-500">正在打开工作台…</div>;
   }
 
-  const preview = (c: Conversation) => {
-    const last = c.turns[c.turns.length - 1];
-    if (!last) return "";
-    const text = last.text.trim() || (last.attachments?.length ? `📎 ${last.attachments[0].name}` : "");
-    return text.replace(/\s+/g, " ");
+  const listed: ConversationSummary[] = [
+    ...(draftId && !summaries.some((c) => c.id === draftId)
+      ? [{ id: draftId, title: "", vehicle: "", updatedAt: loaded[draftId]?.createdAt ?? Date.now(), last: "", lastAuthor: "", turns: 0 }]
+      : []),
+    ...summaries,
+  ];
+  const preview = (c: ConversationSummary) => {
+    if (!c.last) return "";
+    const who = c.lastAuthor === ASSISTANT ? "" : c.lastAuthor === email ? "我" : staffName(c.lastAuthor);
+    return who ? `${who}：${c.last}` : c.last;
   };
   const canSend = !activePending && (input.trim().length > 0 || files.length > 0);
 
@@ -351,11 +416,11 @@ export function Workbench({ email }: { email: string }) {
           <div className="flex items-center gap-3 bg-[#f0f2f5] px-4 py-2.5">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="" width={30} height={30} className="h-[30px] w-[30px] object-contain" />
+              <img src="/workbench/logo.png" alt="" width={30} height={30} className="h-[30px] w-[30px] object-contain" />
             </span>
             <div className="min-w-0 flex-1 leading-tight">
               <h1 className="truncate text-[0.95rem] font-semibold text-[#111b21]">SPEEDX 维修工作台</h1>
-              <p className="truncate text-xs text-[#667781]">{email}</p>
+              <p className="truncate text-xs text-[#667781]">{email} · 全店共用，所有员工可见</p>
             </div>
             <button
               type="button"
@@ -369,15 +434,18 @@ export function Workbench({ email }: { email: string }) {
             </button>
           </div>
           <p className="bg-[#fff5c4] px-4 py-2 text-xs leading-5 text-[#54656f]">内部使用 · 含进价和毛利，请勿截图发给客人</p>
+          {cloud === "not_configured" && <p role="alert" className="bg-red-50 px-4 py-2 text-xs text-red-700">云端会话还没配置（服务器缺少 Cloudflare KV 设置），会话不会保存。</p>}
+          {cloud === "error" && <p role="alert" className="bg-red-50 px-4 py-2 text-xs text-red-700">连不上云端会话，正在重试…</p>}
           <ul className="flex-1 overflow-y-auto">
-            {conversations.map((c) => (
+            {cloud === "loading" && <li className="px-4 py-3 text-sm text-[#667781]">正在读取会话…</li>}
+            {listed.map((c) => (
               <li key={c.id}>
                 <button
                   type="button"
                   data-testid="conversation"
-                  aria-current={c.id === active.id ? "true" : undefined}
+                  aria-current={c.id === currentId ? "true" : undefined}
                   onClick={() => pickConversation(c.id)}
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left ${c.id === active.id ? "bg-[#f0f2f5]" : "hover:bg-[#f5f6f6]"}`}
+                  className={`flex w-full items-center gap-3 px-4 py-3 text-left ${c.id === currentId ? "bg-[#f0f2f5]" : "hover:bg-[#f5f6f6]"}`}
                 >
                   <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#dfe5e7] text-lg font-semibold text-[#54656f]">
                     {(c.title || "新").slice(0, 1).toUpperCase()}
@@ -387,8 +455,12 @@ export function Workbench({ email }: { email: string }) {
                       <span data-testid="conversation-title" className="truncate text-[0.95rem] text-[#111b21]">{c.title || "新会话"}</span>
                       <span className="shrink-0 text-xs text-[#667781]">{timeLabel(c.updatedAt)}</span>
                     </span>
-                    <span className={`block truncate text-sm ${pending[c.id] ? "text-[#00a884]" : "text-[#667781]"}`}>
-                      {pending[c.id] ? "查询中…" : [c.vehicle?.label, preview(c)].filter(Boolean).join(" · ") || " "}
+                    <span className={`block truncate text-sm ${pending[c.id] || serverPending[c.id] ? "text-[#00a884]" : "text-[#667781]"}`}>
+                      {pending[c.id]
+                        ? "查询中…"
+                        : serverPending[c.id]
+                          ? `${staffName(serverPending[c.id].by)} 正在查询…`
+                          : [c.vehicle, preview(c)].filter(Boolean).join(" · ") || " "}
                     </span>
                   </span>
                 </button>
@@ -465,7 +537,7 @@ export function Workbench({ email }: { email: string }) {
             >
               ALLDATA<span className="hidden sm:inline"> 单据</span>
             </button>
-            {active.turns.length > 0 && renaming?.id !== active.id && (
+            {currentId && active.turns.length > 0 && renaming?.id !== active.id && (
               <>
                 <button
                   type="button"
@@ -505,7 +577,7 @@ export function Workbench({ email }: { email: string }) {
                 <p className="mt-2">
                   可以直接发照片或文件给助手看：VIN 铭牌、轮胎侧面、仪表盘警告灯、供应商 PDF、客人的零件清单（点输入框左边的回形针，或把文件拖进来、截图后直接粘贴；每次最多 4 个，单个不超过 5MB）。
                 </p>
-                <p className="mt-2">每个会话互不影响，可以一个会话查报价、另一个会话处理别的车；双击会话名或点 ✎ 可以改名。每张报价单下面的“复制客户报价”只包含客户价。</p>
+                <p className="mt-2">会话保存在云端，全店共用：所有员工都能看到每个会话，每条消息会显示是谁发的，换电脑、换浏览器也不会丢。每个会话互不影响；双击会话名或点 ✎ 可以改名。每张报价单下面的“复制客户报价”只包含客户价。</p>
                 <p className="mt-2">
                   报价确定后说“开 ALLDATA 估价单”，会生成草稿，核对后点按钮在 ALLDATA 建单并打开 PDF 打印；历史单据和收据在右上角“ALLDATA 单据”里找。（需要这台电脑装好 SPEEDX ALLDATA 助手扩展并登录 ALLDATA。）
                 </p>
@@ -525,18 +597,30 @@ export function Workbench({ email }: { email: string }) {
             )}
 
             {active.turns.map((turn, index) =>
-              turn.role === "user" ? (
-                <div key={index} className="flex justify-end">
+              turn.role === "user" && turn.author === email ? (
+                <div key={turn.id ?? index} className="flex justify-end">
                   <div className="wa-bubble wa-bubble-out max-w-[85%] sm:max-w-[70%]">
                     {turn.attachments?.length ? <SentFiles files={turn.attachments} /> : null}
                     {turn.text && <p className="whitespace-pre-wrap">{turn.text}</p>}
                     <Meta at={turn.at} sent />
                   </div>
                 </div>
+              ) : turn.role === "user" ? (
+                <div key={turn.id ?? index} className="flex justify-start">
+                  <div className="wa-bubble wa-bubble-in max-w-[85%] sm:max-w-[70%]" data-testid="colleague-message">
+                    <p className="text-xs font-semibold" style={{ color: nameColour(turn.author) }}>
+                      {staffName(turn.author)}
+                    </p>
+                    {turn.attachments?.length ? <SentFiles files={turn.attachments} /> : null}
+                    {turn.text && <p className="whitespace-pre-wrap">{turn.text}</p>}
+                    <Meta at={turn.at} />
+                  </div>
+                </div>
               ) : (
-                <div key={index} className="space-y-2">
+                <div key={turn.id ?? index} className="space-y-2">
                   {turn.text && (
                     <div className="wa-bubble wa-bubble-in max-w-[92%] sm:max-w-[75%]">
+                      <p className="text-xs font-semibold text-[#00a884]">AI 助手</p>
                       <p className="whitespace-pre-wrap">{turn.text}</p>
                       <Meta at={turn.at} />
                     </div>
@@ -566,6 +650,7 @@ export function Workbench({ email }: { email: string }) {
                   <i />
                   <i />
                 </span>
+                {pendingBy ? `${staffName(pendingBy)} 的问题：` : ""}
                 {STATUS[activePending] ?? STATUS.thinking}
               </div>
             )}
