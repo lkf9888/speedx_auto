@@ -217,10 +217,10 @@
 
 /* ---- WhatsApp-style chat (repair estimate assistant) ---- */
 .wa-chat-bg {
-  background-color: #efeae2;
+  background-color: var(--wa-bg, #efeae2);
   background-image:
-    radial-gradient(rgba(11, 20, 26, 0.06) 1.1px, transparent 1.3px),
-    radial-gradient(rgba(11, 20, 26, 0.04) 1px, transparent 1.2px);
+    radial-gradient(var(--wa-dot, rgba(11, 20, 26, 0.06)) 1.1px, transparent 1.3px),
+    radial-gradient(var(--wa-dot2, rgba(11, 20, 26, 0.04)) 1px, transparent 1.2px);
   background-size: 26px 26px, 26px 26px;
   background-position: 0 0, 13px 13px;
 }
@@ -232,8 +232,8 @@
   max-width: 100%;
   padding: 0.4rem 0.6rem 0.35rem;
   border-radius: 0.5rem;
-  background: #fff;
-  color: #111b21;
+  background: var(--wa-in, #fff);
+  color: var(--wa-text, #111b21);
   font-size: 0.8125rem;
   line-height: 1.4;
   box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
@@ -261,19 +261,19 @@
 
 .wa-bubble-in::before {
   left: -0.5rem;
-  background: #fff;
+  background: var(--wa-in, #fff);
   clip-path: polygon(100% 0, 0 0, 100% 100%);
 }
 
 .wa-bubble-out {
   border-top-right-radius: 0;
   margin-right: 0.5rem;
-  background: #d9fdd3;
+  background: var(--wa-out, #d9fdd3);
 }
 
 .wa-bubble-out::before {
   right: -0.5rem;
-  background: #d9fdd3;
+  background: var(--wa-out, #d9fdd3);
   clip-path: polygon(0 0, 100% 0, 0 100%);
 }
 
@@ -285,7 +285,7 @@
   margin: 0.55rem 0 -0.2rem 0.6rem;
   font-size: 0.6875rem;
   line-height: 1;
-  color: #667781;
+  color: var(--wa-meta, #667781);
 }
 
 .wa-typing {
@@ -318,4 +318,82 @@
     transform: translateY(-3px);
     opacity: 1;
   }
+}
+
+/* ---- Repair workbench colour modes ----
+   Light is the WhatsApp Web look. Dark re-points the grey and white tokens the
+   workbench's cards already use (white, ink-*, brand-*, emerald/amber/red), so
+   every card follows without its own dark styles. */
+.wb-root {
+  --wb-outer: #d1d7db;
+  --wb-panel: #ffffff;
+  --wb-header: #f0f2f5;
+  --wb-border: #e9edef;
+  --wb-line: #d1d7db;
+  --wb-notice: #fff5c4;
+  --wb-icon: #54656f;
+  --wb-muted: #667781;
+  --wb-text: #111b21;
+  --wb-text2: #3b4a54;
+  --wb-avatar: #dfe5e7;
+  --wb-hover: #f5f6f6;
+  --wb-input: #ffffff;
+  --wb-menu: #ffffff;
+  color-scheme: light;
+}
+
+.wb-root[data-theme="dark"] {
+  --wb-outer: #0b141a;
+  --wb-panel: #111b21;
+  --wb-header: #202c33;
+  --wb-border: #222d34;
+  --wb-line: #2f3b43;
+  --wb-notice: #3b3a1f;
+  --wb-icon: #aebac1;
+  --wb-muted: #8696a0;
+  --wb-text: #e9edef;
+  --wb-text2: #c4ced4;
+  --wb-avatar: #2a3942;
+  --wb-hover: #2a3942;
+  --wb-input: #2a3942;
+  --wb-menu: #233138;
+  color-scheme: dark;
+
+  --wa-bg: #0b141a;
+  --wa-dot: rgba(255, 255, 255, 0.045);
+  --wa-dot2: rgba(255, 255, 255, 0.03);
+  --wa-in: #202c33;
+  --wa-out: #005c4b;
+  --wa-text: #e9edef;
+  --wa-meta: #8696a0;
+
+  --color-white: #202c33;
+  --color-ink-50: #182229;
+  --color-ink-100: #2a3942;
+  --color-ink-200: #374851;
+  --color-ink-300: #54656f;
+  --color-ink-400: #8696a0;
+  --color-ink-500: #a0adb5;
+  --color-ink-600: #bcc7cd;
+  --color-ink-700: #d1d9dd;
+  --color-ink-800: #e1e7ea;
+  --color-ink-900: #e9edef;
+  --color-brand-50: #26204f;
+  --color-brand-100: #322a6b;
+  --color-brand-200: #4a3fa0;
+  --color-brand-300: #7d6df0;
+  --color-brand-400: #9b8cff;
+  --color-brand-500: #aa9dff;
+  --color-brand-600: #b8adff;
+  --color-brand-700: #c9c0ff;
+  --color-brand-800: #d9d3ff;
+  --color-emerald-50: #0f3a2e;
+  --color-emerald-100: #14503e;
+  --color-emerald-200: #1f6b54;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+  --color-amber-700: #fbbf24;
+  --color-amber-800: #fcd34d;
+  --color-red-50: #3b1a1a;
+  --color-red-700: #fca5a5;
 }

@@ -40,6 +40,8 @@ export interface Conversation {
   updatedBy: string;
   updatedAt: number;
   turns: Turn[];
+  /** Put away for everyone; a new message brings it back. */
+  archived?: boolean;
 }
 
 export interface ConversationSummary {
@@ -51,6 +53,7 @@ export interface ConversationSummary {
   last: string;
   lastAuthor: string;
   turns: number;
+  archived?: boolean;
 }
 
 /** Someone's question still being answered, so others see "查询中". */

@@ -47,6 +47,7 @@ export function summarize(c: Conversation): ConversationSummary {
     last: lastText.replace(/\s+/g, " ").slice(0, 120),
     lastAuthor: last?.author ?? "",
     turns: c.turns.length,
+    ...(c.archived ? { archived: true } : {}),
   };
 }
 
@@ -140,6 +141,8 @@ export class ConversationStore {
       by,
       (c) => {
         c.turns.push(...turns);
+        // A new message brings an archived conversation back, like WhatsApp.
+        delete c.archived;
         if (vehicle !== undefined) c.vehicle = vehicle;
         if (!c.title && title) c.title = title.slice(0, TITLE_LENGTH);
       },
@@ -151,6 +154,13 @@ export class ConversationStore {
     return this.change(id, by, (c) => {
       const clean = title.replace(/\s+/g, " ").trim().slice(0, TITLE_LENGTH);
       c.title = clean || c.turns.find((t) => t.role === "user")?.text.slice(0, 30) || "";
+    });
+  }
+
+  async setArchived(id: string, by: string, archived: boolean): Promise<Conversation> {
+    return this.change(id, by, (c) => {
+      if (archived) c.archived = true;
+      else delete c.archived;
     });
   }
 

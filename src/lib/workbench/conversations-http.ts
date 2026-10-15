@@ -53,7 +53,7 @@ export async function handleConversationList(request: Request, deps: Conversatio
   }
 }
 
-/** GET one conversation; PATCH its title or a card's state; DELETE it. */
+/** GET one conversation; PATCH its title, archived flag or a card's state; DELETE it. */
 export async function handleConversation(request: Request, id: string, deps: ConversationDeps = defaultDeps): Promise<Response> {
   const ok = await guard(request, deps);
   if (ok instanceof Response) return ok;
@@ -75,6 +75,11 @@ export async function handleConversation(request: Request, id: string, deps: Con
       if (typeof body.title === "string") {
         const conversation = await store.rename(id, user.email, body.title);
         deps.log({ action: "rename", email: user.email, id, title: conversation.title });
+        return json({ conversation });
+      }
+      if (typeof body.archived === "boolean") {
+        const conversation = await store.setArchived(id, user.email, body.archived);
+        deps.log({ action: body.archived ? "archive" : "unarchive", email: user.email, id });
         return json({ conversation });
       }
       const card = body.card as { kind?: string; itemId?: string; created?: unknown } | undefined;

@@ -195,6 +195,97 @@ describe("shared workbench conversations", () => {
     await waitFor(() => expect(titles()).toEqual(["张先生 Camry"]));
   });
 
+  it("right-click on a conversation offers rename, archive and delete; archived ones move to their own list for everyone", async () => {
+    const { unmount } = render(<Workbench email="a@speedx.test" />);
+    await ask("2019 Camry 前刹车片");
+    await chat().findByText(/答复：2019 Camry/);
+    await userEvent.click(screen.getByRole("button", { name: "+ 新会话" }));
+    await ask("2018 Civic LX 换机油");
+    await chat().findByText(/答复：2018 Civic/);
+
+    // Archive the Camry one from the right-click menu.
+    const camry = screen.getAllByTestId("conversation").find((b) => b.textContent?.includes("2019 Camry"))!;
+    await userEvent.pointer({ keys: "[MouseRight]", target: camry });
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["重命名", "存档", "删除"]);
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "存档" }));
+    await waitFor(() => expect(titles()).toEqual(["2018 Civic LX 换机油"]));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    // Others see it archived too, and can bring it back.
+    unmount();
+    newBrowser();
+    render(<Workbench email="b@speedx.test" />);
+    await waitFor(() => expect(titles()).toEqual(["2018 Civic LX 换机油"]));
+    await userEvent.click(screen.getByRole("button", { name: "已存档（1）" }));
+    expect(titles()).toEqual(["2019 Camry 前刹车片"]);
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByTestId("conversation") });
+    await userEvent.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "取消存档" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /已存档/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(titles()).toEqual(["2019 Camry 前刹车片", "2018 Civic LX 换机油"]));
+  });
+
+  it("renames and deletes from the menu, and the ⋯ button opens the same menu; a new message un-archives", async () => {
+    render(<Workbench email="a@speedx.test" />);
+    await ask("2019 Camry 前刹车片");
+    await chat().findByText(/答复：2019 Camry/);
+
+    await userEvent.click(screen.getByRole("button", { name: "会话菜单 2019 Camry 前刹车片" }));
+    await userEvent.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "重命名" }));
+    const box = screen.getByLabelText("会话标题");
+    await userEvent.clear(box);
+    await userEvent.type(box, "李小姐{enter}");
+    await waitFor(() => expect(titles()).toEqual(["李小姐"]));
+
+    await userEvent.click(screen.getByRole("button", { name: "会话菜单 李小姐" }));
+    await userEvent.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "存档" }));
+    await waitFor(() => expect(screen.queryAllByTestId("conversation")).toHaveLength(0));
+    // Opening it from the archive and writing in it brings it back.
+    await userEvent.click(screen.getByRole("button", { name: "已存档（1）" }));
+    await userEvent.click(screen.getByTestId("conversation"));
+    await ask("再问一句");
+    await waitFor(() => expect(screen.queryByRole("button", { name: /已存档/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(titles()).toEqual(["李小姐"]));
+
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByTestId("conversation") });
+    await userEvent.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "删除" }));
+    await waitFor(() => expect(screen.queryAllByTestId("conversation")).toHaveLength(0));
+  });
+
+  it("opens memory and ALLDATA as pop-up windows, closed by × , Escape or a click outside", async () => {
+    render(<Workbench email="a@speedx.test" />);
+    await userEvent.click(screen.getByRole("button", { name: "ALLDATA 单据" }));
+    const dialog = await screen.findByRole("dialog", { name: "ALLDATA 单据" });
+    // Not inside the scrolling chat, where it used to hide above the messages.
+    expect(screen.getByRole("main")).not.toContainElement(dialog);
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "ALLDATA 单据" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "关闭 ALLDATA 单据" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "ALLDATA 单据" }));
+    await userEvent.pointer({ keys: "[MouseLeft]", target: screen.getByRole("dialog") });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("switches between day and night mode and remembers the choice", async () => {
+    window.localStorage.setItem("speedx.workbench.theme.v1", "light");
+    const { container, unmount } = render(<Workbench email="a@speedx.test" />);
+    const root = () => container.querySelector(".wb-root")!;
+    expect(root()).toHaveAttribute("data-theme", "light");
+    await userEvent.click(screen.getByRole("button", { name: "切换到夜间模式" }));
+    expect(root()).toHaveAttribute("data-theme", "dark");
+    expect(window.localStorage.getItem("speedx.workbench.theme.v1")).toBe("dark");
+
+    unmount();
+    const again = render(<Workbench email="a@speedx.test" />);
+    expect(again.container.querySelector(".wb-root")).toHaveAttribute("data-theme", "dark");
+    await userEvent.click(screen.getByRole("button", { name: "切换到白天模式" }));
+    expect(again.container.querySelector(".wb-root")).toHaveAttribute("data-theme", "light");
+  });
+
   it("sends attached photos and files, and stores only their names in the cloud", async () => {
     const { unmount } = render(<Workbench email="staff@example.com" />);
     const photo = new File([new Uint8Array([1, 2, 3])], "vin.jpg", { type: "image/jpeg" });
