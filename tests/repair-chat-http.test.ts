@@ -43,7 +43,7 @@ function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
 
 describe("parseBody", () => {
   it("accepts a well-formed request", () => {
-    expect(parseBody(validBody)).toEqual(validBody);
+    expect(parseBody(validBody)).toEqual({ ...validBody, photos: [] });
   });
 
   it("rejects unknown locales, oversized messages, and bad history", () => {
@@ -54,8 +54,8 @@ describe("parseBody", () => {
   });
 
   it("accepts no contact details yet, but rejects malformed ones", () => {
-    expect(parseBody({ ...validBody, lead: undefined })).toEqual({ ...validBody, lead: null });
-    expect(parseBody({ ...validBody, lead: null })).toEqual({ ...validBody, lead: null });
+    expect(parseBody({ ...validBody, lead: undefined })).toEqual({ ...validBody, lead: null, photos: [] });
+    expect(parseBody({ ...validBody, lead: null })).toEqual({ ...validBody, lead: null, photos: [] });
     expect(parseBody({ ...validBody, lead: { name: "", phone: "7789170710" } })).toBeNull();
     expect(parseBody({ ...validBody, lead: { name: "K", phone: "917-0710" } })).toBeNull();
     expect(parseLead({ name: "  Kevin   Liu ", phone: "+1 (778) 917-0710" })).toEqual({ name: "Kevin Liu", phone: "+1 (778) 917-0710" });
@@ -302,5 +302,33 @@ describe("evaluation mode", () => {
     await response.text();
     expect(sessions.size).toBe(1);
     expect(finished).toHaveLength(0);
+  });
+});
+
+describe("photos from customers", () => {
+  const photo = { name: "vin.jpg", mediaType: "image/jpeg", data: "AQID" };
+
+  it("takes up to two photos, alone or with text, and nothing but photos", () => {
+    expect(parseBody({ ...validBody, message: "", photos: [photo] })).toMatchObject({ message: "Please look at my photo.", photos: [photo] });
+    expect(parseBody({ ...validBody, locale: "zh-CN", message: "", photos: [photo] })!.message).toBe("请看照片。");
+    expect(parseBody({ ...validBody, photos: [photo, photo, photo] })).toBeNull();
+    expect(parseBody({ ...validBody, photos: [{ ...photo, mediaType: "application/pdf" }] })).toBeNull();
+    expect(parseBody({ ...validBody, photos: [{ ...photo, data: "not base64!" }] })).toBeNull();
+  });
+
+  it("shows the photos to the model, and the shop's record only says a photo was sent", async () => {
+    const { sessions } = recordingSessions();
+    let content: unknown = null;
+    const create = vi.fn(async (params: { messages: Array<{ role: string; content: unknown }> }) => {
+      content = params.messages;
+      return { stop_reason: "end_turn", content: [{ type: "text", text: "That's VIN …1234" }] } as never;
+    });
+    const response = await handleChat(request({ ...validBody, message: "", photos: [photo] }), deps({ sessions, client: () => ({ beta: { messages: { create } } }) }));
+    const events = (await response.text()).trim().split("\n").map((l) => JSON.parse(l) as { type: string; id?: string });
+    expect(JSON.stringify(content)).toContain('"type":"image"');
+    expect(JSON.stringify(content)).toContain("Please look at my photo.");
+    const recorded = JSON.stringify(sessions.get(events.find((e) => e.type === "session")!.id)!.transcript);
+    expect(recorded).toContain("[photo ×1]");
+    expect(recorded).not.toContain("AQID");
   });
 });

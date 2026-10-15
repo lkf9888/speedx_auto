@@ -131,6 +131,14 @@ export const zhTW: Dictionary = {
     intro: "告訴助手您的車型和故障現象。它會分析可能的原因並給出零件和維修參考估價。",
     placeholder: "例如：2019 Camry LE，煞車時有摩擦聲",
     send: "傳送",
+    photo: {
+      add: "加入照片",
+      remove: "移除照片",
+      tip: "可以拍 VIN 銘牌、輪胎側面或儀表板故障燈傳過來（每則最多 2 張）。照片只用來回答你，不會保存。",
+      failed: "這個檔案傳不了，請選照片（JPG 或 PNG）或直接截圖。",
+      max: "每則訊息最多 2 張照片。",
+      sent: "照片",
+    },
     reset: "重新開始",
     starters: [
       "煞車時有尖銳的響聲",

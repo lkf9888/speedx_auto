@@ -422,3 +422,41 @@ describe("RepairChat", () => {
     expect(zhCN.repairChat.intro).toBe("告诉助手您的车型和故障现象。它会分析可能的原因并给出零件和维修参考估价。");
   });
 });
+
+describe("RepairChat photos", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("sends a photo with the question, shows it, and only mentions it on later turns", async () => {
+    const server = api(
+      ndjson([{ type: "session", id: SESSION }, { type: "message", text: "That's a 2019 Camry, VIN …1234." }, { type: "done" }]),
+      ndjson([{ type: "message", text: "Front pads?" }, { type: "done" }]),
+    );
+    vi.stubGlobal("fetch", server);
+    render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
+    await userEvent.upload(screen.getByTestId("photo-input"), new File([new Uint8Array([1, 2, 3])], "vin.jpg", { type: "image/jpeg" }));
+    // A photo alone is enough to send.
+    await waitFor(() => expect(screen.getByRole("button", { name: en.repairChat.send })).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: en.repairChat.send }));
+    await screen.findByText("That's a 2019 Camry, VIN …1234.");
+    const first = bodyOf(server.mock.calls[0]);
+    expect(first.photos).toEqual([{ name: "vin.jpg", mediaType: "image/jpeg", data: "AQID" }]);
+    expect(screen.getByTestId("sent-photos")).toBeInTheDocument();
+
+    await ask("brake noise");
+    await screen.findByText("Front pads?");
+    const second = bodyOf(server.mock.calls[1]);
+    expect(second.photos).toBeUndefined();
+    expect(second.history[0].text).toBe("[Photo ×1]");
+  });
+
+  it("takes at most two photos and refuses other files", async () => {
+    vi.stubGlobal("fetch", api());
+    render(<RepairChat locale="zh-CN" dict={zhCN} pagePath="/zh-CN/auto-repair" />);
+    await userEvent.upload(screen.getByTestId("photo-input"), new File(["x"], "list.pdf", { type: "application/pdf" }), { applyAccept: false });
+    expect(await screen.findByRole("alert")).toHaveTextContent(zhCN.repairChat.photo.failed);
+    const photo = (n: number) => new File([new Uint8Array([n])], `p${n}.jpg`, { type: "image/jpeg" });
+    await userEvent.upload(screen.getByTestId("photo-input"), [photo(1), photo(2), photo(3)]);
+    expect(await screen.findByRole("alert")).toHaveTextContent(zhCN.repairChat.photo.max);
+    expect(screen.getAllByRole("button", { name: new RegExp(zhCN.repairChat.photo.remove) })).toHaveLength(2);
+  });
+});

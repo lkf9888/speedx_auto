@@ -130,6 +130,14 @@ export const en = {
     intro: "Tell the assistant your vehicle and what it is doing. It suggests likely causes and gives a ballpark estimate for parts and repair.",
     placeholder: "e.g. 2019 Camry LE, grinding noise when braking",
     send: "Send",
+    photo: {
+      add: "Add a photo",
+      remove: "Remove photo",
+      tip: "You can send a photo of the VIN plate, the tire sidewall or a warning light (up to 2 per message). Photos are only used to answer you and aren't kept.",
+      failed: "That file can't be sent. Please choose a photo (JPG or PNG) or take a screenshot.",
+      max: "Up to 2 photos per message.",
+      sent: "Photo",
+    },
     reset: "Start over",
     starters: [
       "My brakes squeal when I stop",

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { estimateRanges, type EstimateCard } from "@/lib/repair-chat/pricing";
+import { prepareAttachment, type PreparedAttachment } from "@/lib/workbench/prepare-attachment";
 import { company, telLink, whatsappLink } from "@/lib/company";
 import type { Locale } from "@/lib/site-routes";
 import { RepairBooking } from "./RepairBooking";
@@ -22,7 +23,11 @@ interface Turn {
   booking?: boolean;
   /** When the message was sent or received; unset on the greeting so server and browser render the same. */
   at?: number;
+  /** Thumbnails of photos the customer sent with this message (this visit only). */
+  photos?: string[];
 }
+
+const MAX_PHOTOS = 2;
 
 interface Lead {
   name: string;
@@ -257,6 +262,11 @@ export function RepairChat({
   const [turns, setTurns] = useState<Turn[]>([greeting]);
   const [vehicle, setVehicle] = useState<KnownVehicle>(null);
   const [input, setInput] = useState("");
+  const [photos, setPhotos] = useState<PreparedAttachment[]>([]);
+  const [photoNotice, setPhotoNotice] = useState("");
+  const photoInput = useRef<HTMLInputElement>(null);
+  /** The photos of the last question, sent again if that question is re-asked (after name and phone). */
+  const lastPhotos = useRef<PreparedAttachment[]>([]);
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<StatusKey | null>(null);
   /** Over today's limit: show "please call us" instead of the chat. */
@@ -353,9 +363,25 @@ export function RepairChat({
     return true;
   }
 
+  async function addPhotos(picked: FileList | File[]) {
+    setPhotoNotice("");
+    const files = Array.from(picked).filter((f) => f.type.startsWith("image/") || /\.(jpe?g|png|webp|gif)$/i.test(f.name));
+    if (files.length < Array.from(picked).length) setPhotoNotice(copy.photo.failed);
+    const room = MAX_PHOTOS - photos.length;
+    if (files.length > room) setPhotoNotice(copy.photo.max);
+    const added: PreparedAttachment[] = [];
+    for (const file of files.slice(0, Math.max(room, 0))) {
+      const result = await prepareAttachment(file);
+      if ("error" in result) setPhotoNotice(copy.photo.failed);
+      else added.push(result);
+    }
+    if (added.length) setPhotos((current) => [...current, ...added].slice(0, MAX_PHOTOS));
+  }
+
   async function send(text: string, options: { repeat?: boolean; contact?: Lead } = {}) {
     const message = text.trim();
-    if (!message || pending) return;
+    const attached = options.repeat ? lastPhotos.current : photos;
+    if ((!message && attached.length === 0) || pending) return;
     // Sending the question just answered again (e.g. the reply was missed):
     // show that reply instead of paying for the same answer twice.
     const lastAsked = [...turns].reverse().find((t) => t.role === "user");
@@ -376,13 +402,20 @@ export function RepairChat({
     const contact = options.contact ?? lead;
     const earlier = options.repeat ? turns.slice(0, turns.map((t) => t.role).lastIndexOf("user")) : turns;
     const history = earlier
-      .filter((t) => t.text.trim() && !t.localOnly)
+      .filter((t) => (t.text.trim() || t.photos?.length) && !t.localOnly)
       .slice(-MAX_TURNS)
-      .map((t) => ({ role: t.role, text: t.text }));
+      // Earlier photos aren't sent again; the model is told there were some.
+      .map((t) => ({ role: t.role, text: t.photos?.length ? `${t.text} [${copy.photo.sent} ×${t.photos.length}]`.trim() : t.text }));
     while (history.length > 0 && history[0].role !== "user") history.shift();
 
-    if (!options.repeat) setTurns((prev) => [...prev, { role: "user", text: message, estimates: [], at: Date.now() }]);
+    if (!options.repeat) {
+      const thumbs = attached.map((p) => p.preview ?? "").filter(Boolean);
+      setTurns((prev) => [...prev, { role: "user", text: message, estimates: [], at: Date.now(), ...(attached.length ? { photos: thumbs.length ? thumbs : attached.map(() => "") } : {}) }]);
+      lastPhotos.current = attached;
+    }
     setInput("");
+    setPhotos([]);
+    setPhotoNotice("");
     setPending(true);
     setStatus("thinking");
 
@@ -397,7 +430,15 @@ export function RepairChat({
       const response = await fetch("/api/repair-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locale, history, message, vehicleKey: vehicle?.key ?? null, lead: contact, sessionId }),
+        body: JSON.stringify({
+          locale,
+          history,
+          message,
+          vehicleKey: vehicle?.key ?? null,
+          lead: contact,
+          sessionId,
+          ...(attached.length ? { photos: attached.map(({ name, mediaType, data }) => ({ name, mediaType, data })) } : {}),
+        }),
       });
       if (!response.ok || !response.body) {
         failure = response.status === 429 ? "busy" : "unavailable";
@@ -462,6 +503,9 @@ export function RepairChat({
     setAwaitingLead(false);
     setVehicle(null);
     setInput("");
+    setPhotos([]);
+    setPhotoNotice("");
+    lastPhotos.current = [];
   }
 
   const noQuestionYet = !turns.some((t) => t.role === "user");
@@ -494,10 +538,22 @@ export function RepairChat({
             {turns.map((turn, index) => (
               <div key={index} data-turn={index} className={turn.role === "user" ? "flex justify-end" : ""}>
                 {turn.role === "user" ? (
-                  <p className="wa-bubble wa-bubble-out max-w-[80%] whitespace-pre-wrap">
+                  <div className="wa-bubble wa-bubble-out max-w-[80%] whitespace-pre-wrap">
+                    {turn.photos?.length ? (
+                      <div className="mb-1 flex flex-wrap gap-1.5" data-testid="sent-photos">
+                        {turn.photos.map((src, i) =>
+                          src ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={i} src={src} alt={copy.photo.sent} className="h-24 w-24 rounded-md object-cover" />
+                          ) : (
+                            <span key={i} className="rounded-md bg-black/5 px-2 py-1 text-xs">📷 {copy.photo.sent}</span>
+                          ),
+                        )}
+                      </div>
+                    ) : null}
                     {turn.text}
                     <Meta at={turn.at} locale={locale} sent />
-                  </p>
+                  </div>
                 ) : (
                   <div className="max-w-[92%]">
                     {turn.text && (
@@ -563,6 +619,7 @@ export function RepairChat({
                     {starter}
                   </button>
                 ))}
+                <p className="w-full text-right text-xs text-[#667781]">📷 {copy.photo.tip}</p>
               </div>
             )}
             {awaitingLead && (
@@ -584,7 +641,57 @@ export function RepairChat({
           </div>
 
           {!capped && !awaitingLead && (
-            <form onSubmit={onSubmit} className="flex items-end gap-2 bg-[#f0f2f5] px-2.5 py-2">
+            <form onSubmit={onSubmit} className="bg-[#f0f2f5] px-2.5 py-2">
+              {(photos.length > 0 || photoNotice) && (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  {photos.map((photo, index) => (
+                    <span key={`${photo.name}-${index}`} className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photo.preview ?? ""} alt={photo.name} className="h-14 w-14 rounded-lg object-cover" />
+                      <button
+                        type="button"
+                        aria-label={`${copy.photo.remove} ${photo.name}`}
+                        onClick={() => setPhotos((list) => list.filter((_, i) => i !== index))}
+                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink-900 text-xs text-white"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {photoNotice && (
+                    <span role="alert" className="text-xs text-amber-800">
+                      {photoNotice}
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="flex items-end gap-2">
+              <input
+                ref={photoInput}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                data-testid="photo-input"
+                aria-label={copy.photo.add}
+                onChange={(event) => {
+                  void addPhotos(event.target.files ?? []);
+                  event.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                aria-label={copy.photo.add}
+                title={copy.photo.tip}
+                onClick={() => photoInput.current?.click()}
+                disabled={pending || photos.length >= MAX_PHOTOS}
+                className="mb-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#54656f] hover:bg-black/5 disabled:opacity-40"
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+                  <circle cx="12" cy="13" r="3.5" />
+                </svg>
+              </button>
               <label htmlFor="repair-chat-input" className="sr-only">
                 {copy.placeholder}
               </label>
@@ -607,13 +714,14 @@ export function RepairChat({
               <button
                 type="submit"
                 aria-label={copy.send}
-                disabled={pending || !input.trim()}
+                disabled={pending || (!input.trim() && photos.length === 0)}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white transition-colors hover:bg-[#008069] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                   <path d="M3.4 20.4 21 12 3.4 3.6 3.4 10.1 15 12 3.4 13.9z" />
                 </svg>
               </button>
+              </div>
             </form>
           )}
           <div className="flex items-center justify-between gap-4 bg-[#f0f2f5] px-3 pb-2.5 text-xs text-[#667781]">

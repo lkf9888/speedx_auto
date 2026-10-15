@@ -1,3 +1,4 @@
+import { attachmentBlocks, attachmentKind, parseAttachments, type WorkbenchAttachment } from "@/lib/workbench/attachments";
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { BlockList } from "node:net";
@@ -52,7 +53,13 @@ export interface ChatRequestBody {
   /** Absent until the visitor gives name and phone. */
   lead: Lead | null;
   sessionId: string | null;
+  /** Photos the customer attached to this message (VIN plate, tire sidewall, warning light); never stored. */
+  photos: WorkbenchAttachment[];
 }
+
+export const MAX_PHOTOS = 2;
+
+const PHOTO_ONLY: Record<string, string> = { en: "Please look at my photo.", "zh-CN": "请看照片。", "zh-TW": "請看照片。" };
 
 export function parseBody(raw: unknown): ChatRequestBody | null {
   if (!raw || typeof raw !== "object") return null;
@@ -61,7 +68,10 @@ export function parseBody(raw: unknown): ChatRequestBody | null {
   const lead = body.lead == null ? null : parseLead(body.lead);
   if (body.lead != null && !lead) return null;
   if (typeof body.message !== "string") return null;
-  const message = body.message.trim();
+  const attached = parseAttachments(body.photos);
+  if (!attached || attached.length > MAX_PHOTOS || attached.some((f) => attachmentKind(f.mediaType) !== "image")) return null;
+  // A photo alone is a question ("what is this light?").
+  const message = body.message.trim() || (attached.length ? (PHOTO_ONLY[body.locale] ?? PHOTO_ONLY.en) : "");
   if (!message || message.length > MAX_MESSAGE) return null;
   if (!Array.isArray(body.history) || body.history.length > MAX_HISTORY) return null;
   const history: ChatTurn[] = [];
@@ -76,7 +86,7 @@ export function parseBody(raw: unknown): ChatRequestBody | null {
     typeof body.vehicleKey === "string" && body.vehicleKey.length <= 2000 ? body.vehicleKey : null;
   const sessionId =
     typeof body.sessionId === "string" && /^[a-f0-9]{32}$/.test(body.sessionId) ? body.sessionId : null;
-  return { locale: body.locale, history, message, vehicleKey, lead, sessionId };
+  return { locale: body.locale, history, message, vehicleKey, lead, sessionId, photos: attached };
 }
 
 export function isConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -314,7 +324,8 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
   // A session this process doesn't know was opened before a restart: keep
   // the earlier part of the conversation for the shop's email.
   if (!known) sessions.seed(session.id, request_.history);
-  sessions.record(session.id, { role: "user", text: request_.message });
+  // The shop's follow-up email notes that photos were sent; the photos themselves are never kept.
+  sessions.record(session.id, { role: "user", text: request_.photos.length ? `${request_.message} [photo ×${request_.photos.length}]` : request_.message });
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -357,6 +368,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
             message: request_.message,
             locale: request_.locale,
             vehicleKey: request_.vehicleKey,
+            attachments: request_.photos.length ? attachmentBlocks(request_.photos) : undefined,
           },
           send,
           () => `E-${randomBytes(4).toString("hex").toUpperCase()}`,
