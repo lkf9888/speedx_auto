@@ -11,6 +11,7 @@ import { shopToday } from "@/lib/repair-chat/prompt";
 import {
   applyVehicleDetails,
   decodeVehicleKey,
+  forBothSides,
   describeVehicle,
   quoteServiceForStaff,
   readDoneWith,
@@ -52,12 +53,18 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - New tires come from two suppliers. find_tires is the partner price list (good-value brands). find_brand_tires searches DT Tire Hub live for international brands (Michelin, Bridgestone, Continental, Goodyear, Pirelli, Toyo, Yokohama…), sold at MSRP. If staff name an international brand or ask for "大牌/名牌", use find_brand_tires; if they just ask for tires of a size, run both and compare.
 - Each result is shown to staff as a quote card with the full table. In your reply, summarise in a few lines: the cheapest sensible option, the best-margin option, stock, and anything the labor note says is not included. Point out thin margins (under 25%) or items out of stock.
 - Never invent a price, cost or labor time; use only tool results. If a figure is missing (for example no cost on a part), say so.
-- Reply in Chinese. Only answer in English when the staff message itself is written in English sentences; car names, part names, VINs and tire sizes in English inside a Chinese message don't count ("2018 Toyota Camry LE 前刹车片" and "205/55R16 四季胎" get Chinese replies). Be brief and practical: short lines, "•" bullets, no headings or bold.
+- Reply in Chinese. When the staff message is written in English sentences, the whole reply is in English, notes to staff included; car names, part names, VINs and tire sizes in English inside a Chinese message don't count ("2018 Toyota Camry LE 前刹车片" and "205/55R16 四季胎" get Chinese replies). Be brief and practical: short lines, "•" bullets, no headings or bold.
+- Say what every price is: the part's list price, the customer total with labor, or the tire's installed price. Never call a total with labor the part price.
+- Don't say what a part includes beyond what the tool lists. A "strut assembly" may be a bare strut or a loaded (quick) strut with the spring and mount: unless the tool says so, tell staff to check the contents by part number before choosing the labor, since a bare strut needs the spring moved over.
+- The cards show where each price came from (WorldPac, DT Tire Hub, the partner list, shop flat prices) and link buttons; the tool summary says which. Don't tell staff a supplier wasn't checked or that there are no links when the card has them.
 - If staff ask for text to send a customer, write it with customer prices only, never cost or margin (the card's "copy for customer" button does the same). Put any note for staff first; then a line "—— 发给客人 ——" and the customer text, with nothing after it, so staff can copy everything below that line.
 
 # Shop labor rules
 - Jobs done at the same time in the same place (front pads + front rotors, pads + calipers on one axle, water pump with the timing belt): the job with the most hours is charged in full and every other job at half its hours. Example: front pads 0.9 h + front rotors 0.9 h = 0.9 + 0.45 = 1.35 h. Quote both with get_estimate, each with done_with_service_id / done_with_position pointing at the other: the cards then already show the halved hours. When one of them has no labor job (priced with find_parts), apply the rule yourself and say so. Use the charged hours in ALLDATA drafts (label the reduced line "同时施工 50%").
-- Labor-guide times for struts/shocks, control arms, wheel bearings/hubs, CV axles, tie rods and calipers are per side. When staff ask for both sides (两边 / 一对 / left and right), double the hours and the part quantity, and say so. Pads and rotors come as an axle set, so don't double those.
+- Labor-guide times for struts/shocks, control arms, wheel bearings/hubs, CV axles, tie rods and calipers are per side. When staff ask for both sides (两边 / 一对 / left and right), call get_estimate with both_sides true: the card, the customer text and your numbers then all show labor × 2 and both sides' parts. Never double in your reply what the card shows single. Pads and rotors come as an axle set, so they are never both_sides. Left and right are often different part numbers: tell staff to order one of each.
+- Tires must meet the vehicle's load index and speed rating (the placard or the original tire). Never offer or approve a lower load index or speed rating, and a customer's written consent or waiver doesn't change that: say the shop can't install it and give tires that meet the spec.
+- Quantities staff ask for go into the tool as they are (8 tires for two cars is count 8). If a tool refuses a number, tell staff; never quote a different number than they asked for.
+- When staff narrow a choice (no studs, one SKU, one brand), pass it to the tool (studs, skus, brand) so the card and the customer text show only those; don't just leave the others out of your reply.
 - If get_estimate's part list doesn't contain the part the job is about (a strut job that only lists the mount, a labor guide with no rotor job at all), price the part itself with find_parts and add the labor by hand: use a related job's time if there is one and say so, otherwise ask staff for the hours. Never invent hours.
 - Electric cars (Tesla and others) and some exotic cars have no labor-guide data. Say early that labor needs a manual quote; parts can still be priced with find_parts.
 - If one detail (engine, drive type) with only a few choices is missing, get_estimate quotes each choice; list them and ask which one, or for the VIN. With many choices (sub-models), ask for the VIN first, since it settles everything at once.
@@ -71,7 +78,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - When staff ask to make an estimate, work order or receipt in ALLDATA, call draft_alldata_estimate with the job's lines. It only shows a draft card; staff check it, pick the customer in ALLDATA and press the create button themselves. Never say the estimate was created in ALLDATA.
 - Use the prices already quoted in this conversation (customer prices, never cost as the price). Parts: one line each, quantity × customer unit price, with part number and unit cost when the quote has them. Labor: kind "labor", hours × $120 (the walk-in rate) unless staff give another rate. New tires: one part line for the tires (unit price = installed price per tire − eco fee − mounting, so the total matches the quote; quantity = tire count; SKU as part number; unit cost = tire cost), one part line "BC tire eco fee" at the eco fee per tire, and one labor line "Tire mount & balance" with quantity = tire count and unit price = mounting per tire. Shop flat prices: one line at the flat price.
 - Every line is taxable (taxable: true): at this shop ALLDATA charges GST and PST on parts, labor and fees alike. Set taxable false only when staff say a line is tax-exempt.
-- If something is missing (which part option, how many tires, the customer), ask first or leave it out and say so. Include the customer's name and phone when staff gave them, and the vehicle and mileage.
+- If something is missing (which part option, which oil grade, how many tires, the customer), ask first or leave it out and say so. Don't pick between the card's options for staff unless they told you which. Include the customer's name and phone when staff gave them, and the vehicle and mileage.
 - Printing past estimates, work orders or invoices (receipts) is done in the "ALLDATA 单据" panel at the top of the workbench; point staff there.
 
 # Our own fleet (TATO)
@@ -101,10 +108,12 @@ const FIND_BRAND_TIRES: Anthropic.Beta.BetaTool = {
         description: "all_season (no snowflake), all_weather (snowflake, on-road year-round), winter, summer, or any",
       },
       brand: { anyOf: [{ type: "string" }, { type: "null" }], description: "One brand name if staff asked for it (e.g. Michelin), else null" },
-      count: { anyOf: [{ type: "integer" }, { type: "null" }], description: "How many tires; null means 4" },
+      count: { anyOf: [{ type: "integer" }, { type: "null" }], description: "How many tires (1–20); null means 4" },
       vehicle_key: { anyOf: [{ type: "string" }, { type: "null" }], description: "When the vehicle was identified" },
+      studs: { type: "string", enum: ["any", "exclude", "only"], description: "exclude when staff don't want studded tires, only when they want studded, else any" },
+      skus: { type: "string", description: "Comma-separated SKUs to show only those tires (when staff picked specific ones), else empty" },
     },
-    required: ["size", "season", "brand", "count", "vehicle_key"],
+    required: ["size", "season", "brand", "count", "vehicle_key", "studs", "skus"],
     additionalProperties: false,
   },
 };
@@ -207,9 +216,15 @@ export function describeFleetCar(car: FleetCar, trips: FleetTrip[] | null, now =
   ].join(" · ");
   if (trips === null) return `${head}\nTrips: not loaded.`;
   if (trips.length === 0) return `${head}\nTrips: none booked; free now.`;
-  const current = trips.find((t) => t.status === "ongoing" || (Date.parse(t.pickup) <= now.getTime() && Date.parse(t.return) > now.getTime()));
+  // The dates decide; a trip TATO still calls "ongoing" after its return time is stale data, not a car out on the road.
+  const current = trips.find((t) => Date.parse(t.pickup) <= now.getTime() && Date.parse(t.return) > now.getTime());
+  const stale = trips.filter((t) => t.status === "ongoing" && Date.parse(t.return) <= now.getTime());
   const upcoming = trips.filter((t) => t !== current && Date.parse(t.pickup) > now.getTime());
   const lines = [head];
+  for (const t of stale) {
+    const days = Math.floor((now.getTime() - Date.parse(t.return)) / 86_400_000);
+    lines.push(`Stale in TATO: a trip still marked ongoing was due back ${shopTime(t.return)} (${days} days ago). Ask staff to check where the car is before planning the repair.`);
+  }
   if (current) lines.push(`On a trip now, back ${shopTime(current.return)}.`);
   else lines.push(upcoming.length ? `Free now until the next pickup ${shopTime(upcoming[0].pickup)}.` : "Free now; nothing booked.");
   if (upcoming.length) lines.push(`Upcoming trips: ${upcoming.slice(0, 5).map((t) => `${shopTime(t.pickup)} → ${shopTime(t.return)}`).join("; ")}`);
@@ -278,6 +293,16 @@ export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => ST
 }).concat(FIND_BRAND_TIRES, FIND_PARTS, DRAFT_ALLDATA_ESTIMATE, PROPOSE_MEMORY, FIND_FLEET_CAR);
 
 const MAX_BRAND_TIRES = 12;
+export const MAX_TIRE_COUNT = 20;
+
+/** A tire count from the model: null means 4; anything outside 1–20 is refused, never quietly changed. */
+export function readTireCount(raw: unknown): number | { error: string } {
+  if (raw === null || raw === undefined) return 4;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= MAX_TIRE_COUNT ? n : { error: `Tire count must be a whole number from 1 to ${MAX_TIRE_COUNT}; ask staff how many (or split a larger order).` };
+}
+
+const isStudded = (t: DtTire) => /stud/i.test(t.studding) || /STUDDED/i.test(t.model);
 
 /** Our season names → DT's filter, plus the season label each row must carry (DT's filters overlap). */
 const DT_SEASONS: Record<string, { filter: DtSeasonFilter; label: RegExp | null }> = {
@@ -300,11 +325,21 @@ const brandKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
  * DT rows priced at MSRP, installed; rows without an MSRP can't be quoted and are dropped.
  * With a brand, DT appends other brands' "related products" after its matches, so those are dropped too.
  */
-export function brandTireOptions(tires: DtTire[], season: string, rim: number, now = new Date(), brand?: string): StaffTireOption[] {
+export function brandTireOptions(
+  tires: DtTire[],
+  season: string,
+  rim: number,
+  now = new Date(),
+  brand?: string,
+  filters: { studs?: string; skus?: string[] } = {},
+): StaffTireOption[] {
   const wanted = DT_SEASONS[season] ?? DT_SEASONS.any;
+  const skus = (filters.skus ?? []).map((sku) => sku.trim().replace(/^#/, "")).filter(Boolean);
   return tires
     .filter((t) => t.msrp !== null && t.msrp > 0)
     .filter((t) => !brand || brandKey(t.brand) === brandKey(brand))
+    .filter((t) => (filters.studs === "exclude" ? !isStudded(t) : filters.studs === "only" ? isStudded(t) : true))
+    .filter((t) => skus.length === 0 || skus.includes(t.sku))
     .filter((t) => !wanted.label || wanted.label.test(t.season))
     .slice(0, MAX_BRAND_TIRES)
     .map((t) => ({
@@ -335,10 +370,13 @@ async function findBrandTires(
   if (!client) return { content: JSON.stringify({ status: "not_configured", note: "DT Tire Hub sign-in is not set up on the server (DT_TIRE_USERNAME / DT_TIRE_PASSWORD)." }), isError: false, events: [] };
   const season = typeof input.season === "string" && DT_SEASONS[input.season] ? input.season : "any";
   const brand = typeof input.brand === "string" && input.brand.trim() ? input.brand.trim().slice(0, 40) : undefined;
-  const countRaw = Number(input.count);
-  const count = Number.isInteger(countRaw) && countRaw >= 1 && countRaw <= 6 ? countRaw : 4;
+  const count = readTireCount(input.count);
+  if (typeof count !== "number") return { content: JSON.stringify(count), isError: true, events: [] };
   const page = await client.searchBySize({ size, season: DT_SEASONS[season].filter, brand });
-  const options = brandTireOptions(page.tires, season, parsed.rim, new Date(), brand);
+  const options = brandTireOptions(page.tires, season, parsed.rim, new Date(), brand, {
+    studs: typeof input.studs === "string" ? input.studs : "any",
+    skus: typeof input.skus === "string" ? input.skus.split(/[,\s]+/) : [],
+  });
   if (options.length === 0) {
     return { content: JSON.stringify({ status: "not_found", note: `DT Tire Hub has no ${brand ?? ""} ${season} tire in ${size} with a price.`.replace(/\s+/g, " ") }), isError: false, events: [] };
   }
@@ -403,6 +441,7 @@ async function quoteEachVariant(
   position: string | null,
   questions: Array<{ attribute: string; label: string; options: string[] }>,
   newEstimateId: () => string,
+  bothSides = false,
 ): Promise<{ content: string; isError: boolean; events: WorkbenchEvent[] } | null> {
   if (questions.length !== 1) return null;
   const [question] = questions;
@@ -411,8 +450,9 @@ async function quoteEachVariant(
   for (const option of question.options) {
     const applied = await applyVehicleDetails(api, vehicle, [{ attribute: question.attribute, option }]);
     if (applied.status !== "ok" && applied.status !== "needs_details") continue;
-    const job = await quoteServiceForStaff(api, applied.vehicle, serviceId, position);
-    if (job.status !== "ok") continue;
+    const quoted = await quoteServiceForStaff(api, applied.vehicle, serviceId, position);
+    if (quoted.status !== "ok") continue;
+    const job = bothSides ? forBothSides(quoted) : quoted;
     const label = describeVehicle(applied.vehicle);
     // The label usually names the chosen option already ("… 2.4 L4"); add it when it doesn't.
     quotes.push(buildLaborQuote(label.includes(option) ? label : `${label}（${question.label}: ${option}）`, job, newEstimateId()));
@@ -431,8 +471,8 @@ async function quoteEachVariant(
 
 /** Mounting the customer's own tires: the price depends only on the tire, so staff needn't name the car. */
 function tireChangeQuote(input: Record<string, unknown>, id: string): StaffQuote {
-  const countRaw = Number(input.tire_count);
-  const count = Number.isInteger(countRaw) && countRaw >= 1 && countRaw <= 8 ? countRaw : 4;
+  const parsedCount = readTireCount(input.tire_count);
+  const count = typeof parsedCount === "number" ? parsedCount : 4;
   const LABELS: Record<keyof typeof FLAT_PRICES.tirePerWheel, string> = {
     up_to_18: "普通胎（18 寸及以下）",
     over_18: "普通胎（19 寸及以上）",
@@ -486,12 +526,14 @@ export async function runWorkbenchTool(
     const serviceId = Number(input.service_id);
     if (!Number.isInteger(serviceId) || serviceId <= 0) return { content: JSON.stringify({ error: "Invalid service_id." }), isError: true, events: [] };
     const position = typeof input.position === "string" && input.position.trim() ? input.position : null;
-    const job = await quoteServiceForStaff(api, vehicle, serviceId, position);
-    if (job.status === "need_details") {
-      const variants = await quoteEachVariant(api, vehicle, serviceId, position, job.questions, newEstimateId);
+    const bothSides = input.both_sides === true;
+    const quoted = await quoteServiceForStaff(api, vehicle, serviceId, position);
+    if (quoted.status === "need_details") {
+      const variants = await quoteEachVariant(api, vehicle, serviceId, position, quoted.questions, newEstimateId, bothSides);
       if (variants) return variants;
     }
-    if (job.status !== "ok") return { content: JSON.stringify(job), isError: false, events: [] };
+    if (quoted.status !== "ok") return { content: JSON.stringify(quoted), isError: false, events: [] };
+    const job = bothSides ? forBothSides(quoted) : quoted;
     const shared = await sharedLabor(api, vehicle, serviceId, job.laborHours, readDoneWith(input));
     const charged = !shared
       ? job
@@ -519,8 +561,8 @@ export async function runWorkbenchTool(
     const size = typeof input.size === "string" ? input.size.slice(0, 40) : "";
     if (!sizeKey(size)) return { content: JSON.stringify({ error: "Could not read a tire size." }), isError: true, events: [] };
     const season = typeof input.season === "string" ? input.season : "any";
-    const countRaw = Number(input.count);
-    const count = Number.isInteger(countRaw) && countRaw >= 1 && countRaw <= 6 ? countRaw : 4;
+    const count = readTireCount(input.count);
+    if (typeof count !== "number") return { content: JSON.stringify(count), isError: true, events: [] };
     const options = staffTires(size, season);
     if (options === null) return { content: JSON.stringify({ status: "no_price_list", note: "The tire price list is not loaded on the server." }), isError: false, events: [] };
     if (options.length === 0) return { content: JSON.stringify({ status: "not_found", note: "No tire of that size and season on the price list." }), isError: false, events: [] };

@@ -8,6 +8,7 @@ import {
   identifyByVin,
   identifyByYearMakeModel,
   quoteService,
+  forBothSides,
   readDoneWith,
   refineVehicle,
   serviceById,
@@ -134,8 +135,13 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
             "When two jobs are done at the same time in the same place (front pads + front rotors on the same axle): the other job's service_id. Quote both, each pointing at the other; the shop charges the longer job's labor in full and the shorter one's at half. 0 otherwise.",
         },
         done_with_position: { type: "string", description: "The other job's position (e.g. Front), or empty" },
+        both_sides: {
+          type: "boolean",
+          description:
+            "True when the same per-side job is wanted on both sides (left and right struts, both front wheel bearings, both CV axles). The card then shows labor × 2 and both sides' parts. False for pads and rotors (already an axle set) and when only one side is wanted.",
+        },
       },
-      required: ["vehicle_key", "service_id", "position", "done_with_service_id", "done_with_position"],
+      required: ["vehicle_key", "service_id", "position", "done_with_service_id", "done_with_position", "both_sides"],
       additionalProperties: false,
     },
   },
@@ -406,7 +412,8 @@ export async function runTool(
       const serviceId = Number(input.service_id);
       if (!Number.isInteger(serviceId) || serviceId <= 0) return fail("Invalid service_id.");
       const position = typeof input.position === "string" && input.position.trim() ? input.position : null;
-      const quoted = await quoteService(api, vehicle, serviceId, position);
+      const raw = await quoteService(api, vehicle, serviceId, position);
+      const quoted = raw.status === "ok" && input.both_sides === true ? forBothSides(raw) : raw;
       let quote = quoted;
       if (quoted.status === "ok") {
         const shared = await sharedLabor(api, vehicle, serviceId, quoted.laborHours, readDoneWith(input));
@@ -478,8 +485,9 @@ export async function runTool(
         return fail("Could not read a tire size. Ask for the numbers on the tire sidewall, e.g. 225/65R17.");
       }
       const season = pick<TireSeason | "any">(input.season, ["all_season", "all_weather", "winter", "off_road", "any"]) ?? "any";
-      const countRaw = Number(input.count);
-      const count = Number.isInteger(countRaw) && countRaw >= 1 && countRaw <= 6 ? countRaw : 4;
+      const countRaw = input.count === null || input.count === undefined ? 4 : Number(input.count);
+      if (!Number.isInteger(countRaw) || countRaw < 1 || countRaw > 20) return fail("Tire count must be a whole number from 1 to 20; ask how many.");
+      const count = countRaw;
       const vehicleKey = typeof input.vehicle_key === "string" && input.vehicle_key ? input.vehicle_key : knownVehicleKey;
       let decoded = vehicleKey ? decodeVehicleKey(vehicleKey) : null;
       if (decoded) {

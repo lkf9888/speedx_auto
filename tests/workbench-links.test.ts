@@ -6,9 +6,9 @@ describe("quote card links", () => {
     const links = optionLinks({ kind: "labor", supplier: "worldpac", service: "Brake Pads R&R" }, { brand: "PRO-ACT", label: "Brake Pad Set", partNumber: "ACT866A" });
     expect(links).toEqual([
       { label: "speedDIAL", url: "https://speeddial.worldpac.com/", copy: "ACT866A" },
-      { label: "eBay", url: "https://www.ebay.ca/sch/i.html?_nkw=ACT866A" },
-      { label: "Amazon", url: "https://www.amazon.ca/s?k=PRO-ACT%20ACT866A" },
-      { label: "RockAuto", url: "https://www.rockauto.com/en/partsearch/?partnum=ACT866A" },
+      { label: "eBay 搜索", url: "https://www.ebay.ca/sch/i.html?_nkw=ACT866A" },
+      { label: "Amazon 搜索", url: "https://www.amazon.ca/s?k=PRO-ACT%20ACT866A" },
+      { label: "RockAuto 搜索", url: "https://www.rockauto.com/en/partsearch/?partnum=ACT866A" },
     ]);
   });
 
@@ -17,7 +17,7 @@ describe("quote card links", () => {
       { kind: "tires", supplier: "dt", service: "新轮胎（含安装）· 225/65R17" },
       { brand: "Michelin", label: "X-ICE SNOW 225/65R17 106T XL", partNumber: "24387" },
     );
-    expect(dt.label).toBe("DT Tire Hub");
+    expect(dt.label).toBe("DT 搜索");
     const url = new URL(dt.url);
     expect(url.searchParams.get("sku")).toBe("24387");
     expect(url.searchParams.get("tireSize")).toBe("225/65R17");

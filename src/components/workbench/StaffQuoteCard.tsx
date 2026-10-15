@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { optionLinks, type ProductLink } from "@/lib/workbench/links";
+import { customerText } from "@/lib/workbench/customer-text";
 import type { StaffQuote } from "@/lib/workbench/quote";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
@@ -49,10 +50,14 @@ function ProductLinks({ links }: { links: ProductLink[] }) {
 export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
   const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
   const [raw, setRaw] = useState(false);
+  /** Options left out of the customer text (unticked); everything is in by default. */
+  const [left, setLeft] = useState<Set<number>>(new Set());
+  const chosen = quote.options.filter((_, i) => !left.has(i));
+  const textForCustomer = left.size === 0 ? quote.customerText : customerText({ ...quote, options: chosen });
 
   async function copyForCustomer() {
     try {
-      await navigator.clipboard.writeText(quote.customerText);
+      await navigator.clipboard.writeText(textForCustomer);
       setCopied("done");
     } catch {
       setCopied("failed");
@@ -103,6 +108,24 @@ export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
               {quote.options.map((o, i) => (
                 <tr key={`${o.label}-${i}`} className="border-t border-ink-100 align-top">
                   <td className="px-3 py-2">
+                    {quote.options.length > 1 && (
+                      <label className="mb-1 flex items-center gap-1.5 text-[11px] text-ink-500">
+                        <input
+                          type="checkbox"
+                          checked={!left.has(i)}
+                          onChange={() =>
+                            setLeft((current) => {
+                              const next = new Set(current);
+                              if (next.has(i)) next.delete(i);
+                              else next.add(i);
+                              return next;
+                            })
+                          }
+                          aria-label={`复制给客人时包含 ${[o.brand, o.label].filter(Boolean).join(" ")}${o.partNumber ? ` #${o.partNumber}` : ""}`}
+                        />
+                        给客人
+                      </label>
+                    )}
                     <div className="font-medium text-ink-900">{[o.brand, o.label].filter(Boolean).join(" ")}</div>
                     {o.partNumber && <div className="font-mono text-xs text-ink-500">#{o.partNumber}</div>}
                     {o.core !== null && <div className="text-xs text-amber-700">核心件押金 {money(o.core)}</div>}
@@ -144,9 +167,10 @@ export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
         <button
           type="button"
           onClick={() => void copyForCustomer()}
+          disabled={chosen.length === 0}
           className="rounded-full bg-ink-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-600"
         >
-          复制客户报价
+          {left.size === 0 ? "复制客户报价" : `复制客户报价（${chosen.length} 个选项）`}
         </button>
         {copied === "done" && <span className="text-xs text-emerald-700">已复制，可直接粘贴给客人（不含进价）</span>}
         {copied === "failed" && <span className="text-xs text-amber-700">浏览器不允许复制，请在下面手动选择文字</span>}
@@ -162,7 +186,7 @@ export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
       </footer>
 
       {copied === "failed" && (
-        <pre className="mx-4 mb-3 whitespace-pre-wrap rounded-lg bg-ink-50 p-3 text-xs">{quote.customerText}</pre>
+        <pre className="mx-4 mb-3 whitespace-pre-wrap rounded-lg bg-ink-50 p-3 text-xs">{textForCustomer}</pre>
       )}
 
       {raw && (

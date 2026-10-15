@@ -115,7 +115,7 @@ describe("tire mounting without a car", () => {
 describe("shop labor rules in the prompt", () => {
   it("states the half-time rule for jobs done together, per-side doubling and the customer-text divider", () => {
     expect(WORKBENCH_PROMPT).toContain("0.9 + 0.45 = 1.35 h");
-    expect(WORKBENCH_PROMPT).toContain("double the hours and the part quantity");
+    expect(WORKBENCH_PROMPT).toContain("call get_estimate with both_sides true");
     expect(WORKBENCH_PROMPT).toContain("—— 发给客人 ——");
     expect(WORKBENCH_TOOLS.map((t) => t.name)).toContain("find_parts");
   });

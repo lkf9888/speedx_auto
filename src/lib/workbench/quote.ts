@@ -5,6 +5,9 @@
  */
 import { WALK_IN_LABOR_RATE, REFERRAL_LABOR_MULTIPLIER, type EstimateCard } from "@/lib/repair-chat/pricing";
 import type { StaffPartOption } from "@/lib/worldpac/catalog";
+import { customerText } from "./customer-text";
+
+export { customerText };
 
 export type StaffQuoteKind = "labor" | "flat" | "tires" | "team_quote";
 
@@ -52,7 +55,6 @@ export interface StaffQuote {
 }
 
 const money = (value: number) => Math.round(value * 100) / 100;
-const dollars = (value: number) => `$${value.toFixed(2)}`;
 
 export function costField(env: NodeJS.ProcessEnv = process.env): string {
   return env.WORKBENCH_COST_FIELD?.trim() || "unitPrice";
@@ -62,27 +64,6 @@ function finish(option: Omit<StaffQuoteOption, "profit" | "margin">): StaffQuote
   const profit = option.costTotal === null ? null : money(option.customerTotal - option.costTotal);
   const margin = profit === null || option.customerTotal <= 0 ? null : Math.round((profit / option.customerTotal) * 1000) / 1000;
   return { ...option, profit, margin };
-}
-
-/** Text a staff member can paste into WhatsApp/WeChat: customer prices only. */
-export function customerText(quote: Omit<StaffQuote, "customerText">): string {
-  const lines = [
-    "【SPEEDX AUTO 维修报价】",
-    `车辆：${quote.vehicle || "—"}`,
-    `项目：${quote.service}${quote.position ? `（${quote.position}）` : ""}`,
-  ];
-  if (quote.kind === "team_quote" || quote.options.length === 0) {
-    lines.push("这项需要到店检查后报价。");
-  } else {
-    quote.options.forEach((o, i) => {
-      const name = [o.brand, o.label].filter(Boolean).join(" ");
-      const each = quote.kind === "tires" ? `，每条 ${dollars(o.unitPrice)} × ${o.quantity}` : "";
-      lines.push(`${i + 1}. ${name}${each}：${dollars(o.customerTotal)}`);
-    });
-  }
-  lines.push("以上为税前参考价，最终以到店检查为准。");
-  lines.push(`报价编号 ${quote.id}`);
-  return lines.join("\n");
 }
 
 function withText(quote: Omit<StaffQuote, "customerText">): StaffQuote {
@@ -225,7 +206,7 @@ export function buildPartsQuote(vehicle: string, partName: string, position: str
     labor: null,
     costField: field,
     options,
-    notes: ["只含零件标价，不含工时：工时库没有对应的项目，工时请人工确认后再加。", "毛利 = 零件标价 − 进价。"],
+    notes: ["这张卡只含零件标价，不含工时；工时请按相关工时项或人工确认后再加。", "毛利 = 零件标价 − 进价。"],
     createdAt: now.toISOString(),
   });
 }
@@ -345,9 +326,23 @@ export function buildTireQuote(
   });
 }
 
-/** What the model reads about a staff quote: compact, numbers only. */
+const SOURCES: Record<NonNullable<StaffQuote["supplier"]>, string> = {
+  worldpac: "WorldPac speedDIAL (labor guide and the shop's WorldPac account prices)",
+  dt: "DT Tire Hub, live",
+  partner_tires: "the partner tire price list",
+  shop: "the shop's own flat prices",
+};
+
+const LINKS: Partial<Record<NonNullable<StaffQuote["supplier"]>, string>> = {
+  worldpac:
+    "Each part on the card has buttons: speedDIAL (copies the part number and opens speedDIAL, which has no product links), and eBay, Amazon and RockAuto searches by part number. These are search entry points, not checked listings: staff confirm the same part, price and shipping there.",
+  dt: "Each tire on the card has a DT Tire Hub search for its SKU and an Amazon search. Search entry points, not checked listings.",
+};
+
+/** What the model reads about a staff quote: compact, numbers only, plus where it came from. */
 export function summarizeStaffQuote(quote: StaffQuote): string {
-  const head = `Staff quote ${quote.id} shown as a card. Vehicle: ${quote.vehicle}. Service: ${quote.service}${quote.position ? ` (${quote.position})` : ""}.`;
+  const source = quote.supplier ? ` Source: ${SOURCES[quote.supplier]}.` : "";
+  const head = `Staff quote ${quote.id} shown as a card. Vehicle: ${quote.vehicle}. Service: ${quote.service}${quote.position ? ` (${quote.position})` : ""}.${source}`;
   if (quote.kind === "team_quote") return `${head}\nNo public price: ${quote.notes.join(" ")}`;
   const labor = quote.labor
     ? `Labor: ${quote.labor.hours} h × $${quote.labor.rate} = $${quote.labor.walkIn} (referral $${quote.labor.referral}).`
@@ -361,5 +356,5 @@ export function summarizeStaffQuote(quote: StaffQuote): string {
         `${o.profit !== null ? `, profit $${o.profit}${o.margin !== null ? ` (${Math.round(o.margin * 100)}%)` : ""}` : ""}${o.stock ? `, ${o.stock}` : ""}`,
     )
     .join("\n");
-  return [head, labor, options, quote.notes.join(" ")].filter(Boolean).join("\n");
+  return [head, labor, options, quote.notes.join(" "), quote.supplier ? (LINKS[quote.supplier] ?? "") : ""].filter(Boolean).join("\n");
 }

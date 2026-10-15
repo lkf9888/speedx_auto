@@ -584,8 +584,8 @@ export function sanitizePartQuotes(
     const pos = q.position as { id?: number } | undefined;
     return pos?.id === undefined || pos.id === positionId || pos.id === -1;
   };
-  const inPosition = all.filter(matchesPosition);
-  const source = inPosition.length > 0 ? inPosition : all;
+  // A part for another position is not an option for this one: no falling back to every part.
+  const source = all.filter(matchesPosition);
   const options: PartOption[] = [];
   for (const q of source) {
     const listPrice = Number(q.listPrice);
@@ -853,8 +853,8 @@ export function staffPartQuotes(response: PnaResponse, positionId: number | null
     const pos = q.position as { id?: number } | undefined;
     return pos?.id === undefined || pos.id === positionId || pos.id === -1;
   };
-  const inPosition = all.filter(matchesPosition);
-  const source = inPosition.length > 0 ? inPosition : all;
+  // A part for another position is not an option for this one: no falling back to every part.
+  const source = all.filter(matchesPosition);
   const options: StaffPartOption[] = [];
   for (const q of source) {
     const listPrice = Number(q.listPrice);
@@ -1050,5 +1050,23 @@ export async function sharedLabor(
     chargedHours: halved ? Math.round((hours / 2) * 100) / 100 : hours,
     otherName: `${other.serviceName}${other.position ? ` (${other.position})` : ""}`,
     otherHours: other.laborHours,
+  };
+}
+
+// ------------------------------------------------------------- both sides
+
+/**
+ * The same per-side job on both sides (left and right struts, both front
+ * hubs): labor-guide hours are per side, so they double, and a part the
+ * catalog lists once per car (qtyPerCar 1) is needed twice. A part already
+ * listed two or more per car covers both sides as it is.
+ */
+export function forBothSides<T extends { laborHours: number; laborNote: string; position: string; partOptions: Array<{ quantity: number }> }>(quote: T): T {
+  return {
+    ...quote,
+    laborHours: Math.round(quote.laborHours * 2 * 100) / 100,
+    position: quote.position ? `${quote.position}, both sides` : "Both sides",
+    laborNote: `Both sides: labor ${quote.laborHours} h per side × 2. Parts listed once per car are doubled (left and right may be different part numbers). ${quote.laborNote}`.trim(),
+    partOptions: quote.partOptions.map((p) => (p.quantity >= 2 ? p : { ...p, quantity: p.quantity * 2 })),
   };
 }

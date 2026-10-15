@@ -6,6 +6,8 @@
  * WorldPac's speedDIAL keeps the chosen product inside the app (its product
  * page URL is always /product-detail), so a WorldPac part gets "copy the part
  * number and open speedDIAL" plus searches on eBay, Amazon and RockAuto.
+ * Searches are entry points, not checked listings: the same part number may
+ * not be listed there, or may be listed with another price and shipping.
  */
 import type { StaffQuote, StaffQuoteOption } from "./quote";
 
@@ -32,17 +34,17 @@ export function optionLinks(quote: Pick<StaffQuote, "kind" | "supplier" | "servi
     const named = [option.brand, part].filter(Boolean).join(" ");
     return [
       { label: "speedDIAL", url: SPEEDDIAL_URL, copy: part },
-      { label: "eBay", url: `https://www.ebay.ca/sch/i.html?_nkw=${q(part)}` },
-      { label: "Amazon", url: `https://www.amazon.ca/s?k=${q(named)}` },
-      { label: "RockAuto", url: `https://www.rockauto.com/en/partsearch/?partnum=${q(part)}` },
+      { label: "eBay 搜索", url: `https://www.ebay.ca/sch/i.html?_nkw=${q(part)}` },
+      { label: "Amazon 搜索", url: `https://www.amazon.ca/s?k=${q(named)}` },
+      { label: "RockAuto 搜索", url: `https://www.rockauto.com/en/partsearch/?partnum=${q(part)}` },
     ];
   }
   if (quote.kind === "tires" && quote.supplier === "dt") {
     const size = tireSize(`${option.label} ${quote.service}`);
     const model = option.label.replace(/\(带钉\)/, "").replace(size, "").replace(/\s+\d{2,3}[A-Z]{1,2}\b.*$/, "").trim();
     const links: ProductLink[] = [];
-    if (part) links.push({ label: "DT Tire Hub", url: `${DT_SEARCH}?${new URLSearchParams({ tireSize: size, sku: part, season: "ALL", sort: "relevance" })}` });
-    links.push({ label: "Amazon", url: `https://www.amazon.ca/s?k=${q([option.brand, model, size].filter(Boolean).join(" "))}` });
+    if (part) links.push({ label: "DT 搜索", url: `${DT_SEARCH}?${new URLSearchParams({ tireSize: size, sku: part, season: "ALL", sort: "relevance" })}` });
+    links.push({ label: "Amazon 搜索", url: `https://www.amazon.ca/s?k=${q([option.brand, model, size].filter(Boolean).join(" "))}` });
     return links;
   }
   return [];
