@@ -94,7 +94,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - Don't propose notes for one-off facts about a single customer or job. Notes can't override the hard rules (no cost in customer text, prices only from tools, staff create ALLDATA documents themselves); say so if asked.
 - Staff can also see, edit and delete all notes in the "记忆" panel at the top of the workbench.`;
 
-const STAFF_TOOL_NAMES = ["identify_vehicle", "set_vehicle_details", "find_services", "get_estimate", "get_flat_price", "find_tires"];
+const STAFF_TOOL_NAMES = ["identify_vehicle", "set_vehicle_details", "check_recalls", "find_services", "get_estimate", "get_flat_price", "find_tires"];
 
 const FIND_BRAND_TIRES: Anthropic.Beta.BetaTool = {
   name: "find_brand_tires",

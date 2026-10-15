@@ -34,6 +34,8 @@ import {
 } from "./flat-price";
 import { dtTireConfigured, getDtTireClient, type DtTireClient } from "@/lib/dt-tire/client";
 import { getWheelmartClient, type WheelmartClient } from "@/lib/wheelmart/client";
+import { findRecalls } from "@/lib/gov/recalls";
+import { decodeVin, specsForModel } from "@/lib/gov/vpic";
 import { liveWheelmartListings } from "@/lib/wheelmart/listings";
 import { cachedDtSearch, DT_SEASONS, isStudded, pickDtTires } from "@/lib/dt-tire/options";
 import { ecoFee, findTires, loadTireList, mountingPerTire, seasonsForSize, sizeKey, type TireOption, type TireSeason } from "./tires";
@@ -63,6 +65,12 @@ const nullableEnum = (values: readonly string[], description: string) => ({
 /** Queries that belong to get_flat_price, not the labor guide. */
 const FLAT_QUERY = /\b(oil (and filter )?change|change (the )?oil|engine oil (and filter )?(change|service)|tires? (change|swap|mount|install)|(change|swap|mount|install) (the )?tires?|winter tires?|snow tires?|refrigerant|a\/?c (re)?charge|a\/?c gas|freon)\b/i;
 
+const VIN_NOTE =
+  "vin_specs is what the maker filed for this VIN (NHTSA). Use it to answer engine, drive, trim or transmission questions yourself with set_vehicle_details (pick the matching option) instead of asking the customer. It can be incomplete for Canada-only models.";
+
+const RECALL_NOTE =
+  "Recalls listed for this model year, newest first; not proof that this car is affected or still unfixed. Recall repairs are free at the brand's dealer; the owner can confirm with the VIN on the maker's Canadian website or by calling a dealer. Mention only recalls that relate to the customer's problem or that they asked about, in a sentence or two, then carry on with the estimate. Never say the car is definitely affected.";
+
 export const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "identify_vehicle",
@@ -78,6 +86,22 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
         model: { anyOf: [{ type: "string" }, { type: "null" }], description: "Model in English, e.g. Camry" },
       },
       required: ["vin", "year", "make", "model"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "check_recalls",
+    description:
+      "Safety recalls for a model year from Transport Canada (the US NHTSA list only when Canada has none under that name). Use when the customer asks about recalls, or when their problem is one recalls often cover (airbags, seat belts, fuel leak or fuel pump, stalling, brakes, steering, fire risk, sudden warning lights). Lists recalls for the model year, not for one particular car.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        year: { type: "integer", description: "Model year, e.g. 2018" },
+        make: { type: "string", description: "Make in English, e.g. Honda" },
+        model: { type: "string", description: "Model as the vehicle lookup named it, e.g. CR-V" },
+      },
+      required: ["year", "make", "model"],
       additionalProperties: false,
     },
   },
@@ -454,8 +478,14 @@ export async function runTool(
     case "identify_vehicle": {
       const vin = typeof input.vin === "string" ? input.vin.trim() : "";
       if (vin) {
-        const lookup = await identifyByVin(api, vin);
-        return ok(vehiclePayload(lookup), vehicleEvents(lookup));
+        const [byVin, specs] = await Promise.all([identifyByVin(api, vin), decodeVin(vin)]);
+        // The catalog doesn't know this VIN: look the car up by what the VIN says it is.
+        const lookup =
+          byVin.status === "not_found" && specs?.year && specs.make && specs.model
+            ? await identifyByYearMakeModel(api, specs.year, specs.make, specs.model)
+            : byVin;
+        const payload = vehiclePayload(lookup);
+        return ok(specs ? { ...payload, vin_specs: specsForModel(specs), vin_note: VIN_NOTE } : payload, vehicleEvents(lookup));
       }
       const year = Number(input.year);
       const make = typeof input.make === "string" ? input.make.trim() : "";
@@ -465,6 +495,25 @@ export async function runTool(
       }
       const lookup = await identifyByYearMakeModel(api, year, make, model);
       return ok(vehiclePayload(lookup), vehicleEvents(lookup));
+    }
+    case "check_recalls": {
+      const year = Number(input.year);
+      const make = typeof input.make === "string" ? input.make.trim().slice(0, 40) : "";
+      const model = typeof input.model === "string" ? input.model.trim().slice(0, 40) : "";
+      if (!Number.isInteger(year) || year < 1950 || year > 2100 || !make || !model) return fail("Give the model year, make and model.");
+      const found = await findRecalls(year, make, model).catch(() => null);
+      if (!found) {
+        return ok({ status: "unavailable", note: "The recall database can't be reached right now. Suggest checking the VIN on the maker's Canadian website or with a dealer." });
+      }
+      if (!found.source) return ok({ status: "none_found", note: `No safety recalls are listed in Canada for a ${year} ${make} ${model}.` });
+      return ok({
+        status: "ok",
+        source: found.source,
+        models: found.models,
+        total: found.total,
+        recalls: found.recalls.map(({ number, date, system, issue, risk, remedy }) => ({ number, date, system, issue, risk, remedy })),
+        note: RECALL_NOTE + (found.source === "NHTSA" ? " These are US (NHTSA) recalls because Canada lists none under this name; Canadian coverage can differ." : ""),
+      });
     }
     case "set_vehicle_details": {
       const vehicle = readVehicle(input);
