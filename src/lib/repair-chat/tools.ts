@@ -377,6 +377,64 @@ async function withKnownCylinders(
   return { vehicle: refined.vehicle };
 }
 
+/** One labor job on one car, with both sides and done-together labor applied. */
+async function laborQuote(api: CatalogApi, vehicle: VehicleRef, serviceId: number, position: string | null, input: Record<string, unknown>) {
+  const raw = await quoteService(api, vehicle, serviceId, position);
+  const quoted = raw.status === "ok" && input.both_sides === true ? forBothSides(raw) : raw;
+  if (quoted.status !== "ok") return quoted;
+  const shared = await sharedLabor(api, vehicle, serviceId, quoted.laborHours, readDoneWith(input));
+  if (shared?.halved) {
+    return {
+      ...quoted,
+      laborHours: shared.chargedHours,
+      laborNote: `Done together with ${shared.otherName}: labor charged at half (${quoted.laborHours} h → ${shared.chargedHours} h). ${quoted.laborNote}`.trim(),
+    };
+  }
+  if (shared) return { ...quoted, laborNote: `Done together with ${shared.otherName}, whose labor is charged at half. ${quoted.laborNote}`.trim() };
+  return quoted;
+}
+
+const MAX_VARIANTS = 3;
+
+/**
+ * One detail the price depends on is unknown (engine, drive type) and it has
+ * two or three options: estimate each one instead of asking first, so the
+ * customer sees prices straight away. Null when that isn't possible.
+ */
+async function estimateEachVariant(
+  api: CatalogApi,
+  vehicle: VehicleRef,
+  serviceId: number,
+  position: string | null,
+  questions: Array<{ attribute: string; label: string; options: string[] }>,
+  input: Record<string, unknown>,
+  newEstimateId: () => string,
+): Promise<ToolOutcome | null> {
+  if (questions.length !== 1) return null;
+  const [question] = questions;
+  if (question.options.length < 2 || question.options.length > MAX_VARIANTS) return null;
+  const cards: Array<{ option: string; card: EstimateCard }> = [];
+  for (const option of question.options) {
+    const applied = await applyVehicleDetails(api, vehicle, [{ attribute: question.attribute, option }]);
+    if (applied.status !== "ok" && applied.status !== "needs_details") continue;
+    const quote = await laborQuote(api, applied.vehicle, serviceId, position, input);
+    if (quote.status !== "ok") continue;
+    const label = describeVehicle(applied.vehicle);
+    // The label usually names the option already ("… 2.4 L4"); add it when it doesn't.
+    cards.push({ option, card: buildEstimate(label.includes(option) ? label : `${label} (${question.label}: ${option})`, quote, newEstimateId()) });
+  }
+  if (cards.length < 2) return null;
+  return ok(
+    {
+      status: "ok",
+      depends_on: question.label,
+      variants: cards.map(({ option, card }) => ({ [question.label]: option, summary: summarizeEstimateForModel(card) })),
+      note: `The ${question.label} isn't known, so each option has its own card. Say the price depends on the ${question.label}, give each range in one short line, and offer to narrow it to one if they tell you which they have (or the VIN). Don't ask before giving the prices.`,
+    },
+    cards.map(({ card }) => ({ type: "estimate", estimate: card })),
+  );
+}
+
 export async function runTool(
   api: CatalogApi,
   name: string,
@@ -439,20 +497,10 @@ export async function runTool(
       const serviceId = Number(input.service_id);
       if (!Number.isInteger(serviceId) || serviceId <= 0) return fail("Invalid service_id.");
       const position = typeof input.position === "string" && input.position.trim() ? input.position : null;
-      const raw = await quoteService(api, vehicle, serviceId, position);
-      const quoted = raw.status === "ok" && input.both_sides === true ? forBothSides(raw) : raw;
-      let quote = quoted;
-      if (quoted.status === "ok") {
-        const shared = await sharedLabor(api, vehicle, serviceId, quoted.laborHours, readDoneWith(input));
-        if (shared?.halved) {
-          quote = {
-            ...quoted,
-            laborHours: shared.chargedHours,
-            laborNote: `Done together with ${shared.otherName}: labor charged at half (${quoted.laborHours} h → ${shared.chargedHours} h). ${quoted.laborNote}`.trim(),
-          };
-        } else if (shared) {
-          quote = { ...quoted, laborNote: `Done together with ${shared.otherName}, whose labor is charged at half. ${quoted.laborNote}`.trim() };
-        }
+      const quote = await laborQuote(api, vehicle, serviceId, position, input);
+      if (quote.status === "need_details") {
+        const variants = await estimateEachVariant(api, vehicle, serviceId, position, quote.questions, input, newEstimateId);
+        if (variants) return variants;
       }
       if (quote.status === "unavailable") {
         const service = (await serviceById(api, vehicle, serviceId).catch(() => undefined))?.name ?? "Requested service";
