@@ -6,6 +6,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { randomBytes } from "node:crypto";
 import { runChat, type ChatTurn, type MessagesClient } from "@/lib/repair-chat/agent";
+import { estimateRanges, type EstimateCard } from "@/lib/repair-chat/pricing";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 import type { CatalogApi } from "@/lib/worldpac/catalog";
 import { getWorldpacClient } from "@/lib/worldpac/client";
@@ -82,6 +83,13 @@ export interface WorkbenchDeps {
 }
 
 /** The model's view of a stored conversation: the text of each turn, with earlier files named. */
+/** One line per estimate card a website customer was shown: what they were quoted. */
+function websiteCardLine(card: EstimateCard): string {
+  const { totalLow, totalHigh } = estimateRanges(card);
+  const total = totalLow === totalHigh ? `$${totalLow}` : `$${totalLow}–$${totalHigh}`;
+  return `[客人看到的报价卡：${[card.vehicle, card.service, card.position].filter((x) => x && x !== "—").join(" · ")}，${total}（客户价）]`;
+}
+
 export function historyFromTurns(turns: Turn[]): ChatTurn[] {
   const history = turns
     .filter((t) => !t.localOnly && (t.text.trim() || t.attachments?.length))
@@ -89,7 +97,15 @@ export function historyFromTurns(turns: Turn[]): ChatTurn[] {
     .map((t) => ({
       role: t.role,
       // Earlier files aren't sent again; the model is told they existed.
-      text: [t.text, t.attachments?.length ? `[附件：${t.attachments.map((a) => a.name).join("、")}]` : ""].filter(Boolean).join("\n").slice(0, MAX_TURN_TEXT),
+      text: [
+        t.source === "website" ? (t.role === "user" ? "[网站客人在公开估价页上问]" : "[网站 AI 客服回复客人]") : "",
+        t.text,
+        t.attachments?.length ? `[附件：${t.attachments.map((a) => a.name).join("、")}]` : "",
+        ...(t.estimates ?? []).map(websiteCardLine),
+      ]
+        .filter(Boolean)
+        .join("\n")
+        .slice(0, MAX_TURN_TEXT),
     }));
   while (history.length > 0 && history[0].role !== "user") history.shift();
   return history;

@@ -48,6 +48,7 @@ export function summarize(c: Conversation): ConversationSummary {
     lastAuthor: last?.author ?? "",
     turns: c.turns.length,
     ...(c.archived ? { archived: true } : {}),
+    ...(c.website ? { website: c.website.name } : {}),
   };
 }
 
@@ -125,10 +126,12 @@ export class ConversationStore {
     return run;
   }
 
-  /** Keep the newest conversations; the oldest go once there are too many. */
+  /** Keep the newest conversations; the oldest go once there are too many, website chats first. */
   private async trim(map: Map<string, Conversation>) {
     if (map.size <= MAX_CONVERSATIONS) return;
-    const oldest = [...map.values()].sort((a, b) => a.updatedAt - b.updatedAt).slice(0, map.size - MAX_CONVERSATIONS);
+    const oldest = [...map.values()]
+      .sort((a, b) => Number(Boolean(b.website)) - Number(Boolean(a.website)) || a.updatedAt - b.updatedAt)
+      .slice(0, map.size - MAX_CONVERSATIONS);
     for (const c of oldest) {
       map.delete(c.id);
       await this.kv.delete(PREFIX + c.id).catch(() => undefined);
@@ -222,13 +225,19 @@ export class ConversationStore {
   }
 }
 
-let shared: ConversationStore | null | undefined;
+/**
+ * The workbench routes and the public chat route (website conversations) must
+ * share one store and its cache, so it lives on globalThis rather than in a
+ * module instance.
+ */
+const SHARED = Symbol.for("speedx.workbench.conversations");
 
 /** The process-wide store, or null when KV isn't configured. */
 export function getConversationStore(): ConversationStore | null {
-  if (shared === undefined) {
+  const holder = globalThis as { [SHARED]?: ConversationStore | null };
+  if (holder[SHARED] === undefined) {
     const kv = cloudflareKv();
-    shared = kv ? new ConversationStore(kv) : null;
+    holder[SHARED] = kv ? new ConversationStore(kv) : null;
   }
-  return shared;
+  return holder[SHARED];
 }

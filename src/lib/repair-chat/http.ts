@@ -28,6 +28,7 @@ import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import type { ChatEvent } from "@/lib/repair-chat/tools";
 import type { CatalogApi } from "@/lib/worldpac/catalog";
 import { getWorldpacClient } from "@/lib/worldpac/client";
+import { getWebsiteInbox, type WebsiteInbox } from "@/lib/workbench/website-inbox";
 
 const MAX_HISTORY = 30;
 const MAX_MESSAGE = 1500;
@@ -151,6 +152,8 @@ export interface RouteDeps {
   allowlist?: BlockList;
   /** Sends booking requests to the shop. */
   mailer?: Mailer;
+  /** Copies each visit into the workbench's shared conversations, for staff to follow up. */
+  inbox?: () => WebsiteInbox | null;
 }
 
 /**
@@ -189,6 +192,7 @@ const defaultDeps: RouteDeps = {
   opens: shared().opens,
   allowlist: parseAllowlist(process.env.REPAIR_CHAT_IP_ALLOWLIST),
   mailer: shared().mailer,
+  inbox: () => getWebsiteInbox(),
 };
 
 const bookingLimiter = new RateLimiter({
@@ -220,7 +224,7 @@ function foreignOrigin(request: Request): boolean {
  */
 export async function handleLead(
   request: Request,
-  deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "opens" | "allowlist" | "mailer"> & { limiter: RateLimiter },
+  deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "opens" | "allowlist" | "mailer" | "inbox"> & { limiter: RateLimiter },
 ): Promise<Response> {
   if (foreignOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
   if (!deps.configured()) return Response.json({ error: "unavailable" }, { status: 503 });
@@ -240,9 +244,10 @@ export async function handleLead(
   }
   const sessionId = typeof raw?.sessionId === "string" && /^[a-f0-9]{32}$/.test(raw.sessionId) ? raw.sessionId : null;
   const at = new Date().toISOString();
-  const session = deps.sessions.get(sessionId) ?? deps.sessions.create(lead, locale);
+  const session = deps.sessions.get(sessionId) ?? deps.sessions.create(lead, locale, { thread: sessionId });
   const firstTime = !session.lead || session.id !== sessionId;
   deps.sessions.attachLead(session.id, lead);
+  await deps.inbox?.()?.contact(session.thread, { ...lead, locale });
   if (firstTime) {
     await deps.notify({ type: "lead_started", lead, locale, at });
     await Promise.all(session.estimates.map((card) => deps.notify(estimateLeadEvent(lead, locale, card))));
@@ -282,6 +287,7 @@ export function handleDefaultLead(request: Request): Promise<Response> {
     opens: defaultDeps.opens,
     allowlist: defaultDeps.allowlist,
     mailer: defaultDeps.mailer,
+    inbox: defaultDeps.inbox,
     limiter: leadLimiter,
   });
 }
@@ -319,21 +325,43 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
   if (limited) return Response.json({ error: "busy" }, { status: 429 });
 
   const notify: LeadNotifier = evaluation ? async () => {} : deps.notify;
-  const session = known ?? sessions.create(request_.lead, request_.locale, { opensToday, capped });
+  const session = known ?? sessions.create(request_.lead, request_.locale, { opensToday, capped, thread: request_.sessionId });
   if (!session.lead && request_.lead) sessions.attachLead(session.id, request_.lead);
   // A session this process doesn't know was opened before a restart: keep
   // the earlier part of the conversation for the shop's email.
   if (!known) sessions.seed(session.id, request_.history);
   // The shop's follow-up email notes that photos were sent; the photos themselves are never kept.
   sessions.record(session.id, { role: "user", text: request_.photos.length ? `${request_.message} [photo ×${request_.photos.length}]` : request_.message });
+  // Staff follow up from the workbench; test runs and visitors over the limit aren't copied.
+  const inbox = evaluation || capped ? null : (deps.inbox?.() ?? null);
+  inbox?.asking(session.thread);
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const pendingNotices: Array<Promise<void>> = [];
       // Without name and phone, estimates (and the reply quoting them) stay on the server.
       const held: EstimateCard[] = [];
+      const shown: EstimateCard[] = [];
+      let vehicle: { key: string; label: string } | undefined;
       let appointmentHeld = false;
+      const copyToWorkbench = (reply: string, failed = false) => {
+        if (!inbox) return;
+        pendingNotices.push(
+          inbox.exchange({
+            thread: session.thread,
+            contact: { name: session.lead?.name ?? "", phone: session.lead?.phone ?? "", locale: request_.locale, booking: session.booking },
+            question: request_.message,
+            photos: request_.photos,
+            reply,
+            estimates: shown,
+            held: held.length > 0 || appointmentHeld,
+            vehicle,
+            failed,
+          }),
+        );
+      };
       const send = (event: StreamEvent) => {
+        if (event.type === "vehicle") vehicle = event.vehicle;
         if (event.type === "appointment") {
           // Never streamed: the shop gets an email now, or once name and phone are given.
           if (evaluation) return;
@@ -348,6 +376,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
         }
         if (event.type === "estimate") {
           sessions.recordEstimate(session.id, event.estimate);
+          shown.push(event.estimate);
           if (!session.lead) {
             held.push(event.estimate);
             return;
@@ -382,6 +411,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
         } else {
           send({ type: "message", text: result.text });
         }
+        copyToWorkbench(result.text);
       } catch (error) {
         const busy = error instanceof Anthropic.RateLimitError || error instanceof Anthropic.InternalServerError;
         const status = error instanceof Anthropic.APIError ? error.status : undefined;
@@ -392,6 +422,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
           error instanceof Error ? error.message.slice(0, 500) : "",
         );
         send({ type: "error", code: busy ? "busy" : "unavailable" });
+        copyToWorkbench("", true);
       } finally {
         await Promise.allSettled(pendingNotices);
         send({ type: "done" });
@@ -449,7 +480,7 @@ export function handleBookingSlots(now = new Date()): Response {
 /** The visitor picked a time on the booking card: email the shop to confirm it. */
 export async function handleBooking(
   request: Request,
-  deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "allowlist" | "mailer"> & { limiter: RateLimiter },
+  deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "allowlist" | "mailer" | "inbox"> & { limiter: RateLimiter },
   now = new Date(),
 ): Promise<Response> {
   if (foreignOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
@@ -473,7 +504,10 @@ export async function handleBooking(
 
   const sessionId = typeof raw?.sessionId === "string" && /^[a-f0-9]{32}$/.test(raw.sessionId) ? raw.sessionId : null;
   const session = deps.sessions.get(sessionId);
-  if (session) deps.sessions.recordBooking(session.id, { date, time });
+  if (session) {
+    deps.sessions.recordBooking(session.id, { date, time });
+    await deps.inbox?.()?.contact(session.thread, { ...lead, locale, booking: { date, time } });
+  }
   await sendBooking(deps, lead, locale, { date, time }, session, "card", now);
   return Response.json({ ok: true });
 }
@@ -485,6 +519,7 @@ export function handleDefaultBooking(request: Request): Promise<Response> {
     sessions: defaultDeps.sessions,
     allowlist: defaultDeps.allowlist,
     mailer: defaultDeps.mailer,
+    inbox: defaultDeps.inbox,
     limiter: bookingLimiter,
   });
 }

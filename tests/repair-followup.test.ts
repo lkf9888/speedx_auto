@@ -24,6 +24,7 @@ const card = {
 function session(overrides: Partial<ChatSession> = {}): ChatSession {
   return {
     id: "a".repeat(32),
+    thread: "a".repeat(32),
     lead,
     locale: "zh-CN",
     startedAt: "2026-10-12T18:00:00.000Z",

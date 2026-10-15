@@ -456,7 +456,8 @@ describe("RepairChat photos", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(zhCN.repairChat.photo.failed);
     const photo = (n: number) => new File([new Uint8Array([n])], `p${n}.jpg`, { type: "image/jpeg" });
     await userEvent.upload(screen.getByTestId("photo-input"), [photo(1), photo(2), photo(3)]);
-    expect(await screen.findByRole("alert")).toHaveTextContent(zhCN.repairChat.photo.max);
-    expect(screen.getAllByRole("button", { name: new RegExp(zhCN.repairChat.photo.remove) })).toHaveLength(2);
+    // Photos are prepared one by one: wait for the notice and both previews, not the first render.
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(zhCN.repairChat.photo.max));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: new RegExp(zhCN.repairChat.photo.remove) })).toHaveLength(2));
   });
 });

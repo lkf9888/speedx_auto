@@ -31,6 +31,8 @@ export interface PendingReply {
 
 export interface ChatSession {
   id: string;
+  /** The visit's first session id: a session reopened after a restart keeps it (workbench copy). */
+  thread: string;
   /** Null until the visitor gives name and phone (asked when the first estimate is ready). */
   lead: Lead | null;
   locale: string;
@@ -52,6 +54,8 @@ export interface ChatSession {
 export interface SessionOptions {
   opensToday?: number;
   capped?: boolean;
+  /** The session id the browser still has, when this process doesn't know it. */
+  thread?: string | null;
 }
 
 export type FollowUpHandler = (session: ChatSession, reason: FinishReason) => Promise<void>;
@@ -76,8 +80,10 @@ export class SessionStore {
       if (oldest) void this.finish(oldest, "idle");
     }
     const at = this.now().toISOString();
+    const id = randomBytes(16).toString("hex");
     const session: ChatSession = {
-      id: randomBytes(16).toString("hex"),
+      id,
+      thread: options.thread || id,
       lead,
       locale,
       startedAt: at,

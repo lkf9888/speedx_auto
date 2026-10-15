@@ -13,12 +13,14 @@ import {
   type PendingQuery,
   type SentFile,
   type Turn as SharedTurn,
+  WEBSITE_CUSTOMER,
 } from "@/lib/workbench/conversation-types";
 import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
 import { StaffQuoteCard } from "./StaffQuoteCard";
+import { WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
 
 type Turn = SharedTurn;
 
@@ -583,11 +585,14 @@ export function Workbench({ email }: { email: string }) {
                   className={`flex w-full items-center gap-3 px-4 py-3 text-left ${c.id === currentId ? "bg-[color:var(--wb-header)]" : "hover:bg-[color:var(--wb-hover)]"}`}
                 >
                   <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[color:var(--wb-avatar)] text-lg font-semibold text-[color:var(--wb-icon)]">
-                    {(c.title || "新").slice(0, 1).toUpperCase()}
+                    {c.website !== undefined ? "🌐" : (c.title || "新").slice(0, 1).toUpperCase()}
                   </span>
                   <span className="min-w-0 flex-1 border-b border-[color:var(--wb-border)] pb-3 -mb-3">
                     <span className="flex items-baseline justify-between gap-2">
-                      <span data-testid="conversation-title" className="truncate text-[0.95rem] text-[color:var(--wb-text)]">{c.title || "新会话"}</span>
+                      <span data-testid="conversation-title" className="truncate text-[0.95rem] text-[color:var(--wb-text)]">
+                        {c.website !== undefined && <span className="mr-1 rounded bg-[#00a884]/15 px-1 text-xs font-semibold text-[#008069]">网站{c.website ? ` · ${c.website}` : ""}</span>}
+                        {c.title || "新会话"}
+                      </span>
                       <span className="shrink-0 text-xs text-[color:var(--wb-muted)]">{timeLabel(c.updatedAt)}</span>
                     </span>
                     <span className={`block truncate text-sm ${pending[c.id] || serverPending[c.id] ? "text-[#00a884]" : "text-[color:var(--wb-muted)]"}`}>
@@ -640,7 +645,7 @@ export function Workbench({ email }: { email: string }) {
               </svg>
             </button>
             <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:var(--wb-avatar)] font-semibold text-[color:var(--wb-icon)]">
-              {(active.title || "新").slice(0, 1).toUpperCase()}
+              {active.website ? "🌐" : (active.title || "新").slice(0, 1).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1 leading-tight">
               {renaming?.id === active.id ? (
@@ -709,6 +714,7 @@ export function Workbench({ email }: { email: string }) {
               </>
             )}
           </header>
+          {active.website && <WebsiteVisitorBar visitor={active.website} />}
 
           <main className="wa-chat-bg flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-6">
             {dragging && (
@@ -756,7 +762,7 @@ export function Workbench({ email }: { email: string }) {
                 <div key={turn.id ?? index} className="flex justify-start">
                   <div className="wa-bubble wa-bubble-in max-w-[85%] sm:max-w-[70%]" data-testid="colleague-message">
                     <p className="text-xs font-semibold" style={{ color: nameColour(turn.author) }}>
-                      {staffName(turn.author)}
+                      {turn.author === WEBSITE_CUSTOMER ? `🌐 ${active.website?.name || "网站客人"}` : staffName(turn.author)}
                     </p>
                     {turn.attachments?.length ? <SentFiles files={turn.attachments} /> : null}
                     {turn.text && <p className="whitespace-pre-wrap">{turn.text}</p>}
@@ -767,11 +773,15 @@ export function Workbench({ email }: { email: string }) {
                 <div key={turn.id ?? index} className="space-y-2">
                   {turn.text && (
                     <div className="wa-bubble wa-bubble-in max-w-[92%] sm:max-w-[75%]">
-                      <p className="text-xs font-semibold text-[#00a884]">AI 助手</p>
+                      <p className="text-xs font-semibold text-[#00a884]">{turn.source === "website" ? "网站 AI 客服" : "AI 助手"}</p>
+                      {turn.held && <p className="text-xs text-amber-800">客人还没留姓名电话，这条回复和报价卡客人还没看到</p>}
                       <p className="whitespace-pre-wrap">{turn.text}</p>
                       <Meta at={turn.at} />
                     </div>
                   )}
+                  {turn.estimates?.map((card) => (
+                    <WebsiteEstimateCard key={card.id} card={card} />
+                  ))}
                   {turn.quotes.map((quote) => (
                     <StaffQuoteCard key={quote.id} quote={quote} />
                   ))}

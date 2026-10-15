@@ -7,6 +7,8 @@ import { ConversationStore, newTurnId } from "@/lib/workbench/conversations";
 import { handleConversation, handleConversationList } from "@/lib/workbench/conversations-http";
 import { historyFromTurns } from "@/lib/workbench/http";
 import { memoryKv } from "@/lib/workbench/kv";
+import { WebsiteInbox } from "@/lib/workbench/website-inbox";
+import type { EstimateCard } from "@/lib/repair-chat/pricing";
 
 function ndjson(events: unknown[]) {
   return new Response(events.map((e) => JSON.stringify(e)).join("\n") + "\n", {
@@ -172,6 +174,29 @@ describe("shared workbench conversations", () => {
     expect(screen.getAllByTestId("colleague-message")).toHaveLength(1);
     const stored = await server.store.get(server.chats[0].conversationId);
     expect(stored!.turns.filter((t) => t.role === "user").map((t) => t.author)).toEqual(["kevin@speedx.ca", "amy@speedx.ca"]);
+  });
+
+  it("shows a website customer's chat with their contact details, and staff can ask the AI about it", async () => {
+    const inbox = new WebsiteInbox(server.store);
+    const card = { id: "E-AAAA1111", kind: "tires", vehicle: "—", service: "新轮胎（含安装） · 225/65R17", position: "", laborHours: 0, laborRate: 120, laborWalkIn: 0, partOptions: [{ description: "Michelin X-ICE SNOW", series: "winter", unitListPrice: 280, quantity: 4, total: 1120, inStockLocally: false, note: "" }], partsLow: 1120, partsHigh: 1120, totalLow: 1120, totalHigh: 1120 } as unknown as EstimateCard;
+    await inbox.exchange({ thread: "ab".repeat(16), contact: { name: "", phone: "", locale: "zh-CN" }, question: "米其林冬季胎4条多少钱", photos: [], reply: "每条 $280", estimates: [card], held: true });
+    await inbox.contact("ab".repeat(16), { name: "Amy", phone: "604-555-0182", locale: "zh-CN" });
+
+    render(<Workbench email="staff@example.com" />);
+    const listed = await screen.findByText("网站 · Amy");
+    await userEvent.click(listed.closest("button")!);
+    expect(await screen.findByTestId("website-visitor")).toHaveTextContent("Amy");
+    expect(chat().getByTestId("colleague-message")).toHaveTextContent("🌐 Amy");
+    expect(chat().getByText("网站 AI 客服")).toBeInTheDocument();
+    expect(chat().getByTestId("website-estimate")).toHaveTextContent("$1120");
+    // She left her contact details, so the reply is no longer marked unseen.
+    expect(chat().queryByText(/客人还没看到/)).not.toBeInTheDocument();
+
+    await ask("这个客人的进价是多少");
+    await chat().findByText(/答复：这个客人的进价是多少/);
+    const history = server.chats.at(-1)!.history.map((t) => t.text).join("\n");
+    expect(history).toContain("[网站客人在公开估价页上问]");
+    expect(history).not.toMatch(/Amy|604-555/);
   });
 
   it("lets staff rename a conversation for everyone, and Escape cancels", async () => {
