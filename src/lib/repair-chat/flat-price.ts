@@ -217,6 +217,9 @@ const WORDS: Record<Locale, Record<string, string>> = {
     ac_note: "Flat price. The refrigerant type is confirmed from the label under the hood.",
     tires_new: "New tires, installed",
     tires_note: "Price per tire includes installation. Stock and delivery time are confirmed by the shop.",
+    tire_in_stock: "in stock",
+    tire_ships_soon: "about 1–3 days to arrive",
+    tire_studded: "studded",
   },
   "zh-CN": {
     oil_change: "换机油",
@@ -241,6 +244,9 @@ const WORDS: Record<Locale, Record<string, string>> = {
     ac_note: "一口价。雪种类型以发动机舱内的标签为准。",
     tires_new: "新轮胎（含安装）",
     tires_note: "每条价格已含安装。库存和到货时间以店里确认为准。",
+    tire_in_stock: "现货",
+    tire_ships_soon: "需调货，约 1–3 天",
+    tire_studded: "带钉",
   },
   "zh-TW": {
     oil_change: "換機油",
@@ -265,6 +271,9 @@ const WORDS: Record<Locale, Record<string, string>> = {
     ac_note: "一口價。雪種類型以引擎室內的標籤為準。",
     tires_new: "新輪胎（含安裝）",
     tires_note: "每條價格已含安裝。庫存和到貨時間以店裡確認為準。",
+    tire_in_stock: "現貨",
+    tire_ships_soon: "需調貨，約 1–3 天",
+    tire_studded: "帶釘",
   },
 };
 

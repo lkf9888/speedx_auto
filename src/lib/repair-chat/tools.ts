@@ -32,7 +32,9 @@ import {
   type TireType,
   type VehicleSize,
 } from "./flat-price";
-import { findTires, loadTireList, seasonsForSize, sizeKey, type TireSeason } from "./tires";
+import { dtTireConfigured, getDtTireClient, type DtTireClient } from "@/lib/dt-tire/client";
+import { cachedDtSearch, DT_SEASONS, isStudded, pickDtTires } from "@/lib/dt-tire/options";
+import { ecoFee, findTires, loadTireList, mountingPerTire, seasonsForSize, sizeKey, type TireOption, type TireSeason } from "./tires";
 import {
   buildEstimate,
   buildTireEstimate,
@@ -216,6 +218,29 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: "find_brand_tires",
+    description:
+      "Price NEW tires of international brands (Michelin, Bridgestone, Continental, Goodyear, Pirelli, Toyo, Yokohama and the like), installed. Needs the sidewall size. Shows the customer a card with up to six tires: price per tire including installation, and whether each is in stock or needs about 1–3 days. Use when the customer names a brand or asks for brand-name / premium tires; use find_tires for good-value tires.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        size: { type: "string", description: "Tire size as the customer gave it" },
+        season: {
+          type: "string",
+          enum: ["all_season", "all_weather", "winter", "summer", "any"],
+          description: "all_season (no snowflake), all_weather (snowflake, year-round), winter, summer, or any if the customer hasn't said",
+        },
+        brand: { anyOf: [{ type: "string" }, { type: "null" }], description: "One brand the customer asked for, else null" },
+        count: { anyOf: [{ type: "integer" }, { type: "null" }], description: "How many tires; null means 4" },
+        vehicle_key: { anyOf: [{ type: "string" }, { type: "null" }], description: "When the vehicle was identified" },
+        new_price_over_120k: { type: "boolean", description: "True if this vehicle sold new for more than CAD $120,000." },
+      },
+      required: ["size", "season", "brand", "count", "vehicle_key", "new_price_over_120k"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "request_appointment",
     description:
       "Send the shop an appointment request for the day and time the customer named in the chat. Slots are every half hour from 11:00 to 16:30, Monday to Saturday, shop time, not on holidays. The shop confirms by phone or WhatsApp. If the slot isn't open, the result lists open times to offer instead.",
@@ -233,7 +258,7 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "request_team_quote",
     description:
-      "Show the customer a card asking them to contact the team for a price. Use only when a job cannot be priced online: body, collision or paint work; tires of a particular international brand (no vehicle needed); identify_vehicle returned not_found for the vehicle; or find_services found nothing matching after two different wordings.",
+      "Show the customer a card asking them to contact the team for a price. Use only when a job cannot be priced online: body, collision or paint work; brand-name tires find_brand_tires couldn't price; identify_vehicle returned not_found for the vehicle; or find_services found nothing matching after two different wordings.",
     strict: true,
     input_schema: {
       type: "object",
@@ -360,6 +385,8 @@ export async function runTool(
   locale = "en",
   /** Vehicle confirmed earlier in the conversation, used when the model leaves vehicle_key out. */
   knownVehicleKey: string | null = null,
+  /** DT Tire Hub for international brands; null when it isn't set up. */
+  dt: () => DtTireClient | null = () => (dtTireConfigured() ? getDtTireClient() : null),
 ): Promise<ToolOutcome> {
   switch (name) {
     case "identify_vehicle": {
@@ -525,6 +552,52 @@ export async function runTool(
       }
       const card = buildTireEstimate(vehicle, serviceName, options, flatWord(locale, "tires_note"), newEstimateId());
       return ok({ status: "ok", summary: summarizeEstimateForModel(card) }, [{ type: "estimate", estimate: card }]);
+    }
+    case "find_brand_tires": {
+      const size = typeof input.size === "string" ? input.size.trim().slice(0, 40) : "";
+      const parsed = sizeKey(size);
+      if (!parsed) return fail("Could not read a tire size. Ask for the numbers on the tire sidewall, e.g. 225/65R17.");
+      const season = typeof input.season === "string" && DT_SEASONS[input.season] ? input.season : "any";
+      const brand = typeof input.brand === "string" && input.brand.trim() ? input.brand.trim().slice(0, 40) : undefined;
+      const countRaw = input.count === null || input.count === undefined ? 4 : Number(input.count);
+      if (!Number.isInteger(countRaw) || countRaw < 1 || countRaw > 20) return fail("Tire count must be a whole number from 1 to 20; ask how many.");
+      const vehicleKey = typeof input.vehicle_key === "string" && input.vehicle_key ? input.vehicle_key : knownVehicleKey;
+      const decoded = vehicleKey ? decodeVehicleKey(vehicleKey) : null;
+      const vehicle = decoded ? describeVehicle(decoded) : "—";
+      const serviceName = `${flatWord(locale, "tires_new")} · ${size.toUpperCase().replace(/\s+/g, " ")}`;
+      // Same rule as the shop's other posted prices: V8+ and premium vehicles are quoted by the team.
+      const facts = decoded ? vehicleFacts(decoded) : null;
+      if ((facts?.cylinders ?? 0) >= 8 || facts?.premium || input.new_price_over_120k === true) {
+        return teamQuote(vehicle, serviceName, "8+ cylinders or premium vehicle: no posted tire price.", newEstimateId);
+      }
+      const client = dt();
+      if (!client) return teamQuote(vehicle, serviceName, "International-brand tires are quoted by the team.", newEstimateId);
+      const page = await cachedDtSearch(client, { size, season: DT_SEASONS[season].filter, brand });
+      const now = new Date();
+      // In stock somewhere: the customer gets "in stock" or "about 1–3 days"; the supplier is never named.
+      const rows = pickDtTires(page.tires, season, brand, {}, 30)
+        .filter((t) => parseInt(t.localStock, 10) > 0 || parseInt(t.warehouseStock, 10) > 0)
+        .slice(0, 6);
+      if (rows.length === 0) return teamQuote(vehicle, serviceName, `No ${brand ?? "brand-name"} tire in ${size} to quote online.`, newEstimateId);
+      const options: TireOption[] = rows.map((t) => {
+        const perTire = Math.round(t.msrp! + ecoFee(now)) + mountingPerTire({ category: /terrain|mud|rugged/i.test(t.performance) ? "off_road" : "all_season" }, parsed.rim);
+        const stock = flatWord(locale, parseInt(t.localStock, 10) > 0 ? "tire_in_stock" : "tire_ships_soon");
+        return {
+          season: (/winter/i.test(t.season) ? "winter" : /weather/i.test(t.season) ? "all_weather" : "all_season") as TireSeason,
+          brand: t.brand,
+          pattern: `${t.model.replace(/\s*STUDDED\b/i, "")}${isStudded(t) ? ` (${flatWord(locale, "tire_studded")})` : ""}`,
+          size: t.size,
+          load: `${t.serviceDescription} · ${stock}`,
+          perTire,
+          count: countRaw,
+          total: perTire * countRaw,
+        };
+      });
+      const card = buildTireEstimate(vehicle, serviceName, options, flatWord(locale, "tires_note"), newEstimateId());
+      return ok(
+        { status: "ok", summary: `${summarizeEstimateForModel(card)}\nNever say where the shop buys these tires. "${flatWord(locale, "tire_in_stock")}" means in stock now; the others take about 1–3 days.` },
+        [{ type: "estimate", estimate: card }],
+      );
     }
     case "request_appointment": {
       const date = typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : "";

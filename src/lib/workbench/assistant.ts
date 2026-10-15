@@ -21,7 +21,7 @@ import {
   type VehicleRef,
 } from "@/lib/worldpac/catalog";
 import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
-import { dtTireConfigured, getDtTireClient, type DtSeasonFilter, type DtTireClient } from "@/lib/dt-tire/client";
+import { dtTireConfigured, getDtTireClient, type DtTireClient } from "@/lib/dt-tire/client";
 import type { DtTire } from "@/lib/dt-tire/parse";
 import { cachedDtSearch, DT_SEASONS, pickDtTires } from "@/lib/dt-tire/options";
 import { getTatoClient, type FleetCar, type FleetTrip, type TatoClient } from "@/lib/tato/client";
