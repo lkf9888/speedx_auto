@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { StaffQuoteCard } from "@/components/workbench/StaffQuoteCard";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { isWheelmartLoginPage, parseWheelmartPage, readDescription, searchDigits } from "@/lib/wheelmart/parse";
@@ -181,6 +184,25 @@ describe("Wheel Mart in the quotes", () => {
     const links = optionLinks(quote, ground);
     expect(links[0].label).toBe("Wheel Mart 搜索");
     expect(new URL(links[0].url).searchParams.get("ProductSearch[size]")).toBe("2256517");
+  });
+
+  it("workbench card: tires Wheel Mart has none of start unticked for the customer copy", async () => {
+    noPriceList();
+    vi.stubEnv("TIRE_MARKUP", "1.3");
+    const out = await runWorkbenchTool(api, "find_tires", { size: "225/65R17", season: "all_weather", count: 4 }, () => "W-2", null, () => null, () => null, () => fakeClient());
+    const quote = out.events.flatMap((e: WorkbenchEvent) => (e.type === "quote" ? [e.quote] : []))[0] as StaffQuote;
+    expect(quote.options.map((o) => [o.brand, Boolean(o.outOfStock)])).toEqual([
+      ["Lanvigator", true],
+      ["Delinte", false],
+    ]);
+    const writeText = vi.fn(async (text: string) => void text);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<StaffQuoteCard quote={quote} />);
+    expect(screen.getByRole("checkbox", { name: /Lanvigator/ })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Delinte/ })).toBeChecked();
+    await userEvent.click(screen.getByRole("button", { name: "复制客户报价（1 个选项）" }));
+    expect(writeText.mock.calls[0][0]).toContain("AW6");
+    expect(writeText.mock.calls[0][0]).not.toContain("CATCHFORS");
   });
 
   it("keeps quoting from the price list when Wheel Mart is down", async () => {

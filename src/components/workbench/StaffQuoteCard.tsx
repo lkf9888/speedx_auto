@@ -50,8 +50,8 @@ function ProductLinks({ links }: { links: ProductLink[] }) {
 export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
   const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
   const [raw, setRaw] = useState(false);
-  /** Options left out of the customer text (unticked); everything is in by default. */
-  const [left, setLeft] = useState<Set<number>>(new Set());
+  /** Options left out of the customer text (unticked); out-of-stock ones start unticked so they aren't copied by accident. */
+  const [left, setLeft] = useState<Set<number>>(() => new Set(quote.options.flatMap((o, i) => (o.outOfStock ? [i] : []))));
   const chosen = quote.options.filter((_, i) => !left.has(i));
   const textForCustomer = left.size === 0 ? quote.customerText : customerText({ ...quote, options: chosen });
 

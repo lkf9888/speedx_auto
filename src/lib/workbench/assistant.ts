@@ -22,7 +22,7 @@ import {
 } from "@/lib/worldpac/catalog";
 import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
 import { dtTireConfigured, getDtTireClient, type DtTireClient } from "@/lib/dt-tire/client";
-import type { DtTire } from "@/lib/dt-tire/parse";
+import { stockCount, type DtTire } from "@/lib/dt-tire/parse";
 import { cachedDtSearch, DT_SEASONS, pickDtTires } from "@/lib/dt-tire/options";
 import { getTatoClient, type FleetCar, type FleetTrip, type TatoClient } from "@/lib/tato/client";
 import { getWheelmartClient, type WheelmartClient } from "@/lib/wheelmart/client";
@@ -336,6 +336,7 @@ export function brandTireOptions(
       cost: t.cost,
       sku: t.sku,
       stock: dtStock(t),
+      ...(stockCount(t.localStock) + stockCount(t.warehouseStock) > 0 ? {} : { outOfStock: true }),
     }));
 }
 
@@ -414,6 +415,7 @@ async function staffTires(size: string, season: string, wheelmart: () => Wheelma
     cost: l.cost,
     sku: l.sku,
     stock: [`Wheel Mart 库存 ${l.onHand > 0 ? l.onHandText : "0（无货）"}`, l.remarks].filter(Boolean).join(" · "),
+    ...(l.onHand > 0 ? {} : { outOfStock: true }),
   }));
   return [...fromList, ...fromWheelmart].sort((a, b) => a.retail - b.retail);
 }

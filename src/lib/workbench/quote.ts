@@ -23,6 +23,8 @@ export interface StaffQuoteOption {
   /** Core charge per unit, when WorldPac sends one. */
   core: number | null;
   stock: string;
+  /** The supplier has none: left out of the customer copy unless staff tick it. */
+  outOfStock?: boolean;
   /** Customer total for this option: parts + labor (walk-in). */
   customerTotal: number;
   /** Same with the referral labor price. */
@@ -265,6 +267,7 @@ export interface StaffTireOption {
   sku?: string;
   /** Supplier stock, e.g. "本地 51 / 其他仓 99+". */
   stock?: string;
+  outOfStock?: boolean;
 }
 
 export interface TireQuoteSource {
@@ -298,6 +301,7 @@ export function buildTireQuote(
       unitCost: o.cost === null ? null : money(o.cost),
       core: null,
       stock: [o.season, o.stock].filter(Boolean).join(" · "),
+      ...(o.outOfStock ? { outOfStock: true } : {}),
       customerTotal: perTire * count,
       referralTotal: perTire * count,
       // Eco fee is passed through, so it counts against profit like cost.
