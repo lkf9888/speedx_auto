@@ -571,19 +571,30 @@ function pickPrimaryCategory(
 }
 
 /** Only these fields may leave this module for a part; nothing price-related but list. */
+/**
+ * Whether a quoted part is for the labor operation's position. Same position
+ * id, no position, or a side of it by name ("Front Left" for "Front") fit;
+ * a part for another position (a rear shock on a front strut job) doesn't.
+ */
+function partFitsPosition(q: Record<string, unknown>, positionId: number | null, positionLabel: string): boolean {
+  if (positionId === null || positionId < 0) return true;
+  const pos = q.position as { id?: number; description?: string } | undefined;
+  if (pos?.id === undefined || pos.id === positionId || pos.id === -1) return true;
+  const wanted = normalize(positionLabel).split(" ")[0];
+  const label = normalize(String(pos.description ?? "")).split(" ");
+  return Boolean(wanted) && label.includes(wanted);
+}
+
 export function sanitizePartQuotes(
   response: PnaResponse,
   positionId: number | null,
+  positionLabel = "",
 ): PartOption[] {
   const apps = new Map(
     (response.applications ?? []).map((a) => [String(a.appID), a]),
   );
   const all = (response.quotes ?? []).flatMap((q) => q.productQuotes ?? []);
-  const matchesPosition = (q: Record<string, unknown>) => {
-    if (positionId === null || positionId < 0) return true;
-    const pos = q.position as { id?: number } | undefined;
-    return pos?.id === undefined || pos.id === positionId || pos.id === -1;
-  };
+  const matchesPosition = (q: Record<string, unknown>) => partFitsPosition(q, positionId, positionLabel);
   // A part for another position is not an option for this one: no falling back to every part.
   const source = all.filter(matchesPosition);
   const options: PartOption[] = [];
@@ -784,7 +795,7 @@ export async function quoteService(
   const data = await loadServiceData(api, vehicle, serviceId, position);
   if (data.status !== "ok") return data;
   const partOptions = data.pna
-    ? representativeOptions(filterRealisticOptions(sanitizePartQuotes(data.pna, data.positionId)))
+    ? representativeOptions(filterRealisticOptions(sanitizePartQuotes(data.pna, data.positionId, data.position)))
     : [];
   if (partOptions.length === 0 && !data.partsNote && data.hasPartCategory) {
     const ask = await detailsNeededForParts(api, vehicle);
@@ -845,14 +856,10 @@ function firstString(q: Record<string, unknown>, keys: string[]): string {
   return "";
 }
 
-export function staffPartQuotes(response: PnaResponse, positionId: number | null): StaffPartOption[] {
+export function staffPartQuotes(response: PnaResponse, positionId: number | null, positionLabel = ""): StaffPartOption[] {
   const apps = new Map((response.applications ?? []).map((a) => [String(a.appID), a]));
   const all = (response.quotes ?? []).flatMap((q) => q.productQuotes ?? []);
-  const matchesPosition = (q: Record<string, unknown>) => {
-    if (positionId === null || positionId < 0) return true;
-    const pos = q.position as { id?: number } | undefined;
-    return pos?.id === undefined || pos.id === positionId || pos.id === -1;
-  };
+  const matchesPosition = (q: Record<string, unknown>) => partFitsPosition(q, positionId, positionLabel);
   // A part for another position is not an option for this one: no falling back to every part.
   const source = all.filter(matchesPosition);
   const options: StaffPartOption[] = [];
@@ -912,7 +919,7 @@ export async function quoteServiceForStaff(
 ): Promise<StaffServiceQuote> {
   const data = await loadServiceData(api, vehicle, serviceId, position);
   if (data.status !== "ok") return data;
-  const partOptions = data.pna ? staffPartQuotes(data.pna, data.positionId) : [];
+  const partOptions = data.pna ? staffPartQuotes(data.pna, data.positionId, data.position) : [];
   if (partOptions.length === 0 && !data.partsNote && data.hasPartCategory) {
     const ask = await detailsNeededForParts(api, vehicle);
     if (ask) return ask;

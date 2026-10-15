@@ -64,6 +64,25 @@ describe("F06: narrowing a tire choice", () => {
 });
 
 describe("F03: parts for another position", () => {
+  it("keep a side of the job's position (Front Left for Front) and drop other positions", () => {
+    const parts = staffPartQuotes(
+      {
+        quotes: [
+          {
+            productQuotes: [
+              { partDescription: "Strut Assembly", manufacturerPart: "L-1", listPrice: 678, unitPrice: 173, position: { id: 31, description: "Front Left" } },
+              { partDescription: "Strut Assembly", manufacturerPart: "R-1", listPrice: 678, unitPrice: 173, position: { id: 32, description: "Front Right" } },
+              { partDescription: "Shock Absorber", manufacturerPart: "REAR-1", listPrice: 260, unitPrice: 116, position: { id: 30, description: "Rear" } },
+            ],
+          },
+        ],
+      },
+      22,
+      "Front",
+    );
+    expect(parts.map((p) => p.partNumber)).toEqual(["L-1", "R-1"]);
+  });
+
   it("are left out instead of every part coming back", () => {
     const parts = staffPartQuotes({ quotes: [{ productQuotes: [{ partDescription: "Rear shock absorber", manufacturerPart: "REAR-QA", listPrice: 100, unitPrice: 50, position: { id: 2 } }] }] }, 1);
     expect(parts).toEqual([]);

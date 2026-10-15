@@ -23,6 +23,7 @@ import {
 import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
 import { dtTireConfigured, getDtTireClient, type DtSeasonFilter, type DtTireClient } from "@/lib/dt-tire/client";
 import type { DtTire } from "@/lib/dt-tire/parse";
+import { cachedDtSearch, DT_SEASONS, pickDtTires } from "@/lib/dt-tire/options";
 import { getTatoClient, type FleetCar, type FleetTrip, type TatoClient } from "@/lib/tato/client";
 import { MAX_NOTE_LENGTH } from "./memory";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
@@ -302,24 +303,12 @@ export function readTireCount(raw: unknown): number | { error: string } {
   return Number.isInteger(n) && n >= 1 && n <= MAX_TIRE_COUNT ? n : { error: `Tire count must be a whole number from 1 to ${MAX_TIRE_COUNT}; ask staff how many (or split a larger order).` };
 }
 
-const isStudded = (t: DtTire) => /stud/i.test(t.studding) || /STUDDED/i.test(t.model);
-
-/** Our season names → DT's filter, plus the season label each row must carry (DT's filters overlap). */
-const DT_SEASONS: Record<string, { filter: DtSeasonFilter; label: RegExp | null }> = {
-  all_season: { filter: "SUMMER", label: /^all[- ]season/i },
-  all_weather: { filter: "AW", label: /^all[- ]weather/i },
-  winter: { filter: "WINTER", label: /^winter/i },
-  summer: { filter: "SUMMER", label: /^summer/i },
-  any: { filter: "ALL", label: null },
-};
 
 const SEASON_ZH: Record<string, string> = { "all-season": "四季", "all-weather": "全天候", winter: "冬季", summer: "夏季" };
 
 function dtStock(tire: DtTire): string {
   return `DT 本地 ${tire.localStock || "0"} / 其他仓 ${tire.warehouseStock || "0"}`;
 }
-
-const brandKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /**
  * DT rows priced at MSRP, installed; rows without an MSRP can't be quoted and are dropped.
@@ -333,16 +322,7 @@ export function brandTireOptions(
   brand?: string,
   filters: { studs?: string; skus?: string[] } = {},
 ): StaffTireOption[] {
-  const wanted = DT_SEASONS[season] ?? DT_SEASONS.any;
-  const skus = (filters.skus ?? []).map((sku) => sku.trim().replace(/^#/, "")).filter(Boolean);
-  return tires
-    .filter((t) => t.msrp !== null && t.msrp > 0)
-    .filter((t) => !brand || brandKey(t.brand) === brandKey(brand))
-    .filter((t) => (filters.studs === "exclude" ? !isStudded(t) : filters.studs === "only" ? isStudded(t) : true))
-    .filter((t) => skus.length === 0 || skus.includes(t.sku))
-    .filter((t) => !wanted.label || wanted.label.test(t.season))
-    .slice(0, MAX_BRAND_TIRES)
-    .map((t) => ({
+  return pickDtTires(tires, season, brand, filters, MAX_BRAND_TIRES).map((t) => ({
       brand: t.brand,
       pattern: [t.model, t.studding && /stud/i.test(t.studding) ? "(带钉)" : ""].filter(Boolean).join(" "),
       size: t.size,
@@ -372,7 +352,7 @@ async function findBrandTires(
   const brand = typeof input.brand === "string" && input.brand.trim() ? input.brand.trim().slice(0, 40) : undefined;
   const count = readTireCount(input.count);
   if (typeof count !== "number") return { content: JSON.stringify(count), isError: true, events: [] };
-  const page = await client.searchBySize({ size, season: DT_SEASONS[season].filter, brand });
+  const page = await cachedDtSearch(client, { size, season: DT_SEASONS[season].filter, brand });
   const options = brandTireOptions(page.tires, season, parsed.rim, new Date(), brand, {
     studs: typeof input.studs === "string" ? input.studs : "any",
     skus: typeof input.skus === "string" ? input.skus.split(/[,\s]+/) : [],
