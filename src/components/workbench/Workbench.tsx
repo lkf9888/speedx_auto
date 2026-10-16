@@ -262,6 +262,25 @@ export function Workbench({ email }: { email: string }) {
     }).catch(() => null);
   }
 
+  /** Staff agreed a price with the customer: saved on the quote for everyone (null puts the assistant's back). */
+  async function saveFinalPrices(conversationId: string, quoteId: string, totals: Record<string, number> | null): Promise<boolean> {
+    const response = await fetch(`/api/workbench/conversations/${conversationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card: { kind: "quote", itemId: quoteId, totals } }),
+    }).catch(() => null);
+    if (!response?.ok) return false;
+    const { conversation } = (await response.json().catch(() => ({}))) as { conversation?: Conversation };
+    const saved = conversation?.turns.flatMap((t) => t.quotes).find((q) => q.id === quoteId);
+    if (!saved || !conversation) return false;
+    patchLocal(conversationId, (c) => ({
+      ...c,
+      updatedAt: conversation.updatedAt,
+      turns: c.turns.map((t) => (t.quotes.some((q) => q.id === quoteId) ? { ...t, quotes: t.quotes.map((q) => (q.id === quoteId ? saved : q)) } : t)),
+    }));
+    return true;
+  }
+
   async function markMemorySaved(conversationId: string, proposalId: string) {
     patchLocal(conversationId, (c) => ({
       ...c,
@@ -783,7 +802,7 @@ export function Workbench({ email }: { email: string }) {
                     <WebsiteEstimateCard key={card.id} card={card} />
                   ))}
                   {turn.quotes.map((quote) => (
-                    <StaffQuoteCard key={quote.id} quote={quote} />
+                    <StaffQuoteCard key={quote.id} quote={quote} onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined} />
                   ))}
                   {turn.drafts?.map((draft) => (
                     <AlldataDraftCard key={draft.id} draft={draft} onCreated={(created) => markCreated(active.id, draft.id, created)} />

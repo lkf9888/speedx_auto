@@ -19,6 +19,7 @@ import { ASSISTANT, type Turn, type Vehicle } from "./conversation-types";
 import type { AlldataDraft } from "./alldata-draft";
 import type { MemoryProposal } from "./assistant";
 import type { StaffQuote } from "./quote";
+import { withFinalPrices } from "./final-price";
 
 const MAX_HISTORY = 40;
 const MAX_MESSAGE = 2000;
@@ -90,6 +91,12 @@ function websiteCardLine(card: EstimateCard): string {
   return `[客人看到的报价卡：${[card.vehicle, card.service, card.position].filter((x) => x && x !== "—").join(" · ")}，${total}（客户价）]`;
 }
 
+/** Staff changed a quote's prices: the assistant must use the agreed ones from now on (ALLDATA drafts, totals). */
+function finalPriceLine(quote: StaffQuote): string {
+  const priced = withFinalPrices(quote).options.flatMap((o) => (o.originalTotal === null ? [] : [`${[o.brand, o.label].filter(Boolean).join(" ")} $${o.customerTotal}（原 $${o.originalTotal}）`]));
+  return `[员工把报价 ${quote.id} 改成了最终价：${priced.join("；")}。之后一律按最终价。]`;
+}
+
 export function historyFromTurns(turns: Turn[]): ChatTurn[] {
   const history = turns
     .filter((t) => !t.localOnly && (t.text.trim() || t.attachments?.length))
@@ -102,6 +109,7 @@ export function historyFromTurns(turns: Turn[]): ChatTurn[] {
         t.text,
         t.attachments?.length ? `[附件：${t.attachments.map((a) => a.name).join("、")}]` : "",
         ...(t.estimates ?? []).map(websiteCardLine),
+        ...t.quotes.filter((q) => q.final).map(finalPriceLine),
       ]
         .filter(Boolean)
         .join("\n")

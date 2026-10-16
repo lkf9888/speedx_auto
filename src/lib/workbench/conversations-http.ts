@@ -82,7 +82,12 @@ export async function handleConversation(request: Request, id: string, deps: Con
         deps.log({ action: body.archived ? "archive" : "unarchive", email: user.email, id });
         return json({ conversation });
       }
-      const card = body.card as { kind?: string; itemId?: string; created?: unknown } | undefined;
+      const card = body.card as { kind?: string; itemId?: string; created?: unknown; totals?: unknown } | undefined;
+      if (card && typeof card.itemId === "string" && card.kind === "quote" && card.totals !== undefined) {
+        const conversation = await store.markCard(id, user.email, { kind: "quote", itemId: card.itemId, totals: card.totals });
+        deps.log({ action: card.totals === null ? "final_price_cleared" : "final_price", email: user.email, id, quote: card.itemId });
+        return json({ conversation });
+      }
       if (card && typeof card.itemId === "string" && (card.kind === "draft" || card.kind === "memory")) {
         const conversation =
           card.kind === "draft"

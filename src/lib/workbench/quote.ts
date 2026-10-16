@@ -6,6 +6,7 @@
 import { WALK_IN_LABOR_RATE, REFERRAL_LABOR_MULTIPLIER, type EstimateCard } from "@/lib/repair-chat/pricing";
 import type { StaffPartOption } from "@/lib/worldpac/catalog";
 import { customerText } from "./customer-text";
+import type { FinalPrices } from "./final-price";
 
 export { customerText };
 
@@ -54,6 +55,8 @@ export interface StaffQuote {
   notes: string[];
   customerText: string;
   createdAt: string;
+  /** Prices staff agreed with the customer; the numbers above stay the assistant's. */
+  final?: FinalPrices;
 }
 
 const money = (value: number) => Math.round(value * 100) / 100;

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { optionLinks, type ProductLink } from "@/lib/workbench/links";
-import { customerText } from "@/lib/workbench/customer-text";
+import { finalCustomerText, priceOption, withFinalPrices } from "@/lib/workbench/final-price";
+import { staffName } from "@/lib/workbench/conversation-types";
 import type { StaffQuote } from "@/lib/workbench/quote";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
@@ -46,14 +47,88 @@ function ProductLinks({ links }: { links: ProductLink[] }) {
   );
 }
 
-/** One staff quote: every option with cost and margin, and a customer-safe text to copy. */
-export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
+type Totals = Record<string, number> | null;
+
+/**
+ * One staff quote: every option with cost and margin, and a customer-safe text
+ * and PDF. Staff can change the customer prices after bargaining ("改价"); the
+ * agreed prices are saved for everyone and used for the text and the PDF.
+ */
+export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSaveFinal?: (totals: Totals) => Promise<boolean> }) {
   const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
   const [raw, setRaw] = useState(false);
   /** Options left out of the customer text (unticked); out-of-stock ones start unticked so they aren't copied by accident. */
   const [left, setLeft] = useState<Set<number>>(() => new Set(quote.options.flatMap((o, i) => (o.outOfStock ? [i] : []))));
-  const chosen = quote.options.filter((_, i) => !left.has(i));
-  const textForCustomer = left.size === 0 ? quote.customerText : customerText({ ...quote, options: chosen });
+  /** Price inputs while editing, by option index. */
+  const [editing, setEditing] = useState<Record<string, string> | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [pdf, setPdf] = useState<{ state: "idle" | "making" | "failed" } | { state: "ready"; file: File }>({ state: "idle" });
+
+  const priced = withFinalPrices(quote);
+  const draftTotal = (i: number) => {
+    const value = editing?.[String(i)];
+    const n = value === undefined || value.trim() === "" ? NaN : Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
+  // While editing, the row shows what the typed price would give.
+  const rows = editing ? quote.options.map((o, i) => priceOption(quote, o, draftTotal(i))) : priced.options;
+  const chosen = priced.options.filter((_, i) => !left.has(i));
+  const textForCustomer = finalCustomerText(quote, (i) => !left.has(i));
+
+  function startEditing() {
+    setNotice("");
+    setEditing(Object.fromEntries(priced.options.map((o, i) => [String(i), o.customerTotal.toFixed(2)])));
+  }
+
+  async function saveFinal(totals: Totals) {
+    if (!onSaveFinal) return;
+    setSaving(true);
+    setNotice("");
+    const ok = await onSaveFinal(totals).catch(() => false);
+    setSaving(false);
+    if (ok) {
+      setEditing(null);
+      setPdf({ state: "idle" });
+      setNotice(totals ? "最终价已保存，复制和 PDF 都按最终价" : "已恢复 AI 报价");
+    } else {
+      setNotice("保存失败，请稍后再试");
+    }
+  }
+
+  function saveEdits() {
+    const totals: Record<string, number> = {};
+    for (let i = 0; i < quote.options.length; i += 1) {
+      const value = draftTotal(i);
+      if (value === undefined) {
+        setNotice("每个价格都要填一个数字");
+        return;
+      }
+      totals[String(i)] = Math.round(value * 100) / 100;
+    }
+    void saveFinal(totals);
+  }
+
+  async function makePdf() {
+    setPdf({ state: "making" });
+    try {
+      const { downloadFile, quotePdf } = await import("@/lib/workbench/quote-pdf");
+      const file = await quotePdf({ ...priced, options: chosen });
+      downloadFile(file);
+      setPdf({ state: "ready", file });
+    } catch {
+      setPdf({ state: "failed" });
+    }
+  }
+
+  async function sharePdf(file: File) {
+    try {
+      await navigator.share({ files: [file], title: `SPEEDX AUTO ${quote.id}` });
+    } catch {
+      // Cancelled, or the browser can't share files: the PDF was already downloaded.
+    }
+  }
+  const canShare = pdf.state === "ready" && typeof navigator !== "undefined" && typeof navigator.canShare === "function" && navigator.canShare({ files: [pdf.file] });
 
   async function copyForCustomer() {
     try {
@@ -76,6 +151,11 @@ export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
             {quote.position ? ` · ${quote.position}` : ""}
           </h3>
           <p className="text-xs text-ink-500">{quote.vehicle}</p>
+          {quote.final && (
+            <p data-testid="final-badge" className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+              最终价 · {staffName(quote.final.by)} 修改
+            </p>
+          )}
         </div>
         <span className="shrink-0 font-mono text-xs text-ink-400">{quote.id}</span>
       </header>
@@ -105,7 +185,7 @@ export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
               </tr>
             </thead>
             <tbody>
-              {quote.options.map((o, i) => (
+              {rows.map((o, i) => (
                 <tr key={`${o.label}-${i}`} className="border-t border-ink-100 align-top">
                   <td className="px-3 py-2">
                     {quote.options.length > 1 && (
@@ -134,7 +214,23 @@ export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
                   <td className="px-3 py-2">{o.quantity}</td>
                   <td className="px-3 py-2 text-right">{money(o.unitPrice)}</td>
                   {showCost && <td className="px-3 py-2 text-right">{money(o.unitCost)}</td>}
-                  <td className="px-3 py-2 text-right font-semibold text-ink-900">{money(o.customerTotal)}</td>
+                  <td className="px-3 py-2 text-right font-semibold text-ink-900">
+                    {editing ? (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        inputMode="decimal"
+                        value={editing[String(i)] ?? ""}
+                        onChange={(e) => setEditing((current) => ({ ...(current ?? {}), [String(i)]: e.target.value }))}
+                        aria-label={`最终价 ${[o.brand, o.label].filter(Boolean).join(" ")}`}
+                        className="w-28 rounded-md border border-ink-300 px-2 py-1 text-right font-semibold focus:border-brand-500 focus:outline-none"
+                      />
+                    ) : (
+                      money(o.customerTotal)
+                    )}
+                    {o.originalTotal !== null && <div className="text-[11px] font-normal text-ink-400 line-through">{money(o.originalTotal)}</div>}
+                  </td>
                   {quote.kind === "labor" && <td className="px-3 py-2 text-right text-ink-600">{money(o.referralTotal)}</td>}
                   {showCost && <td className="px-3 py-2 text-right">{money(o.profit)}</td>}
                   {showCost && (
@@ -164,14 +260,55 @@ export function StaffQuoteCard({ quote }: { quote: StaffQuote }) {
       )}
 
       <footer className="flex flex-wrap items-center gap-2 border-t border-ink-100 px-4 py-3">
-        <button
-          type="button"
-          onClick={() => void copyForCustomer()}
-          disabled={chosen.length === 0}
-          className="rounded-full bg-ink-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-600"
-        >
-          {left.size === 0 ? "复制客户报价" : `复制客户报价（${chosen.length} 个选项）`}
-        </button>
+        {editing ? (
+          <>
+            <button type="button" disabled={saving} onClick={saveEdits} className="rounded-full bg-amber-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50">
+              {saving ? "保存中…" : "保存最终价"}
+            </button>
+            <button type="button" disabled={saving} onClick={() => setEditing(null)} className="rounded-full border border-ink-200 px-4 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50">
+              取消
+            </button>
+            {quote.final && (
+              <button type="button" disabled={saving} onClick={() => void saveFinal(null)} className="rounded-full border border-ink-200 px-4 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50">
+                恢复 AI 报价
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => void copyForCustomer()}
+              disabled={chosen.length === 0}
+              className="rounded-full bg-ink-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-600"
+            >
+              {left.size === 0 ? "复制客户报价" : `复制客户报价（${chosen.length} 个选项）`}
+            </button>
+            {quote.options.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void makePdf()}
+                disabled={chosen.length === 0 || pdf.state === "making"}
+                className="rounded-full border border-ink-900 px-4 py-1.5 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
+              >
+                {pdf.state === "making" ? "正在生成 PDF…" : "下载 PDF 报价单"}
+              </button>
+            )}
+            {pdf.state === "ready" && canShare && (
+              <button type="button" onClick={() => void sharePdf(pdf.file)} className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                发给客人（WhatsApp / 微信）
+              </button>
+            )}
+            {onSaveFinal && quote.options.length > 0 && (
+              <button type="button" onClick={startEditing} className="rounded-full border border-amber-400 px-4 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50">
+                ✎ 改价
+              </button>
+            )}
+          </>
+        )}
+        {notice && <span className="text-xs text-amber-800">{notice}</span>}
+        {pdf.state === "ready" && <span className="text-xs text-emerald-700">已下载 {pdf.file.name}{canShare ? "" : "，可在 WhatsApp / 微信里作为文件发给客人"}</span>}
+        {pdf.state === "failed" && <span className="text-xs text-amber-700">PDF 生成失败，请再试一次</span>}
         {copied === "done" && <span className="text-xs text-emerald-700">已复制，可直接粘贴给客人（不含进价）</span>}
         {copied === "failed" && <span className="text-xs text-amber-700">浏览器不允许复制，请在下面手动选择文字</span>}
         {quote.kind === "labor" && (

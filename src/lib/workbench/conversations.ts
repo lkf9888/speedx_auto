@@ -7,6 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { cloudflareKv, type KvClient } from "./kv";
 import type { Conversation, ConversationSummary, PendingQuery, Turn, Vehicle } from "./conversation-types";
+import { finalCustomerText, readFinalTotals } from "./final-price";
 
 const PREFIX = "workbench-conv-v1:";
 export const MAX_CONVERSATIONS = 300;
@@ -175,9 +176,23 @@ export class ConversationStore {
     this.pending.delete(id);
   }
 
-  /** Record that a card was acted on (ALLDATA estimate created, memory note saved). */
-  async markCard(id: string, by: string, card: { kind: "draft"; itemId: string; created: unknown } | { kind: "memory"; itemId: string }): Promise<Conversation> {
+  /** Record that a card was acted on (ALLDATA estimate created, memory note saved, final prices set). */
+  async markCard(
+    id: string,
+    by: string,
+    card: { kind: "draft"; itemId: string; created: unknown } | { kind: "memory"; itemId: string } | { kind: "quote"; itemId: string; totals: unknown },
+  ): Promise<Conversation> {
     return this.change(id, by, (c) => {
+      if (card.kind === "quote") {
+        const quote = c.turns.flatMap((t) => t.quotes).find((q) => q.id === card.itemId);
+        if (!quote) throw new ConversationError("That quote isn't in this conversation.", "not_found");
+        const totals = card.totals === null ? null : readFinalTotals(card.totals, quote.options.length);
+        if (card.totals !== null && !totals) throw new ConversationError("Give a price for at least one option.", "invalid");
+        if (totals) quote.final = { totals, by, at: this.now() };
+        else delete quote.final;
+        quote.customerText = finalCustomerText(quote);
+        return;
+      }
       for (const turn of c.turns) {
         if (card.kind === "draft" && turn.drafts?.some((d) => d.id === card.itemId)) {
           turn.drafts = turn.drafts.map((d) => (d.id === card.itemId ? { ...d, created: card.created as never } : d));
