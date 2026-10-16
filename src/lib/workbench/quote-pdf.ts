@@ -1,12 +1,13 @@
 /**
  * A customer estimate PDF built in the staff member's browser: the quote is
- * laid out as an A4 page, drawn with html2canvas (so Chinese text uses the
- * system fonts) and saved with jsPDF. Customer prices only: no cost, margin,
- * stock, supplier or part numbers. Both libraries load only when staff ask
- * for a PDF.
+ * laid out as an A4 page, drawn with html2canvas and saved with jsPDF. Always
+ * in English (Chinese wording on the staff card is translated or dropped).
+ * Customer prices only: no cost, margin, stock, supplier or part numbers.
+ * Both libraries load only when staff ask for a PDF.
  */
 import { company } from "@/lib/company";
 import type { PricedQuote } from "./final-price";
+import { toEnglish } from "./pdf-english";
 
 const PAGE_WIDTH_PX = 794; // A4 at 96 dpi
 const A4_MM = { width: 210, height: 297 };
@@ -43,37 +44,36 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
       el("div", { fontSize: "12px", color: "#4b5563" }, `${company.phoneDisplay} (WhatsApp) · ${company.email} · WeChat ${company.wechatId}`),
     ]),
     el("div", { textAlign: "right" }, undefined, [
-      el("div", { fontSize: "20px", fontWeight: "700" }, "维修报价单"),
-      el("div", { fontSize: "13px", color: "#4b5563" }, "Repair Estimate"),
+      el("div", { fontSize: "22px", fontWeight: "700" }, "Repair Estimate"),
     ]),
   ]);
 
   const meta = (label: string, value: string) =>
     el("div", { display: "flex", gap: "8px", fontSize: "13px", padding: "3px 0" }, undefined, [
-      el("span", { width: "150px", color: "#6b7280", flexShrink: "0" }, label),
+      el("span", { width: "110px", color: "#6b7280", flexShrink: "0" }, label),
       el("span", { fontWeight: "600" }, value || "—"),
     ]);
-  const position = quote.position ? `（${quote.position}）` : "";
+  const position = quote.position ? ` (${toEnglish(quote.position)})` : "";
   const details = el("div", { margin: "18px 0" }, undefined, [
-    meta("报价编号 Estimate No.", quote.id),
-    meta("日期 Date", shopDate(now)),
-    meta("车辆 Vehicle", quote.vehicle === "—" ? "" : quote.vehicle),
-    meta("项目 Service", `${quote.service}${position}`),
+    meta("Estimate No.", quote.id),
+    meta("Date", shopDate(now)),
+    meta("Vehicle", quote.vehicle === "—" ? "" : toEnglish(quote.vehicle)),
+    meta("Service", `${toEnglish(quote.service)}${position}`),
   ]);
 
   const tires = quote.kind === "tires";
   const unitShown = quote.kind === "tires" || quote.kind === "flat";
   const head = el("tr", { background: "#f3f4f6", fontSize: "12px", color: "#374151" }, undefined, [
     el("th", { padding: "8px", textAlign: "left", width: "28px" }, "#"),
-    el("th", { padding: "8px", textAlign: "left" }, "项目 Item"),
-    el("th", { padding: "8px", textAlign: "right", width: "60px" }, "数量 Qty"),
-    el("th", { padding: "8px", textAlign: "right", width: "130px" }, unitShown ? (tires ? "每条含安装 Each, installed" : "单价 Unit") : ""),
-    el("th", { padding: "8px", textAlign: "right", width: "110px" }, "金额 Amount"),
+    el("th", { padding: "8px", textAlign: "left" }, "Item"),
+    el("th", { padding: "8px", textAlign: "right", width: "60px" }, "Qty"),
+    el("th", { padding: "8px", textAlign: "right", width: "130px" }, unitShown ? (tires ? "Each, installed" : "Unit price") : ""),
+    el("th", { padding: "8px", textAlign: "right", width: "110px" }, "Amount"),
   ]);
   const rows = quote.options.map((o, i) =>
     el("tr", { fontSize: "13px" }, undefined, [
       cell(String(i + 1)),
-      cell([o.brand, o.label].filter(Boolean).join(" ") + (quote.kind === "labor" ? "（零件 + 工时 Parts & labour）" : "")),
+      cell(toEnglish([o.brand, o.label].filter(Boolean).join(" ")) + (quote.kind === "labor" ? " (parts & labour)" : "")),
       cell(String(o.quantity), "right"),
       cell(unitShown ? money(o.unitPrice) : "", "right"),
       cell(money(o.customerTotal), "right", true),
@@ -83,16 +83,16 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
 
   const several = quote.options.length > 1;
   const summary = several
-    ? el("div", { fontSize: "13px", marginTop: "10px", color: "#374151" }, "以上为可选方案，任选其一。 These are alternative options; choose one.")
+    ? el("div", { fontSize: "13px", marginTop: "10px", color: "#374151" }, "These are alternative options; choose one.")
     : el("div", { display: "flex", justifyContent: "flex-end", gap: "24px", fontSize: "16px", fontWeight: "800", marginTop: "12px" }, undefined, [
-        el("span", {}, "合计 Total（税前 before tax）"),
+        el("span", {}, "Total (before tax)"),
         el("span", {}, money(quote.options[0]?.customerTotal ?? 0)),
       ]);
 
   const notes = el("div", { marginTop: "28px", fontSize: "12px", color: "#4b5563", lineHeight: "1.7", borderTop: "1px solid #e5e7eb", paddingTop: "12px" }, undefined, [
-    el("div", {}, "• 以上价格为税前价，GST / PST 另计。 Prices are before tax; GST / PST extra."),
-    el("div", {}, "• 最终价格以到店检查为准。 The final price is confirmed after inspection at the shop."),
-    el("div", {}, `• 营业时间 Hours: ${company.hours}`),
+    el("div", {}, "• Prices are before tax; GST / PST extra."),
+    el("div", {}, "• The final price is confirmed after inspection at the shop."),
+    el("div", {}, `• Hours: ${company.hours}`),
   ]);
 
   return el(
@@ -103,7 +103,7 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
       boxSizing: "border-box",
       background: "#ffffff",
       color: "#111827",
-      fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif',
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
     },
     undefined,
     [header, details, table, summary, notes],

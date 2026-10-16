@@ -286,3 +286,13 @@ export function flatWord(locale: string, key: string): string {
 export function flatWordEn(key: string): string {
   return WORDS.en[key] ?? key;
 }
+
+/** The English wording for a phrase from the Chinese tables, e.g. "换机油" → "Oil change"; null when it isn't one. */
+export function englishFlatWord(text: string): string | null {
+  const wanted = text.trim();
+  for (const locale of ["zh-CN", "zh-TW"] as const) {
+    const key = Object.keys(WORDS[locale]).find((k) => WORDS[locale][k] === wanted);
+    if (key) return WORDS.en[key] ?? null;
+  }
+  return null;
+}

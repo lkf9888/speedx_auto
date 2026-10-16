@@ -15,6 +15,7 @@ vi.mock("@/lib/workbench/quote-pdf", async (original) => ({
 import { StaffQuoteCard } from "@/components/workbench/StaffQuoteCard";
 import { finalCustomerText, readFinalTotals, withFinalPrices } from "@/lib/workbench/final-price";
 import { buildQuotePage } from "@/lib/workbench/quote-pdf";
+import { toEnglish } from "@/lib/workbench/pdf-english";
 import { buildTireQuote, type StaffQuote } from "@/lib/workbench/quote";
 import { ConversationStore, newTurnId } from "@/lib/workbench/conversations";
 import { handleConversation } from "@/lib/workbench/conversations-http";
@@ -114,20 +115,38 @@ describe("quote card", () => {
 });
 
 describe("PDF page", () => {
-  it("has the shop, the quote and customer prices only", () => {
+  it("is in English only, with the shop, the quote and customer prices only", () => {
     const quote = withFinalPrices({ ...tireQuote(), final: { totals: { "0": 520 }, by: "kevin@speedx.ca", at: 1 } });
     const page = buildQuotePage(quote, new Date("2026-10-15T20:00:00Z"));
     const text = page.textContent ?? "";
     expect(text).toContain("SPEEDX AUTO");
     expect(text).toContain("2980 Number 3 Rd");
-    expect(text).toContain("维修报价单");
+    expect(text).toContain("Repair Estimate");
     expect(text).toContain("W-TEST1");
     expect(text).toContain("2026-10-15");
     expect(text).toContain("2019 Toyota RAV4");
+    expect(text).toContain("New tires, installed · 225/65R17");
     expect(text).toContain("$520.00");
     expect(text).toContain("$130.00");
-    expect(text).toContain("任选其一");
+    expect(text).toContain("choose one");
+    expect(text).not.toMatch(/[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/);
     // Nothing staff-only.
-    expect(text).not.toMatch(/87\.7|SKU-|进价|毛利|winter|库存/);
+    expect(text).not.toMatch(/87\.7|SKU-|winter|cost|margin/i);
+  });
+});
+
+describe("English for PDFs", () => {
+  it.each([
+    ["新轮胎（含安装）· 225/65R17", "New tires, installed · 225/65R17"],
+    ["换机油", "Oil change"],
+    ["普通轿车 / 小 SUV", "Car / small SUV"],
+    ["Michelin X-ICE NORTH 4 (带钉) 225/65R17 106T XL · 现货", "Michelin X-ICE NORTH 4 (studded) 225/65R17 106T XL · in stock"],
+    ["换胎（客人自带轮胎）", "Tire change (customer's own tires)"],
+    ["普通胎（18 寸及以下）", 'Standard tire, up to 18"'],
+    ["Front，左右两边", "Front, both sides"],
+    ["Brake Pads R&R", "Brake Pads R&R"],
+    ["刹车片 Brake pads", "Brake pads"],
+  ])("%s", (chinese, english) => {
+    expect(toEnglish(chinese)).toBe(english);
   });
 });
