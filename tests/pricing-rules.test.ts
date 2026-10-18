@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { encodeVehicleKey, partsMarkup, quoteService, sanitizePartQuotes, staffPartQuotes, type CatalogApi, type VehicleRef } from "@/lib/worldpac/catalog";
+import { encodeVehicleKey, isSoldByVolume, partsMarkup, quoteService, sanitizePartQuotes, staffPartQuotes, type CatalogApi, type VehicleRef } from "@/lib/worldpac/catalog";
 import { buildEstimate, chargedHours } from "@/lib/repair-chat/pricing";
 import { runTool, type ChatEvent } from "@/lib/repair-chat/tools";
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
@@ -57,10 +57,12 @@ let nextBase = 720000;
 const vehicle = (): VehicleRef => ({ baseVehicleId: (nextBase += 1), label: "2003 Honda Accord", attributes: [] });
 
 /** A labor job whose catalog entry links no part; the part exists under its own name. */
-function sensorCatalog(): CatalogApi & { posts: string[] } {
+function sensorCatalog(job = "Oxygen Sensor R&R", partTypes = [{ code: "N1", description: "Oxygen Sensor" }, { code: "N2", description: "Air Fuel Ratio Sensor" }], positions = ["Front", "Rear"]): CatalogApi & { posts: string[]; codes: string[] } {
+  const codes: string[] = [];
   const posts: string[] = [];
   return {
     posts,
+    codes,
     async get() {
       throw new Error("unused");
     },
@@ -68,21 +70,22 @@ function sensorCatalog(): CatalogApi & { posts: string[] } {
       posts.push(path);
       const d = data as Record<string, unknown>;
       if (path === "labor-ops-list") return { laborOperations: [{ applicationID: 1, assetName: "a", position: { description: "Front" } }] } as T;
-      if (path === "labor-ops-details") return { laborOperation: { estimateTimeHour: 0.5, laborCategoryName: "Oxygen Sensor R&R", applications: [] } } as T;
+      if (path === "labor-ops-details") return { laborOperation: { estimateTimeHour: 0.5, laborCategoryName: job, applications: [] } } as T;
       if (path === "vehicle/refine") return { recommendedVehAttrs: [] } as T;
       if (path === "category/details") {
         if (!d.categoryCode) return { replacementParts: [{ code: "E", description: "Emission Control" }] } as T;
         if (d.categoryCode === "E") return { replacementParts: [{ code: "EA", description: "Oxygen Sensors" }] } as T;
-        if (d.categoryCode === "EA") return { partTypes: [{ code: "N1", description: "Oxygen Sensor" }, { code: "N2", description: "Air Fuel Ratio Sensor" }] } as T;
+        if (d.categoryCode === "EA") return { partTypes } as T;
       }
       if (path === "pna360_cat") {
+        codes.push(((d.partTypes as Array<{ categoryCode: string }>)[0]).categoryCode);
         return {
           applications: [{ appID: "1", qtyPerCar: 1 }, { appID: "2", qtyPerCar: 1 }],
           quotes: [
             {
               productQuotes: [
-                { appID: "1", partDescription: "Oxygen Sensor", seriesDescription: "Upstream", listPrice: 300, unitPrice: 120, position: { description: "Front" } },
-                { appID: "2", partDescription: "Oxygen Sensor", seriesDescription: "Downstream", listPrice: 280, unitPrice: 110, position: { description: "Rear" } },
+                { appID: "1", partDescription: "Oxygen Sensor", seriesDescription: "Upstream", listPrice: 300, unitPrice: 120, position: { description: positions[0] } },
+                { appID: "2", partDescription: "Oxygen Sensor", seriesDescription: "Downstream", listPrice: 280, unitPrice: 110, position: { description: positions[1] } },
               ],
             },
           ],
@@ -90,7 +93,7 @@ function sensorCatalog(): CatalogApi & { posts: string[] } {
       }
       throw new Error(`unexpected ${path}`);
     },
-  } as CatalogApi & { posts: string[] };
+  } as CatalogApi & { posts: string[]; codes: string[] };
 }
 
 describe("parts for jobs whose catalog entry links none", () => {
@@ -102,6 +105,26 @@ describe("parts for jobs whose catalog entry links none", () => {
     expect(quote.partOptions.map((o) => o.series)).toEqual(["Upstream"]);
     expect(quote.partsNote).toMatch(/matched by name/);
     expect(api.posts).toContain("pna360_cat");
+  });
+
+  it("keep every part when the parts name positions differently from the labor guide", async () => {
+    const quote = await quoteService(sensorCatalog(undefined, undefined, ["Upstream", "Downstream"]), vehicle(), 78, null);
+    expect(quote.status === "ok" && quote.partOptions.map((o) => o.series).sort()).toEqual(["Downstream", "Upstream"]);
+  });
+
+  it("pick the job's own part, not a seal or resistor that shares its name", async () => {
+    const api = sensorCatalog("HVAC Blower Motor R&R", [{ code: "S1", description: "HVAC Blower Motor Seal" }, { code: "M1", description: "HVAC Blower Motor" }, { code: "R1", description: "HVAC Blower Motor Resistor" }]);
+    await quoteService(api, vehicle(), 79, null);
+    expect(api.codes).toEqual(["M1"]);
+  });
+});
+
+describe("parts billed by volume", () => {
+  it("are fluids, not hardware named after a fluid", () => {
+    expect(isSoldByVolume("Auto Trans Fluid")).toBe(true);
+    expect(isSoldByVolume("Engine Oil")).toBe(true);
+    expect(isSoldByVolume("Engine Oil Cooler")).toBe(false);
+    expect(isSoldByVolume("Radiator Coolant Hose")).toBe(false);
   });
 });
 

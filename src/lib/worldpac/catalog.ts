@@ -656,9 +656,12 @@ function dedupe<T>(options: T[], key: (o: T) => string, better: (a: T, b: T) => 
 const BULK_PACKAGING = /\b(drum|pail|bulk|tote|case of|\d+\s?(gal|gallon|g)\b|55g|\d+\s?l(iter|itre)?\s?(jug|box))/i;
 const SOLD_BY_VOLUME = /\b(fluid|oil|coolant|antifreeze|refrigerant|grease|lubricant|additive)\b/i;
 
+/** Parts named after a fluid that are hardware, not the fluid itself ("Oil Cooler", "Coolant Hose"). */
+const FLUID_HARDWARE = /\b(cooler|filter|pan|pump|seal|gasket|cap|line|hose|pipe|sensor|switch|reservoir|tank|housing|valve|plug|dipstick|separator|bottle|jet|nozzle)\b/i;
+
 /** Parts sold by the container (fluids) can't be priced per job from list price. */
 export function isSoldByVolume(partName: string): boolean {
-  return SOLD_BY_VOLUME.test(partName);
+  return SOLD_BY_VOLUME.test(partName) && !FLUID_HARDWARE.test(partName);
 }
 
 /** Drop shop-bulk packaging and extreme outliers so the range stays meaningful. */
@@ -812,8 +815,13 @@ async function partsByJobName(api: CatalogApi, vehicle: VehicleRef, data: Servic
     .trim();
   if (!name || isSoldByVolume(name)) return null;
   const partTypes = await partTypesFor(api, vehicle, name);
+  const wantedName = normalize(name);
   const best = partTypes
-    .map((part) => ({ part, score: scoreService(name, part.name) }))
+    .map((part) => ({
+      part,
+      // The job's own part first: "HVAC Blower Motor", not "HVAC Blower Motor Seal" or its resistor.
+      score: normalize(part.name) === wantedName ? 10 : scoreService(name, part.name) - (PART_ACCESSORY.test(part.name) && !PART_ACCESSORY.test(name) ? 1 : 0),
+    }))
     .filter((p) => p.score >= 0.5)
     .sort((a, b) => b.score - a.score || a.part.name.length - b.part.name.length)[0];
   if (!best) return null;
@@ -830,8 +838,12 @@ async function partsByJobName(api: CatalogApi, vehicle: VehicleRef, data: Servic
       return !label || label.includes(wanted) || wanted.includes(label);
     }),
   }));
-  return { ...pna, quotes };
+  // Parts can name positions differently from the labor guide ("Upstream" for "Front"): then keep them all.
+  return quotes.some((q) => q.productQuotes.length > 0) ? { ...pna, quotes } : pna;
 }
+
+/** Bits that come with a part rather than being it. */
+const PART_ACCESSORY = /\b(seal|gasket|resistor|switch|relay|connector|harness|bracket|mount|cover|clip|bolt|hardware|kit|o-ring|bushing|shim|spring|retainer|screw|nut|washer|pigtail)\b/i;
 
 const BY_NAME_NOTE = "The part was matched by name; the shop confirms the exact part for this vehicle.";
 
