@@ -175,7 +175,7 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
               <tr>
                 <th className="px-3 py-2 font-medium">选项</th>
                 <th className="px-3 py-2 font-medium">数量</th>
-                <th className="px-3 py-2 text-right font-medium">{quote.kind === "tires" ? "每条（含安装）" : quote.kind === "labor" ? "零件标价（List）" : "单价"}</th>
+                <th className="px-3 py-2 text-right font-medium">{quote.kind === "tires" ? "每条（含安装）" : quote.kind === "labor" ? "零件售价" : "单价"}</th>
                 {showCost && <th className="px-3 py-2 text-right font-medium">进价</th>}
                 <th className="px-3 py-2 text-right font-medium">{quote.kind === "labor" && quote.labor ? "客户总价（零件+工时）" : "客户总价"}</th>
                 {quote.kind === "labor" && <th className="px-3 py-2 text-right font-medium">推荐价</th>}

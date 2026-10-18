@@ -77,6 +77,8 @@ export type ServiceQuote =
       otherPartNames: string[];
       /** Why parts are not priced, when they aren't (e.g. fluids by volume). */
       partsNote: string;
+      /** Done together with another job and charged at half: the shop's minimum doesn't apply. */
+      halved?: boolean;
     }
   | { status: "need_position"; positions: string[] }
   | { status: "need_details"; questions: VehicleQuestion[] }
@@ -585,10 +587,32 @@ function partFitsPosition(q: Record<string, unknown>, positionId: number | null,
   return Boolean(wanted) && label.includes(wanted);
 }
 
+/** The shop's markup on parts cost (PARTS_MARKUP, else TIRE_MARKUP); null means customers pay WorldPac List. */
+export function partsMarkup(env: NodeJS.ProcessEnv = process.env): number | null {
+  for (const raw of [env.PARTS_MARKUP, env.TIRE_MARKUP]) {
+    const value = Number(raw);
+    if (raw && Number.isFinite(value) && value > 1) return value;
+  }
+  return null;
+}
+
+/**
+ * What a customer pays for one part: the shop's cost × the markup when both
+ * are known, otherwise WorldPac's List price. The cost is read here and goes
+ * no further.
+ */
+function customerPartPrice(q: Record<string, unknown>, markup: number | null, env: NodeJS.ProcessEnv = process.env): number | null {
+  const cost = Number(q[env.WORKBENCH_COST_FIELD?.trim() || "unitPrice"]);
+  if (markup && Number.isFinite(cost) && cost > 0) return Math.round(cost * markup * 100) / 100;
+  const list = Number(q.listPrice);
+  return Number.isFinite(list) && list > 0 ? Math.round(list * 100) / 100 : null;
+}
+
 export function sanitizePartQuotes(
   response: PnaResponse,
   positionId: number | null,
   positionLabel = "",
+  markup: number | null = partsMarkup(),
 ): PartOption[] {
   const apps = new Map(
     (response.applications ?? []).map((a) => [String(a.appID), a]),
@@ -599,14 +623,14 @@ export function sanitizePartQuotes(
   const source = all.filter(matchesPosition);
   const options: PartOption[] = [];
   for (const q of source) {
-    const listPrice = Number(q.listPrice);
-    if (!Number.isFinite(listPrice) || listPrice <= 0) continue;
+    const price = customerPartPrice(q, markup);
+    if (price === null) continue;
     const app = apps.get(String(q.appID));
     const quantity = Number(app?.qtyPerCar);
     options.push({
       description: String(q.partDescription ?? "").slice(0, 120),
       series: String(q.seriesDescription ?? "").slice(0, 80),
-      listPrice: Math.round(listPrice * 100) / 100,
+      listPrice: price,
       quantity: Number.isInteger(quantity) && quantity > 0 && quantity <= 8 ? quantity : 1,
       inStockLocally: /local/i.test(String(q.availability ?? "")) && Number(q.qtyAvailable) > 0,
       note: String(app?.applicationNote ?? "").slice(0, 160),
@@ -776,6 +800,41 @@ async function loadServiceData(
   };
 }
 
+/**
+ * Some labor jobs link no priced part in the catalog (an oxygen sensor, a
+ * blower motor). Look the part up by the job's name instead, at the job's
+ * position when the parts name one. Null when nothing fits.
+ */
+async function partsByJobName(api: CatalogApi, vehicle: VehicleRef, data: ServiceData): Promise<PnaResponse | null> {
+  const name = (data.primaryPartName || data.serviceName)
+    .replace(/\b(R&R|R&I|R & R|Remove|Replace(ment)?|Install|Drain & Refill)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!name || isSoldByVolume(name)) return null;
+  const partTypes = await partTypesFor(api, vehicle, name);
+  const best = partTypes
+    .map((part) => ({ part, score: scoreService(name, part.name) }))
+    .filter((p) => p.score >= 0.5)
+    .sort((a, b) => b.score - a.score || a.part.name.length - b.part.name.length)[0];
+  if (!best) return null;
+  const pna = await api.post<PnaResponse>("pna360_cat", {
+    attributes: attributePayload(vehicle),
+    partTypes: [{ requestedQuantity: 0, orderType: "ST", categoryCode: best.part.code, baseVehicleID: vehicle.baseVehicleId, positionID: -1 }],
+  });
+  const wanted = normalize(data.position);
+  if (!wanted) return pna;
+  const quotes = (pna.quotes ?? []).map((q) => ({
+    ...q,
+    productQuotes: (q.productQuotes ?? []).filter((pq) => {
+      const label = normalize(String((pq.position as { description?: string } | undefined)?.description ?? ""));
+      return !label || label.includes(wanted) || wanted.includes(label);
+    }),
+  }));
+  return { ...pna, quotes };
+}
+
+const BY_NAME_NOTE = "The part was matched by name; the shop confirms the exact part for this vehicle.";
+
 /** A part needs a priced option, or the catalog wants the trim/engine first (e.g. brake pads). */
 async function detailsNeededForParts(api: CatalogApi, vehicle: VehicleRef): Promise<NotOk | null> {
   const refined = await refineVehicle(api, vehicle);
@@ -794,12 +853,17 @@ export async function quoteService(
 
   const data = await loadServiceData(api, vehicle, serviceId, position);
   if (data.status !== "ok") return data;
-  const partOptions = data.pna
+  let partOptions = data.pna
     ? representativeOptions(filterRealisticOptions(sanitizePartQuotes(data.pna, data.positionId, data.position)))
     : [];
   if (partOptions.length === 0 && !data.partsNote && data.hasPartCategory) {
     const ask = await detailsNeededForParts(api, vehicle);
     if (ask) return ask;
+  }
+  if (partOptions.length === 0 && !data.partsNote) {
+    const byName = await partsByJobName(api, vehicle, data).catch(() => null);
+    partOptions = byName ? representativeOptions(filterRealisticOptions(sanitizePartQuotes(byName, null))) : [];
+    if (partOptions.length > 0) data.partsNote = BY_NAME_NOTE;
   }
 
   const quote: ServiceQuote = {
@@ -856,7 +920,7 @@ function firstString(q: Record<string, unknown>, keys: string[]): string {
   return "";
 }
 
-export function staffPartQuotes(response: PnaResponse, positionId: number | null, positionLabel = ""): StaffPartOption[] {
+export function staffPartQuotes(response: PnaResponse, positionId: number | null, positionLabel = "", markup: number | null = partsMarkup()): StaffPartOption[] {
   const apps = new Map((response.applications ?? []).map((a) => [String(a.appID), a]));
   const all = (response.quotes ?? []).flatMap((q) => q.productQuotes ?? []);
   const matchesPosition = (q: Record<string, unknown>) => partFitsPosition(q, positionId, positionLabel);
@@ -864,8 +928,8 @@ export function staffPartQuotes(response: PnaResponse, positionId: number | null
   const source = all.filter(matchesPosition);
   const options: StaffPartOption[] = [];
   for (const q of source) {
-    const listPrice = Number(q.listPrice);
-    if (!Number.isFinite(listPrice) || listPrice <= 0) continue;
+    const price = customerPartPrice(q, markup);
+    if (price === null) continue;
     const app = apps.get(String(q.appID));
     const quantity = Number(app?.qtyPerCar);
     const prices: Record<string, number> = {};
@@ -881,7 +945,7 @@ export function staffPartQuotes(response: PnaResponse, positionId: number | null
     options.push({
       description: String(q.partDescription ?? "").slice(0, 120),
       series: String(q.seriesDescription ?? "").slice(0, 80),
-      listPrice: Math.round(listPrice * 100) / 100,
+      listPrice: price,
       quantity: Number.isInteger(quantity) && quantity > 0 && quantity <= 8 ? quantity : 1,
       inStockLocally: /local/i.test(String(q.availability ?? "")) && qty > 0,
       note: String(app?.applicationNote ?? "").slice(0, 160),
@@ -919,10 +983,15 @@ export async function quoteServiceForStaff(
 ): Promise<StaffServiceQuote> {
   const data = await loadServiceData(api, vehicle, serviceId, position);
   if (data.status !== "ok") return data;
-  const partOptions = data.pna ? staffPartQuotes(data.pna, data.positionId, data.position) : [];
+  let partOptions = data.pna ? staffPartQuotes(data.pna, data.positionId, data.position) : [];
   if (partOptions.length === 0 && !data.partsNote && data.hasPartCategory) {
     const ask = await detailsNeededForParts(api, vehicle);
     if (ask) return ask;
+  }
+  if (partOptions.length === 0 && !data.partsNote) {
+    const byName = await partsByJobName(api, vehicle, data).catch(() => null);
+    partOptions = byName ? staffPartQuotes(byName, null) : [];
+    if (partOptions.length > 0) data.partsNote = BY_NAME_NOTE;
   }
   return {
     status: "ok",

@@ -412,6 +412,7 @@ async function laborQuote(api: CatalogApi, vehicle: VehicleRef, serviceId: numbe
   if (shared?.halved) {
     return {
       ...quoted,
+      halved: true,
       laborHours: shared.chargedHours,
       laborNote: `Done together with ${shared.otherName}: labor charged at half (${quoted.laborHours} h → ${shared.chargedHours} h). ${quoted.laborNote}`.trim(),
     };
@@ -450,6 +451,15 @@ async function estimateEachVariant(
     cards.push({ option, card: buildEstimate(label.includes(option) ? label : `${label} (${question.label}: ${option})`, quote, newEstimateId()) });
   }
   if (cards.length < 2) return null;
+  // The detail doesn't change the price (same hours and parts for every trim): one card is enough.
+  const same = (c: EstimateCard) => JSON.stringify([c.laborHours, c.partOptions.map((p) => [p.description, p.unitListPrice, p.quantity])]);
+  if (new Set(cards.map(({ card }) => same(card))).size === 1) {
+    const card = { ...cards[0].card, vehicle: describeVehicle(vehicle) };
+    return ok(
+      { status: "ok", summary: summarizeEstimateForModel(card), note: `The price is the same for every ${question.label} (${cards.map((c) => c.option).join(", ")}), so there is no need to ask which.` },
+      [{ type: "estimate", estimate: card }],
+    );
+  }
   return ok(
     {
       status: "ok",

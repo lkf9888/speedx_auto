@@ -28,6 +28,7 @@ import { getTatoClient, type FleetCar, type FleetTrip, type TatoClient } from "@
 import { getWheelmartClient, type WheelmartClient } from "@/lib/wheelmart/client";
 import { liveWheelmartListings, tireMarkup } from "@/lib/wheelmart/listings";
 import { MAX_NOTE_LENGTH } from "./memory";
+import { customerText } from "./customer-text";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
 import { buildFlatQuote, buildLaborQuote, buildPartsQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
 
@@ -457,6 +458,17 @@ async function quoteEachVariant(
     quotes.push(buildLaborQuote(label.includes(option) ? label : `${label}（${question.label}: ${option}）`, job, newEstimateId()));
   }
   if (quotes.length < 2) return null;
+  // The detail doesn't change the price: one card is enough.
+  const same = (q: StaffQuote) => JSON.stringify([q.labor?.hours, q.options.map((o) => [o.label, o.partNumber, o.unitPrice, o.quantity])]);
+  if (new Set(quotes.map(same)).size === 1) {
+    const merged = { ...quotes[0], vehicle: describeVehicle(vehicle) };
+    const quote = { ...merged, customerText: customerText(merged) };
+    return {
+      content: JSON.stringify({ status: "ok", note: `Same price for every ${question.label} (${question.options.join(", ")}).`, summary: summarizeStaffQuote(quote) }),
+      isError: false,
+      events: [{ type: "quote", quote } as WorkbenchEvent],
+    };
+  }
   return {
     content: JSON.stringify({
       status: "ok",
@@ -538,7 +550,7 @@ export async function runWorkbenchTool(
     const charged = !shared
       ? job
       : shared.halved
-        ? { ...job, laborHours: shared.chargedHours, laborNote: `与「${shared.otherName}」同时施工，工时按一半（原 ${job.laborHours} h → ${shared.chargedHours} h）。${job.laborNote}` }
+        ? { ...job, halved: true, laborHours: shared.chargedHours, laborNote: `与「${shared.otherName}」同时施工，工时按一半（原 ${job.laborHours} h → ${shared.chargedHours} h）。${job.laborNote}` }
         : { ...job, laborNote: `与「${shared.otherName}」同时施工：本项工时全收，对方按一半。${job.laborNote}` };
     return quoteOutcome(buildLaborQuote(describeVehicle(vehicle), charged, newEstimateId()));
   }

@@ -43,6 +43,8 @@ export type StreamEvent =
   /** Over today's limit: the reply is the fixed "please call us" text. */
   | { type: "capped" }
   | { type: "session"; id: string }
+  /** Evaluation runs that ask for it: a tool call and its result, for debugging. */
+  | { type: "trace"; tool: string; input: unknown; output: string }
   | { type: "error"; code: "unavailable" | "busy" | "invalid" }
   | { type: "done" };
 
@@ -401,6 +403,10 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
           },
           send,
           () => `E-${randomBytes(4).toString("hex").toUpperCase()}`,
+          undefined,
+          evaluation && request.headers.get("x-repair-eval-trace") === "1"
+            ? (tool, input, output) => send({ type: "trace", tool, input, output: output.slice(0, 4000) })
+            : undefined,
         );
         sessions.record(session.id, { role: "assistant", text: result.text });
         if (evaluation) await sessions.finish(session.id, "idle"); // drop the throwaway session's timer

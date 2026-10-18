@@ -3,7 +3,7 @@
  * public never sees — every part option, the shop's cost, margin, labor hours
  * and the referral price — plus a customer-ready text with no cost in it.
  */
-import { WALK_IN_LABOR_RATE, REFERRAL_LABOR_MULTIPLIER, type EstimateCard } from "@/lib/repair-chat/pricing";
+import { chargedHours, MIN_LABOR_HOURS, WALK_IN_LABOR_RATE, REFERRAL_LABOR_MULTIPLIER, type EstimateCard } from "@/lib/repair-chat/pricing";
 import type { StaffPartOption } from "@/lib/worldpac/catalog";
 import { customerText } from "./customer-text";
 import type { FinalPrices } from "./final-price";
@@ -84,12 +84,15 @@ export interface LaborJob {
   otherPartNames: string[];
   partsNote: string;
   partOptions: StaffPartOption[];
+  /** Done together with another job and charged at half: the shop's minimum doesn't apply. */
+  halved?: boolean;
 }
 
 export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env: NodeJS.ProcessEnv = process.env, now = new Date()): StaffQuote {
   const field = costField(env);
-  const walkIn = money(job.laborHours * WALK_IN_LABOR_RATE);
-  const referral = money(job.laborHours * WALK_IN_LABOR_RATE * REFERRAL_LABOR_MULTIPLIER);
+  const hours = job.halved ? job.laborHours : chargedHours(job.laborHours);
+  const walkIn = money(hours * WALK_IN_LABOR_RATE);
+  const referral = money(hours * WALK_IN_LABOR_RATE * REFERRAL_LABOR_MULTIPLIER);
   const options = job.partOptions.map((p) => {
     const cost = p.prices[field];
     const unitCost = typeof cost === "number" && cost > 0 ? cost : null;
@@ -130,10 +133,11 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
     );
   }
   const notes = [
+    hours > job.laborHours ? `工时手册 ${job.laborHours} h，按店里最低 ${MIN_LABOR_HOURS} h 收。` : "",
     job.laborNote && `工时说明：${job.laborNote}`,
     job.partsNote && `零件：${job.partsNote}`,
     job.otherPartNames.length ? `可能还需要：${job.otherPartNames.join("、")}` : "",
-    "毛利 = 客户总价（零件标价 + 工时）− 零件进价，未扣人工成本。",
+    "零件售价 = 进价 × 店里的加价倍率（没配置倍率时用 WorldPac List 价）。毛利 = 客户总价（零件售价 + 工时）− 零件进价，未扣人工成本。",
   ].filter(Boolean) as string[];
   return withText({
     id,
@@ -142,7 +146,7 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
     vehicle,
     service: job.serviceName,
     position: job.position,
-    labor: { hours: job.laborHours, rate: WALK_IN_LABOR_RATE, walkIn, referral },
+    labor: { hours, rate: WALK_IN_LABOR_RATE, walkIn, referral },
     costField: field,
     options,
     notes,

@@ -80,6 +80,14 @@ export function estimateRanges(card: EstimateCard): EstimateRanges {
   };
 }
 
+/** The shop charges at least this much labor for any job. */
+export const MIN_LABOR_HOURS = 0.5;
+
+/** Hours charged for a job: the labor guide's, but never under the shop's minimum. */
+export function chargedHours(guideHours: number): number {
+  return guideHours > 0 ? Math.max(MIN_LABOR_HOURS, guideHours) : 0;
+}
+
 export function laborCost(hours: number, referral = false): number {
   const rate = referral ? WALK_IN_LABOR_RATE * REFERRAL_LABOR_MULTIPLIER : WALK_IN_LABOR_RATE;
   return money(hours * rate);
@@ -103,15 +111,16 @@ export function buildEstimate(
   const totals = partOptions.map((p) => p.total);
   const partsLow = totals.length ? Math.min(...totals) : 0;
   const partsHigh = totals.length ? Math.max(...totals) : 0;
-  const laborWalkIn = laborCost(quote.laborHours);
-  const laborReferral = laborCost(quote.laborHours, true);
+  const hours = quote.halved ? quote.laborHours : chargedHours(quote.laborHours);
+  const laborWalkIn = laborCost(hours);
+  const laborReferral = laborCost(hours, true);
   return {
     id,
     kind: "labor",
     vehicle,
     service: quote.serviceName,
     position: quote.position,
-    laborHours: quote.laborHours,
+    laborHours: hours,
     laborRate: WALK_IN_LABOR_RATE,
     laborWalkIn,
     laborReferral,
@@ -123,7 +132,7 @@ export function buildEstimate(
     totalHigh: money(partsHigh + laborWalkIn),
     referralTotalLow: money(partsLow + laborReferral),
     referralTotalHigh: money(partsHigh + laborReferral),
-    laborNote: quote.laborNote,
+    laborNote: hours > quote.laborHours ? `Minimum labor charge ${MIN_LABOR_HOURS} h (labor guide ${quote.laborHours} h). ${quote.laborNote}`.trim() : quote.laborNote,
     otherPartNames: quote.otherPartNames,
     partsNote: quote.partsNote ?? "",
     createdAt: now.toISOString(),

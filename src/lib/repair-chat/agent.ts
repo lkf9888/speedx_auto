@@ -131,6 +131,8 @@ export async function runChat<E extends { type: string } = ChatEvent>(
   onEvent: (event: E) => void,
   newEstimateId: () => string,
   profile: ChatProfile<E> = PUBLIC_PROFILE as unknown as ChatProfile<E>,
+  /** Test runs only: each tool call and what it returned. */
+  onTool?: (name: string, input: unknown, content: string) => void,
 ): Promise<ChatResult<E>> {
   const earlierCustomerMessages = request.history.filter((t) => t.role === "user").map((t) => t.text).reverse();
   const language = detectCustomerLanguage(request.message, request.locale, earlierCustomerMessages);
@@ -209,6 +211,7 @@ export async function runChat<E extends { type: string } = ChatEvent>(
           knownVehicleKey,
         );
         outcome.events.forEach(emit);
+        onTool?.(use.name, use.input, outcome.content);
         results.push({
           type: "tool_result",
           tool_use_id: use.id,
