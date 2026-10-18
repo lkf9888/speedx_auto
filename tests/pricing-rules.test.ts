@@ -1,39 +1,23 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { encodeVehicleKey, isSoldByVolume, partsMarkup, quoteService, sanitizePartQuotes, staffPartQuotes, type CatalogApi, type VehicleRef } from "@/lib/worldpac/catalog";
+import { describe, expect, it } from "vitest";
+import { encodeVehicleKey, isSoldByVolume, quoteService, sanitizePartQuotes, staffPartQuotes, type CatalogApi, type VehicleRef } from "@/lib/worldpac/catalog";
 import { buildEstimate, chargedHours } from "@/lib/repair-chat/pricing";
 import { runTool, type ChatEvent } from "@/lib/repair-chat/tools";
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
+import { surchargeOf } from "@/lib/workbench/surcharge";
 
-// Shop rules from the ALLDATA invoice smoke test (2026-10-17): parts at cost × 1.3, at least 0.5 h labor per job.
+// Shop rules from the ALLDATA invoice smoke test (2026-10-17): WorldPac parts at List, others at cost × 1.3 with the surcharge shown, at least 0.5 h labor per job.
 
 const pna = {
   applications: [{ appID: "1", qtyPerCar: 1 }],
   quotes: [{ productQuotes: [{ appID: "1", partDescription: "Oxygen Sensor", seriesDescription: "OE", listPrice: 250, unitPrice: 100, availability: "local", qtyAvailable: 3 }] }],
 };
 
-describe("part prices", () => {
-  afterEach(() => vi.unstubAllEnvs());
-
-  it("charge customers the shop's cost × markup, and the cost goes no further", () => {
-    const [option] = sanitizePartQuotes(pna, null, "", 1.3);
-    expect(option.listPrice).toBe(130);
-    expect(JSON.stringify(option)).not.toMatch(/100|unitPrice/);
-    expect(staffPartQuotes(pna, null, "", 1.3)[0]).toMatchObject({ listPrice: 130, prices: { unitPrice: 100, listPrice: 250 } });
-  });
-
-  it("fall back to WorldPac List when no markup is set", () => {
-    expect(sanitizePartQuotes(pna, null, "", null)[0].listPrice).toBe(250);
-  });
-
-  it("use PARTS_MARKUP, else the tire markup", () => {
-    vi.stubEnv("PARTS_MARKUP", "");
-    vi.stubEnv("TIRE_MARKUP", "1.3");
-    expect(partsMarkup()).toBe(1.3);
-    vi.stubEnv("PARTS_MARKUP", "1.25");
-    expect(partsMarkup()).toBe(1.25);
-    vi.stubEnv("PARTS_MARKUP", "");
-    vi.stubEnv("TIRE_MARKUP", "");
-    expect(partsMarkup()).toBeNull();
+describe("WorldPac part prices", () => {
+  it("are WorldPac's suggested retail (List), and the cost goes no further", () => {
+    const [option] = sanitizePartQuotes(pna, null, "");
+    expect(option.listPrice).toBe(250);
+    expect(JSON.stringify(option)).not.toMatch(/\b100\b|unitPrice/);
+    expect(staffPartQuotes(pna, null, "")[0]).toMatchObject({ listPrice: 250, prices: { unitPrice: 100, listPrice: 250 } });
   });
 });
 
@@ -153,5 +137,77 @@ describe("per-configuration cards", () => {
     expect(cards).toHaveLength(1);
     expect(cards[0].vehicle).toBe("2018 Nissan Rogue");
     expect(JSON.parse(out.content).note).toMatch(/same for every Sub Model/);
+  });
+});
+
+/** A car whose labor guide has pad and caliper-pin jobs but no rotor or caliper job. */
+function journeyCatalog(withRotorJob = false): CatalogApi {
+  return {
+    async get() {
+      throw new Error("unused");
+    },
+    async post<T>(path: string, data: unknown) {
+      const d = data as Record<string, unknown>;
+      if (path === "category/details") {
+        if (!d.categoryCode) return { replacementParts: [{ code: "B", description: "Brake" }] } as T;
+        if (d.categoryCode === "B") {
+          const jobs = [
+            { acaPartTerminologyID: 1684, description: "Brake Pads R&R" },
+            { acaPartTerminologyID: 1700, description: "Disc Brake Caliper Guide Pin R&R" },
+            ...(withRotorJob ? [{ acaPartTerminologyID: 1896, description: "Brake Rotor R&R" }] : []),
+          ];
+          return { laborOperations: jobs, replacementParts: [{ code: "BA", description: "Brake" }] } as T;
+        }
+        if (d.categoryCode === "BA") return { partTypes: [{ code: "N1896", description: "Disc Brake Rotor" }, { code: "N1700", description: "Disc Brake Caliper" }, { code: "N1010", description: "Brake Pad Set" }] } as T;
+      }
+      if (path === "pna360_cat") {
+        const code = (d.partTypes as Array<{ categoryCode: string }>)[0].categoryCode;
+        const name = code === "N1896" ? "Brake Disc" : "Brake Caliper";
+        return {
+          applications: [{ appID: "1", qtyPerCar: 2 }, { appID: "2", qtyPerCar: 2 }],
+          quotes: [
+            {
+              productQuotes: [
+                { appID: "1", partDescription: name, seriesDescription: "Front", listPrice: 120, unitPrice: 60, position: { description: "Front" } },
+                { appID: "2", partDescription: name, seriesDescription: "Rear", listPrice: 100, unitPrice: 50, position: { description: "Rear" } },
+              ],
+            },
+          ],
+        } as T;
+      }
+      throw new Error(`unexpected ${path}`);
+    },
+  };
+}
+
+describe("rotors and calipers with no labor-guide job", () => {
+  const ask = (api: CatalogApi, part: string, count = 1) =>
+    runTool(api, "quote_extra_part", { vehicle_key: encodeVehicleKey({ baseVehicleId: (nextBase += 1), label: "2015 Dodge Journey", attributes: [] }), part, position: "Front", count }, () => "E-1", "en");
+  const card = (out: Awaited<ReturnType<typeof ask>>) => out.events.find((e: ChatEvent): e is { type: "estimate"; estimate: EstimateCard } => e.type === "estimate")!.estimate;
+
+  it("charge 0.5 h per axle for rotors, with the front rotors at List", async () => {
+    const c = card(await ask(journeyCatalog(), "brake_rotor"));
+    expect([c.service, c.position, c.laborHours, c.laborWalkIn]).toEqual(["Brake Rotor R&R", "Front", 0.5, 60]);
+    expect(c.partOptions).toEqual([expect.objectContaining({ unitListPrice: 120, quantity: 2 })]);
+    expect(c.laborNote).toMatch(/0\.5 h per axle/);
+  });
+
+  it("charge 0.5 h per caliper", async () => {
+    const c = card(await ask(journeyCatalog(), "brake_caliper", 2));
+    expect([c.laborHours, c.partOptions[0].quantity]).toEqual([1, 2]);
+  });
+
+  it("send the assistant to the guide's job when there is one", async () => {
+    const out = await ask(journeyCatalog(true), "brake_rotor");
+    expect(JSON.parse(out.content)).toMatchObject({ status: "use_get_estimate", service_id: 1896 });
+    expect(out.events).toEqual([]);
+  });
+});
+
+describe("surcharge on staff cards", () => {
+  it("is the customer price over cost: List for WorldPac, the markup for tires", () => {
+    expect(surchargeOf({ kind: "labor" }, { unitPrice: 130, unitCost: 100, prices: {} })).toBe(0.3);
+    expect(surchargeOf({ kind: "tires" }, { unitPrice: 160, unitCost: 100, prices: { retail: 130, cost: 100 } })).toBe(0.3);
+    expect(surchargeOf({ kind: "flat" }, { unitPrice: 80, unitCost: null, prices: {} })).toBeNull();
   });
 });

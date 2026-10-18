@@ -6,6 +6,7 @@
 import { chargedHours, MIN_LABOR_HOURS, WALK_IN_LABOR_RATE, REFERRAL_LABOR_MULTIPLIER, type EstimateCard } from "@/lib/repair-chat/pricing";
 import type { StaffPartOption } from "@/lib/worldpac/catalog";
 import { customerText } from "./customer-text";
+import { surchargeOf } from "./surcharge";
 import type { FinalPrices } from "./final-price";
 
 export { customerText };
@@ -137,7 +138,7 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
     job.laborNote && `工时说明：${job.laborNote}`,
     job.partsNote && `零件：${job.partsNote}`,
     job.otherPartNames.length ? `可能还需要：${job.otherPartNames.join("、")}` : "",
-    "零件售价 = 进价 × 店里的加价倍率（没配置倍率时用 WorldPac List 价）。毛利 = 客户总价（零件售价 + 工时）− 零件进价，未扣人工成本。",
+    "零件售价 = WorldPac 建议零售价（List）；“加价”= 售价 ÷ 进价 − 1。毛利 = 客户总价（零件售价 + 工时）− 零件进价，未扣人工成本。",
   ].filter(Boolean) as string[];
   return withText({
     id,
@@ -285,7 +286,7 @@ export interface TireQuoteSource {
   supplier: "dt" | "partner_tires";
 }
 
-const PARTNER_LIST: TireQuoteSource = { name: "合作轮胎价目表 + Wheel Mart（实时，每行注明）", retailRule: "零售价（拿货价 × 店里的加价倍率）", supplier: "partner_tires" };
+const PARTNER_LIST: TireQuoteSource = { name: "合作轮胎价目表 + Wheel Mart（实时，每行注明）", retailRule: "零售价（拿货价 × 加价倍率，见每行“加价”）", supplier: "partner_tires" };
 
 /** New tires: installed price per tire for the customer; cost, eco fee and mounting shown apart. */
 export function buildTireQuote(
@@ -363,7 +364,7 @@ export function summarizeStaffQuote(quote: StaffQuote): string {
       (o, i) =>
         `${i + 1}. ${[o.brand, o.label].filter(Boolean).join(" ")}${o.partNumber ? ` #${o.partNumber}` : ""} ×${o.quantity}: unit $${o.unitPrice}` +
         `${quote.kind === "tires" && o.prices.retail !== undefined ? ` (= tire $${o.prices.retail} + eco fee $${o.prices.eco} + mounting $${o.prices.mounting}, eco rounded in)` : ""}` +
-        `${o.unitCost !== null ? `, cost $${o.unitCost}` : ""}; customer $${o.customerTotal} (referral $${o.referralTotal})` +
+        `${o.unitCost !== null ? `, cost $${o.unitCost}` : ""}${surchargeOf(quote, o) !== null ? `, surcharge +${Math.round(surchargeOf(quote, o)! * 100)}%` : ""}; customer $${o.customerTotal} (referral $${o.referralTotal})` +
         `${o.profit !== null ? `, profit $${o.profit}${o.margin !== null ? ` (${Math.round(o.margin * 100)}%)` : ""}` : ""}${o.stock ? `, ${o.stock}` : ""}`,
     )
     .join("\n");

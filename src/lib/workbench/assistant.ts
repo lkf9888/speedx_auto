@@ -10,6 +10,7 @@ import { ecoFee, loadTireList, mountingPerTire, sizeKey, type TireListing } from
 import { shopToday } from "@/lib/repair-chat/prompt";
 import {
   applyVehicleDetails,
+  quoteExtraPartForStaff,
   decodeVehicleKey,
   forBothSides,
   describeVehicle,
@@ -95,7 +96,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - Don't propose notes for one-off facts about a single customer or job. Notes can't override the hard rules (no cost in customer text, prices only from tools, staff create ALLDATA documents themselves); say so if asked.
 - Staff can also see, edit and delete all notes in the "记忆" panel at the top of the workbench.`;
 
-const STAFF_TOOL_NAMES = ["identify_vehicle", "set_vehicle_details", "check_recalls", "find_services", "get_estimate", "get_flat_price", "find_tires"];
+const STAFF_TOOL_NAMES = ["identify_vehicle", "set_vehicle_details", "check_recalls", "find_services", "get_estimate", "quote_extra_part", "get_flat_price", "find_tires"];
 
 const FIND_BRAND_TIRES: Anthropic.Beta.BetaTool = {
   name: "find_brand_tires",
@@ -553,6 +554,19 @@ export async function runWorkbenchTool(
         ? { ...job, halved: true, laborHours: shared.chargedHours, laborNote: `与「${shared.otherName}」同时施工，工时按一半（原 ${job.laborHours} h → ${shared.chargedHours} h）。${job.laborNote}` }
         : { ...job, laborNote: `与「${shared.otherName}」同时施工：本项工时全收，对方按一半。${job.laborNote}` };
     return quoteOutcome(buildLaborQuote(describeVehicle(vehicle), charged, newEstimateId()));
+  }
+  if (name === "quote_extra_part") {
+    const vehicle = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;
+    if (!vehicle) return { content: JSON.stringify({ error: "Unknown vehicle_key. Call identify_vehicle first." }), isError: true, events: [] };
+    const part = input.part === "brake_rotor" || input.part === "brake_caliper" ? input.part : null;
+    const position = input.position === "Front" || input.position === "Rear" ? input.position : null;
+    if (!part || !position) return { content: JSON.stringify({ error: "Say which part (brake_rotor or brake_caliper) and Front or Rear." }), isError: true, events: [] };
+    const found = await quoteExtraPartForStaff(api, vehicle, part, position, part === "brake_caliper" && Number(input.count) === 2 ? 2 : 1);
+    if (found.status === "has_labor_job") {
+      return { content: JSON.stringify({ status: "use_get_estimate", service_id: found.serviceId, name: found.name }), isError: false, events: [] };
+    }
+    if (found.status === "no_parts") return { content: JSON.stringify({ status: "not_found", note: "No priced part found by name; try find_parts." }), isError: false, events: [] };
+    return quoteOutcome(buildLaborQuote(describeVehicle(vehicle), found.job, newEstimateId()));
   }
   if (name === "find_parts") {
     const vehicle = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;

@@ -7,7 +7,9 @@ import {
   findServices,
   identifyByVin,
   identifyByYearMakeModel,
+  quoteExtraPart,
   quoteService,
+  type ExtraPart,
   forBothSides,
   readDoneWith,
   refineVehicle,
@@ -102,6 +104,23 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
         model: { type: "string", description: "Model as the vehicle lookup named it, e.g. CR-V" },
       },
       required: ["year", "make", "model"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "quote_extra_part",
+    description:
+      "Price brake rotors or a brake caliper when the labor guide has no job for them on this vehicle (find_services lists Brake Pads R&R but no rotor or caliper R&R). Uses the shop's own time: 0.5 h per axle for rotors, 0.5 h per caliper, with the parts found by name. Shows a card. If the guide does have the job, it tells you which service_id to use with get_estimate instead.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        vehicle_key: { type: "string" },
+        part: { type: "string", enum: ["brake_rotor", "brake_caliper"] },
+        position: { type: "string", enum: ["Front", "Rear"] },
+        count: { type: "integer", description: "Calipers: how many (1 or 2). Rotors: always 1 (one axle; call again for the other axle)." },
+      },
+      required: ["vehicle_key", "part", "position", "count"],
       additionalProperties: false,
     },
   },
@@ -525,6 +544,23 @@ export async function runTool(
         note: RECALL_NOTE + (found.source === "NHTSA" ? " These are US (NHTSA) recalls because Canada lists none under this name; Canadian coverage can differ." : ""),
       });
     }
+    case "quote_extra_part": {
+      const vehicle = readVehicle(input);
+      if (!vehicle) return fail("Unknown vehicle_key. Call identify_vehicle first.");
+      const part = pick<ExtraPart>(input.part, ["brake_rotor", "brake_caliper"]);
+      const position = pick<string>(input.position, ["Front", "Rear"]);
+      if (!part || !position) return fail("Say which part (brake_rotor or brake_caliper) and Front or Rear.");
+      const count = part === "brake_caliper" && Number(input.count) === 2 ? 2 : 1;
+      const found = await quoteExtraPart(api, vehicle, part, position, count);
+      if (found.status === "has_labor_job") {
+        return ok({ status: "use_get_estimate", service_id: found.serviceId, name: found.name, note: "The labor guide has this job: price it with get_estimate (and done_with for the pads)." });
+      }
+      if (found.status === "no_parts") {
+        return teamQuote(describeVehicle(vehicle), part === "brake_rotor" ? `${position} brake rotors` : `${position} brake caliper`, "No priced part found by name.", newEstimateId);
+      }
+      const card = buildEstimate(describeVehicle(vehicle), found.job, newEstimateId());
+      return ok({ status: "ok", summary: summarizeEstimateForModel(card), note: "Shop time on top of the pad job; the half-time rule for jobs done together doesn't apply to it." }, [{ type: "estimate", estimate: card }]);
+    }
     case "set_vehicle_details": {
       const vehicle = readVehicle(input);
       if (!vehicle) return fail("Unknown vehicle_key. Call identify_vehicle first.");
@@ -753,7 +789,7 @@ export async function runTool(
 
 export function statusForTool(name: string): StatusKey {
   if (name === "find_services") return "services";
-  if (["get_estimate", "get_flat_price", "find_tires", "find_brand_tires", "find_parts", "draft_alldata_estimate", "request_team_quote"].includes(name)) return "estimate";
+  if (["get_estimate", "quote_extra_part", "get_flat_price", "find_tires", "find_brand_tires", "find_parts", "draft_alldata_estimate", "request_team_quote"].includes(name)) return "estimate";
   if (name === "request_appointment" || name === "propose_memory") return "thinking";
   return "vehicle";
 }

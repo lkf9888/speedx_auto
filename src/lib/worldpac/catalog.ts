@@ -587,23 +587,8 @@ function partFitsPosition(q: Record<string, unknown>, positionId: number | null,
   return Boolean(wanted) && label.includes(wanted);
 }
 
-/** The shop's markup on parts cost (PARTS_MARKUP, else TIRE_MARKUP); null means customers pay WorldPac List. */
-export function partsMarkup(env: NodeJS.ProcessEnv = process.env): number | null {
-  for (const raw of [env.PARTS_MARKUP, env.TIRE_MARKUP]) {
-    const value = Number(raw);
-    if (raw && Number.isFinite(value) && value > 1) return value;
-  }
-  return null;
-}
-
-/**
- * What a customer pays for one part: the shop's cost × the markup when both
- * are known, otherwise WorldPac's List price. The cost is read here and goes
- * no further.
- */
-function customerPartPrice(q: Record<string, unknown>, markup: number | null, env: NodeJS.ProcessEnv = process.env): number | null {
-  const cost = Number(q[env.WORKBENCH_COST_FIELD?.trim() || "unitPrice"]);
-  if (markup && Number.isFinite(cost) && cost > 0) return Math.round(cost * markup * 100) / 100;
+/** What a customer pays for a WorldPac part: WorldPac's suggested retail (List) price (the shop's rule). */
+function customerPartPrice(q: Record<string, unknown>): number | null {
   const list = Number(q.listPrice);
   return Number.isFinite(list) && list > 0 ? Math.round(list * 100) / 100 : null;
 }
@@ -612,7 +597,6 @@ export function sanitizePartQuotes(
   response: PnaResponse,
   positionId: number | null,
   positionLabel = "",
-  markup: number | null = partsMarkup(),
 ): PartOption[] {
   const apps = new Map(
     (response.applications ?? []).map((a) => [String(a.appID), a]),
@@ -623,7 +607,7 @@ export function sanitizePartQuotes(
   const source = all.filter(matchesPosition);
   const options: PartOption[] = [];
   for (const q of source) {
-    const price = customerPartPrice(q, markup);
+    const price = customerPartPrice(q);
     if (price === null) continue;
     const app = apps.get(String(q.appID));
     const quantity = Number(app?.qtyPerCar);
@@ -814,6 +798,11 @@ async function partsByJobName(api: CatalogApi, vehicle: VehicleRef, data: Servic
     .replace(/\s+/g, " ")
     .trim();
   if (!name || isSoldByVolume(name)) return null;
+  return partsByName(api, vehicle, name, data.position);
+}
+
+/** WorldPac's quotes for the part type best named `name`, at `position` when the parts name one. */
+async function partsByName(api: CatalogApi, vehicle: VehicleRef, name: string, position: string): Promise<PnaResponse | null> {
   const partTypes = await partTypesFor(api, vehicle, name);
   const wantedName = normalize(name);
   const best = partTypes
@@ -829,7 +818,7 @@ async function partsByJobName(api: CatalogApi, vehicle: VehicleRef, data: Servic
     attributes: attributePayload(vehicle),
     partTypes: [{ requestedQuantity: 0, orderType: "ST", categoryCode: best.part.code, baseVehicleID: vehicle.baseVehicleId, positionID: -1 }],
   });
-  const wanted = normalize(data.position);
+  const wanted = normalize(position);
   if (!wanted) return pna;
   const quotes = (pna.quotes ?? []).map((q) => ({
     ...q,
@@ -840,6 +829,78 @@ async function partsByJobName(api: CatalogApi, vehicle: VehicleRef, data: Servic
   }));
   // Parts can name positions differently from the labor guide ("Upstream" for "Front"): then keep them all.
   return quotes.some((q) => q.productQuotes.length > 0) ? { ...pna, quotes } : pna;
+}
+
+// ------------------------------------------------- parts with no labor job
+//
+// Some cars' labor guides have no job for parts often replaced with another
+// (front rotors on a 2015 Dodge Journey, a caliper on a 2013 Santa Fe). The
+// shop's rule (Kevin, 2026-10-17): 0.5 h per axle for rotors and 0.5 h per
+// caliper, on top of the pad job, with the parts found by name.
+
+export type ExtraPart = "brake_rotor" | "brake_caliper";
+
+const EXTRA_PARTS: Record<ExtraPart, { part: string; job: RegExp; service: string; hours: (count: number) => number; note: string }> = {
+  brake_rotor: {
+    part: "Disc Brake Rotor",
+    job: /\brotor\b|\bbrake dis[ck]\b/i,
+    service: "Brake Rotor R&R",
+    hours: () => 0.5,
+    note: "No labor-guide time for rotors on this vehicle: the shop charges 0.5 h per axle, on top of the brake pad job.",
+  },
+  brake_caliper: {
+    part: "Disc Brake Caliper",
+    job: /\bcaliper\b(?!.*\b(pin|bolt|bracket|bushing|boot|seal)\b)/i,
+    service: "Disc Brake Caliper R&R",
+    hours: (count) => 0.5 * count,
+    note: "No labor-guide time for calipers on this vehicle: the shop charges 0.5 h per caliper.",
+  },
+};
+
+export type ExtraPartJob<P extends PartOption> =
+  | { status: "ok"; job: Omit<Extract<ServiceQuote, { status: "ok" }>, "partOptions"> & { partOptions: P[] } }
+  | { status: "has_labor_job"; serviceId: number; name: string }
+  | { status: "no_parts" };
+
+async function extraPartData(api: CatalogApi, vehicle: VehicleRef, kind: ExtraPart, position: string, count: number) {
+  const rule = EXTRA_PARTS[kind];
+  // The labor guide has a job for it after all: that one prices it properly.
+  const existing = (await allServices(api, vehicle)).find((s) => rule.job.test(s.name) && /R&R|replace/i.test(s.name));
+  if (existing) return { status: "has_labor_job" as const, serviceId: existing.serviceId, name: existing.name };
+  const pna = await partsByName(api, vehicle, rule.part, position);
+  const hours = rule.hours(count);
+  const common = {
+    serviceName: rule.service,
+    position,
+    laborHours: hours,
+    laborNote: rule.note,
+    primaryPartName: rule.part,
+    otherPartNames: [],
+    partsNote: BY_NAME_NOTE,
+    // Shop time, not a guide time: the minimum and the half-time rule don't apply.
+    halved: true,
+  };
+  return { status: "found" as const, pna, common, count, kind };
+}
+
+/** Customer-safe: List-priced parts and the shop's hours for a part with no labor job. */
+export async function quoteExtraPart(api: CatalogApi, vehicle: VehicleRef, kind: ExtraPart, position: string, count = 1): Promise<ExtraPartJob<PartOption>> {
+  const data = await extraPartData(api, vehicle, kind, position, count);
+  if (data.status === "has_labor_job") return data;
+  let options = data.pna ? representativeOptions(filterRealisticOptions(sanitizePartQuotes(data.pna, null))) : [];
+  if (kind === "brake_caliper") options = options.map((o) => ({ ...o, quantity: count }));
+  if (options.length === 0) return { status: "no_parts" };
+  return { status: "ok", job: { status: "ok", ...data.common, partOptions: options } };
+}
+
+/** Staff: the same with account prices. */
+export async function quoteExtraPartForStaff(api: CatalogApi, vehicle: VehicleRef, kind: ExtraPart, position: string, count = 1): Promise<ExtraPartJob<StaffPartOption>> {
+  const data = await extraPartData(api, vehicle, kind, position, count);
+  if (data.status === "has_labor_job") return data;
+  let options = data.pna ? staffPartQuotes(data.pna, null) : [];
+  if (kind === "brake_caliper") options = options.map((o) => ({ ...o, quantity: count }));
+  if (options.length === 0) return { status: "no_parts" };
+  return { status: "ok", job: { status: "ok", ...data.common, partOptions: options } };
 }
 
 /** Bits that come with a part rather than being it. */
@@ -932,7 +993,7 @@ function firstString(q: Record<string, unknown>, keys: string[]): string {
   return "";
 }
 
-export function staffPartQuotes(response: PnaResponse, positionId: number | null, positionLabel = "", markup: number | null = partsMarkup()): StaffPartOption[] {
+export function staffPartQuotes(response: PnaResponse, positionId: number | null, positionLabel = ""): StaffPartOption[] {
   const apps = new Map((response.applications ?? []).map((a) => [String(a.appID), a]));
   const all = (response.quotes ?? []).flatMap((q) => q.productQuotes ?? []);
   const matchesPosition = (q: Record<string, unknown>) => partFitsPosition(q, positionId, positionLabel);
@@ -940,7 +1001,7 @@ export function staffPartQuotes(response: PnaResponse, positionId: number | null
   const source = all.filter(matchesPosition);
   const options: StaffPartOption[] = [];
   for (const q of source) {
-    const price = customerPartPrice(q, markup);
+    const price = customerPartPrice(q);
     if (price === null) continue;
     const app = apps.get(String(q.appID));
     const quantity = Number(app?.qtyPerCar);
