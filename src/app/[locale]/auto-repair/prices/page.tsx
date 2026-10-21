@@ -16,7 +16,7 @@ import {
   priceGuideSystems,
   priceGuideValues,
 } from "@/lib/repair-price-guide";
-import { buildPageMetadata } from "@/lib/seo";
+import { buildPageMetadata, repairShareImage } from "@/lib/seo";
 import { absoluteRouteUrl, routePath } from "@/lib/site-routes";
 
 export async function generateMetadata({
@@ -32,6 +32,7 @@ export async function generateMetadata({
     route: "repairPrices",
     title: copy.metaTitle,
     description: copy.metaDescription,
+    image: repairShareImage(locale),
   });
 }
 

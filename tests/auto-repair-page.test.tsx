@@ -49,7 +49,7 @@ describe("auto repair hub page", () => {
       cleanup();
     }
     await renderPage("zh-CN");
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("汽车与电动车机械维修");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("列治文汽车与电动车机械维修");
   });
 
   it("lists the facts directly above the price sections", async () => {

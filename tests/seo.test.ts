@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPageMetadata } from "@/lib/seo";
+import { buildPageMetadata, repairShareImage } from "@/lib/seo";
 
 describe("buildPageMetadata", () => {
   it("gives the English homepage a self-referencing canonical", () => {
@@ -43,5 +43,22 @@ describe("buildPageMetadata", () => {
       title: "刹车检查与维修",
       description: "列治文及大温地区刹车检查服务。",
     });
+  });
+
+  it("uses the repair share card on repair pages and the logo elsewhere", () => {
+    const repair = buildPageMetadata({
+      locale: "zh-TW",
+      route: "repairTeslaEv",
+      title: "Tesla",
+      description: "EV",
+      image: repairShareImage("zh-TW"),
+    });
+    expect(repair.openGraph?.images).toEqual([
+      expect.objectContaining({ url: "/zh-TW/auto-repair/opengraph-image", width: 1200, height: 630 }),
+    ]);
+    expect(repair.twitter?.images).toEqual(["/zh-TW/auto-repair/opengraph-image"]);
+
+    const hosting = buildPageMetadata({ locale: "en", route: "hosting", title: "Hosting", description: "Turo" });
+    expect(hosting.openGraph?.images).toEqual([expect.objectContaining({ url: "/logo.png" })]);
   });
 });

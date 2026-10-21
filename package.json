@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:production": "node scripts/verify-production.mjs",
+    "indexnow": "node scripts/indexnow.mjs",
     "worldpac:check": "WORLDPAC_LIVE=1 node --env-file=.env.local ./node_modules/vitest/vitest.mjs run tests/live --reporter=verbose"
   },
   "dependencies": {

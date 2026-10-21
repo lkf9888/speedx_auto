@@ -4,7 +4,7 @@ import { RepairServicePage } from "@/components/RepairServicePage";
 import { StructuredData } from "@/components/StructuredData";
 import { isLocale, locales, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
-import { buildPageMetadata } from "@/lib/seo";
+import { buildPageMetadata, repairShareImage } from "@/lib/seo";
 import {
   absoluteRouteUrl,
   repairRouteKeys,
@@ -35,6 +35,7 @@ export async function generateMetadata({
     route: repairRouteKeys[service],
     title: copy.metaTitle,
     description: copy.metaDescription,
+    image: repairShareImage(locale),
   });
 }
 

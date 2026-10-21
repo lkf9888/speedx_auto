@@ -10,7 +10,7 @@ import { StructuredData } from "@/components/StructuredData";
 import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
 import { company } from "@/lib/company";
-import { buildPageMetadata } from "@/lib/seo";
+import { buildPageMetadata, repairShareImage } from "@/lib/seo";
 import {
   absoluteRouteUrl,
   repairRouteKeys,
@@ -31,6 +31,7 @@ export async function generateMetadata({
     route: "autoRepair",
     title: copy.metaTitle,
     description: copy.metaDescription,
+    image: repairShareImage(locale),
   });
 }
 
