@@ -10,6 +10,14 @@ const contactConversionDestinations = {
   wechat: "AW-625073096/iUGYCKifn44dEMi3h6oC",
 } as const;
 
+// "Repair – estimate lead" and "Repair – booking request", created 2026-10-21.
+const repairLeadConversionDestinations = {
+  estimate_lead: "AW-625073096/--kTCJeh_aQdEMi3h6oC",
+  booking_request: "AW-625073096/5zNnCMym_aQdEMi3h6oC",
+} as const;
+
+export type RepairLeadKind = keyof typeof repairLeadConversionDestinations;
+
 export type ContactMethod = "whatsapp" | "phone" | "wechat" | "email";
 export type ContactIntent = "hosting" | "auto_repair" | "general";
 export type ContactPlacement = "hero" | "middle" | "footer" | "sticky_mobile" | "chat";
@@ -57,6 +65,37 @@ export function emitContactClick(event: ContactClickEvent): void {
   const conversion = {
     send_to: contactConversionDestinations[event.method],
     value: 0,
+    currency: "CAD",
+    transport_type: "beacon",
+  };
+  if (window.gtag) {
+    window.gtag("event", "conversion", conversion);
+  } else {
+    queueGoogleCommand("event", "conversion", conversion);
+  }
+}
+
+/**
+ * A confirmed repair lead: the estimate assistant accepted the customer's name
+ * and phone, or a booking request was saved. Call it once, after the server
+ * answered OK. Unlike a button click this is a real lead, so it is the
+ * conversion the repair search campaigns optimize for.
+ */
+export function emitRepairLead(kind: RepairLeadKind, locale: Locale): void {
+  if (typeof window === "undefined") return;
+
+  const parameters = { lead_type: kind, intent: "auto_repair", locale };
+  if (window.gtag) {
+    window.gtag("event", "generate_lead", parameters);
+  } else {
+    window.dataLayer ??= [];
+    window.dataLayer.push({ event: "generate_lead", ...parameters });
+  }
+
+  if (readConsent() !== "granted") return;
+  trackMetaEvent(kind === "booking_request" ? "Schedule" : "Lead", { content_category: "auto_repair" });
+  const conversion = {
+    send_to: repairLeadConversionDestinations[kind],
     currency: "CAD",
     transport_type: "beacon",
   };

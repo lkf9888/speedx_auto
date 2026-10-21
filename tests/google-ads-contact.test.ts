@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { emitContactClick } from "@/lib/analytics";
+import { emitContactClick, emitRepairLead } from "@/lib/analytics";
 import { saveConsent } from "@/lib/consent";
 
 const destinations = {
@@ -76,5 +76,40 @@ describe("Google Ads contact click conversions", () => {
     saveConsent("granted");
     emitContactClick(click);
     expect(gtag.mock.calls.filter((args) => args[1] === "conversion")).toHaveLength(1);
+  });
+});
+
+describe("Google Ads repair lead conversions", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    window.dataLayer = [];
+    delete window.gtag;
+  });
+  afterEach(() => {
+    localStorage.clear();
+    delete window.gtag;
+    window.dataLayer = [];
+  });
+
+  it.each([
+    ["estimate_lead", "AW-625073096/--kTCJeh_aQdEMi3h6oC"],
+    ["booking_request", "AW-625073096/5zNnCMym_aQdEMi3h6oC"],
+  ] as const)("sends one %s conversion after consent", (kind, destination) => {
+    saveConsent("granted");
+    const gtag = vi.fn();
+    window.gtag = gtag;
+    emitRepairLead(kind, "zh-CN");
+    expect(gtag.mock.calls).toEqual([
+      ["event", "generate_lead", { lead_type: kind, intent: "auto_repair", locale: "zh-CN" }],
+      ["event", "conversion", { send_to: destination, currency: "CAD", transport_type: "beacon" }],
+    ]);
+  });
+
+  it("only records the analytics event without consent", () => {
+    const gtag = vi.fn();
+    window.gtag = gtag;
+    emitRepairLead("estimate_lead", "en");
+    expect(gtag).toHaveBeenCalledTimes(1);
+    expect(gtag.mock.calls[0][1]).toBe("generate_lead");
   });
 });
