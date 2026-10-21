@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { addDays, weekday, type BookableDay } from "@/lib/repair-chat/booking";
 import type { Locale } from "@/lib/site-routes";
+import { emitRepairLead } from "@/lib/analytics";
 
 type BookingCopy = Dictionary["repairChat"]["booking"];
 type State = "loading" | "ready" | "sending" | "done" | "failed" | "taken" | "none";
@@ -97,6 +98,8 @@ export function RepairBooking({
         return;
       }
       setState(response.ok ? "done" : "failed");
+      // A booking request the shop received: the campaigns' conversion.
+      if (response.ok) emitRepairLead("booking_request", locale);
     } catch {
       setState("failed");
     }

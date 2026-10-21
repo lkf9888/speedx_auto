@@ -6,6 +6,7 @@ import { estimateRanges, type EstimateCard } from "@/lib/repair-chat/pricing";
 import { prepareAttachment, type PreparedAttachment } from "@/lib/workbench/prepare-attachment";
 import { company, telLink, whatsappLink } from "@/lib/company";
 import type { Locale } from "@/lib/site-routes";
+import { emitRepairLead } from "@/lib/analytics";
 import { RepairBooking } from "./RepairBooking";
 import { QuoteSheet } from "./QuoteSheet";
 import { TrackedContactLink } from "./TrackedContactLink";
@@ -276,6 +277,8 @@ export function RepairChat({
   const endRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const seenTurns = useRef(1);
+  /** The estimate-lead conversion is reported once per visit, however often contact details are sent. */
+  const leadReported = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Tell the server the visit is over so the shop gets its follow-up email now
@@ -353,6 +356,10 @@ export function RepairChat({
     }
     setLead(next);
     setAwaitingLead(false);
+    if (!leadReported.current) {
+      leadReported.current = true;
+      emitRepairLead("estimate_lead", locale);
+    }
     if (held) {
       appendReply(held.text, held.estimates);
     } else {
