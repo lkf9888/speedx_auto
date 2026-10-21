@@ -652,4 +652,6 @@ export const WORKBENCH_PROFILE: ChatProfile<WorkbenchEvent> = {
     );
     return [{ type: "quote", quote }];
   },
+  describeAdded: (added) =>
+    added.flatMap((e) => (e.type === "quote" ? [`A minimum labor card was added after the others: ${summarizeStaffQuote(e.quote)}`] : [])).join("\n"),
 };

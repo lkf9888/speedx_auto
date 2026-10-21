@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { decodeVehicleKey, describeVehicle, type CatalogApi } from "@/lib/worldpac/catalog";
-import { minimumLaborCard } from "./pricing";
+import { minimumLaborCard, summarizeEstimateForModel } from "./pricing";
 import { WorldpacError } from "@/lib/worldpac/client";
 import { detectCustomerLanguage, safetyWarning, SYSTEM_PROMPT, turnContext } from "./prompt";
 import { matchScript } from "./script";
@@ -82,6 +82,8 @@ export interface ChatProfile<E extends { type: string }> {
   toolFailure(catalogDown: boolean): string;
   /** Cards added once the reply's tools have run (the order's minimum labor). */
   finishTurn?(events: E[], newEstimateId: () => string, cardLocale: "en" | "zh-CN" | "zh-TW"): E[];
+  /** What the model is told about those cards, so it can redo its reply with them. */
+  describeAdded?(added: E[]): string;
 }
 
 export const PUBLIC_PROFILE: ChatProfile<ChatEvent> = {
@@ -110,6 +112,10 @@ export const PUBLIC_PROFILE: ChatProfile<ChatEvent> = {
     const card = minimumLaborCard(cards, cardLocale, newEstimateId());
     return card ? [{ type: "estimate", estimate: { ...card, lang: cardLocale } }] : [];
   },
+  describeAdded: (added) =>
+    added
+      .flatMap((e) => (e.type === "estimate" ? [`A minimum labor charge card was added after the others: ${summarizeEstimateForModel(e.estimate)}`] : []))
+      .join("\n"),
 };
 
 const SAFE_LABEL = /[^A-Za-z0-9 .,/()+-]/g;
@@ -164,6 +170,7 @@ export async function runChat<E extends { type: string } = ChatEvent>(
     onEvent(event);
   };
 
+  let finished = false;
   for (let step = 0; step < MAX_STEPS; step += 1) {
     const response = await client.beta.messages.create({
       model: profile.model,
@@ -186,7 +193,20 @@ export async function runChat<E extends { type: string } = ChatEvent>(
       (block): block is Anthropic.Beta.BetaToolUseBlock => block.type === "tool_use",
     );
     if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
-      profile.finishTurn?.([...events], newEstimateId, cardLocale).forEach(emit);
+      // Cards that depend on the whole reply (the order's minimum labor): add them, then let the
+      // model write its reply again with them in the total. Once per turn, with a step to spare.
+      if (!finished && profile.finishTurn && step < MAX_STEPS - 1) {
+        finished = true;
+        const added = profile.finishTurn([...events], newEstimateId, cardLocale);
+        if (added.length > 0) {
+          added.forEach(emit);
+          messages.push({
+            role: "user",
+            content: `[Shop system note, not from the customer] ${profile.describeAdded?.(added) ?? "Cards were added to this reply."}\nWrite your whole reply again with this included in the total. Do not mention this note.`,
+          });
+          continue;
+        }
+      }
       const warning = profile.preface?.(request.message, language) ?? null;
       const answer = matchScript(
         toPlainText(

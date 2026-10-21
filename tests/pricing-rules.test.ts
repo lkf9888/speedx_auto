@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { encodeVehicleKey, isSoldByVolume, quoteService, sanitizePartQuotes, staffPartQuotes, type CatalogApi, type VehicleRef } from "@/lib/worldpac/catalog";
 import { buildEstimate, laborShortfall, minimumLaborCard } from "@/lib/repair-chat/pricing";
-import { PUBLIC_PROFILE } from "@/lib/repair-chat/agent";
+import { PUBLIC_PROFILE, runChat } from "@/lib/repair-chat/agent";
 import { WORKBENCH_PROFILE } from "@/lib/workbench/assistant";
 import { buildLaborQuote } from "@/lib/workbench/quote";
 import { parseDraftInput } from "@/lib/workbench/alldata-draft";
@@ -237,5 +237,33 @@ describe("surcharge on staff cards", () => {
     expect(surchargeOf({ kind: "labor" }, { unitPrice: 130, unitCost: 100, prices: {} })).toBe(0.3);
     expect(surchargeOf({ kind: "tires" }, { unitPrice: 160, unitCost: 100, prices: { retail: 130, cost: 100 } })).toBe(0.3);
     expect(surchargeOf({ kind: "flat" }, { unitPrice: 80, unitCost: null, prices: {} })).toBeNull();
+  });
+});
+
+describe("the assistant's reply when a minimum labor card is added", () => {
+  it("is written again with the card in the total", async () => {
+    const requests: Array<{ messages: Array<{ role: string; content: unknown }> }> = [];
+    const replies = [
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "get_estimate", input: {} }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "About $80–$111." }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "About $80–$111, plus the $32–$40 minimum labor: $112–$151 in all." }] },
+    ];
+    const client = { beta: { messages: { create: vi.fn(async (params: { messages: Array<{ role: string; content: unknown }> }) => (requests.push(structuredClone(params)), replies.shift()) as never) } } };
+    const card = buildEstimate("2023 Mercedes-Benz GLC300", { status: "ok", serviceName: "Engine Air Filter Element R&R", position: "", laborHours: 0.2, laborNote: "", primaryPartName: "", partOptions: [], otherPartNames: [], partsNote: "" }, "E-1");
+    const profile = { ...PUBLIC_PROFILE, runTool: async () => ({ content: "{}", isError: false, events: [{ type: "estimate" as const, estimate: card }] }) };
+    const seen: ChatEvent[] = [];
+    const result = await runChat(client, {} as CatalogApi, { history: [], message: "GLC air filter?", locale: "en", vehicleKey: null }, (e) => seen.push(e), () => "E-2", profile);
+    expect(result.text).toBe("About $80–$111, plus the $32–$40 minimum labor: $112–$151 in all.");
+    expect(seen.filter((e) => e.type === "estimate").map((e) => (e as { estimate: EstimateCard }).estimate.id)).toEqual(["E-1", "E-2"]);
+    const note = JSON.stringify(requests[2].messages.at(-1));
+    expect(note).toContain("Shop system note");
+    expect(note).toContain("minimum labor charge card");
+    expect(client.beta.messages.create).toHaveBeenCalledTimes(3);
+  });
+
+  it("isn't asked for when no card is added", async () => {
+    const client = { beta: { messages: { create: vi.fn(async () => ({ stop_reason: "end_turn", content: [{ type: "text", text: "Hello" }] }) as never) } } };
+    await runChat(client, {} as CatalogApi, { history: [], message: "hi", locale: "en", vehicleKey: null }, () => {}, () => "E-1");
+    expect(client.beta.messages.create).toHaveBeenCalledTimes(1);
   });
 });
