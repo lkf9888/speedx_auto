@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { encodeVehicleKey, isSoldByVolume, quoteService, sanitizePartQuotes, staffPartQuotes, type CatalogApi, type VehicleRef } from "@/lib/worldpac/catalog";
-import { buildEstimate, chargedHours } from "@/lib/repair-chat/pricing";
+import { buildEstimate, laborShortfall, minimumLaborCard } from "@/lib/repair-chat/pricing";
+import { PUBLIC_PROFILE } from "@/lib/repair-chat/agent";
+import { WORKBENCH_PROFILE } from "@/lib/workbench/assistant";
+import { buildLaborQuote } from "@/lib/workbench/quote";
+import { parseDraftInput } from "@/lib/workbench/alldata-draft";
 import { runTool, type ChatEvent } from "@/lib/repair-chat/tools";
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import { surchargeOf } from "@/lib/workbench/surcharge";
 
-// Shop rules from the ALLDATA invoice smoke test (2026-10-17): WorldPac parts at List, others at cost × 1.3 with the surcharge shown, at least 0.5 h labor per job.
+// Shop rules from the ALLDATA invoice smoke test (2026-10-17): WorldPac parts at List, others at cost × 1.3 with the surcharge shown, at least 0.5 h labor per order (Kevin, 2026-10-21: per order, not per job).
 
 const pna = {
   applications: [{ appID: "1", qtyPerCar: 1 }],
@@ -21,19 +25,43 @@ describe("WorldPac part prices", () => {
   });
 });
 
-describe("labor minimum", () => {
-  const job = { status: "ok" as const, serviceName: "Engine Air Filter Element R&R", position: "", laborHours: 0.2, laborNote: "", primaryPartName: "", partOptions: [], otherPartNames: [], partsNote: "" };
+describe("labor minimum per order", () => {
+  const job = (hours: number, service = "Engine Air Filter Element R&R") =>
+    ({ status: "ok" as const, serviceName: service, position: "", laborHours: hours, laborNote: "", primaryPartName: "", partOptions: [], otherPartNames: [], partsNote: "" });
 
-  it("charges at least 0.5 h and says so", () => {
-    expect(chargedHours(0.2)).toBe(0.5);
-    expect(chargedHours(1.1)).toBe(1.1);
-    const card = buildEstimate("2023 Mercedes-Benz GLC300", job, "E-1");
-    expect([card.laborHours, card.laborWalkIn]).toEqual([0.5, 60]);
-    expect(card.laborNote).toContain("Minimum labor charge 0.5 h (labor guide 0.2 h)");
+  it("leaves each job at its labor-guide hours", () => {
+    expect(buildEstimate("2023 Mercedes-Benz GLC300", job(0.2), "E-1").laborHours).toBe(0.2);
   });
 
-  it("doesn't apply to a job charged at half because it's done with another", () => {
-    expect(buildEstimate("car", { ...job, laborHours: 0.45, halved: true }, "E-2").laborHours).toBe(0.45);
+  it("tops the whole order up to 0.5 h once, not each job", () => {
+    expect(laborShortfall([0.3, 0.15])).toBe(0.05);
+    expect(laborShortfall([0.6])).toBe(0);
+    expect(laborShortfall([])).toBe(0);
+    const engine = buildEstimate("2022 Mitsubishi Outlander", job(0.3), "E-1");
+    const cabin = buildEstimate("2022 Mitsubishi Outlander", job(0.15, "Cabin Air Filter R&R"), "E-2");
+    const extra = minimumLaborCard([engine, cabin], "zh-CN", "E-3")!;
+    expect([extra.service, extra.laborHours, extra.laborWalkIn, extra.vehicle]).toEqual(["最低工时补足（整单不足 0.5 小时）", 0.05, 6, "2022 Mitsubishi Outlander"]);
+    expect(extra.laborNote).toContain("add up to 0.45 h");
+    expect(minimumLaborCard([buildEstimate("car", job(0.8), "E-4")], "en", "E-5")).toBeNull();
+  });
+
+  it("is added after the reply's cards, in both assistants", () => {
+    const cards = [buildEstimate("car", job(0.2), "E-1")];
+    const publicExtra = PUBLIC_PROFILE.finishTurn!(cards.map((estimate) => ({ type: "estimate" as const, estimate })), () => "E-9", "en");
+    expect(publicExtra).toEqual([{ type: "estimate", estimate: expect.objectContaining({ id: "E-9", laborHours: 0.3, lang: "en" }) }]);
+
+    const staffQuote = buildLaborQuote("car", { serviceName: "Cabin Air Filter R&R", position: "", laborHours: 0.15, laborNote: "", primaryPartName: "", otherPartNames: [], partsNote: "", partOptions: [] }, "W-1");
+    const staffExtra = WORKBENCH_PROFILE.finishTurn!([{ type: "quote", quote: staffQuote }], () => "W-2", "zh-CN");
+    expect(staffExtra).toHaveLength(1);
+    expect(staffExtra[0]).toMatchObject({ type: "quote", quote: { id: "W-2", service: "最低工时补足（整单不足 0.5 小时）", labor: { hours: 0.35, walkIn: 42 } } });
+    expect(WORKBENCH_PROFILE.finishTurn!([], () => "W-3", "en")).toEqual([]);
+  });
+
+  it("is added to ALLDATA drafts whose labor is under 0.5 h", () => {
+    const draft = parseDraftInput({ lines: [{ kind: "labor", description: "Cabin filter", quantity: 0.2, unit_price: 120 }, { kind: "part", description: "Filter", quantity: 1, unit_price: 30 }] }, "D-1");
+    expect("lines" in draft && draft.lines.at(-1)).toMatchObject({ kind: "labor", description: "Minimum labor charge (order under 0.5 h)", quantity: 0.3, unitPrice: 120 });
+    const enough = parseDraftInput({ lines: [{ kind: "labor", description: "Pads", quantity: 0.9, unit_price: 120 }] }, "D-2");
+    expect("lines" in enough && enough.lines).toHaveLength(1);
   });
 });
 

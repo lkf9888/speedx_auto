@@ -29,6 +29,7 @@ import { getTatoClient, type FleetCar, type FleetTrip, type TatoClient } from "@
 import { getWheelmartClient, type WheelmartClient } from "@/lib/wheelmart/client";
 import { liveWheelmartListings, tireMarkup } from "@/lib/wheelmart/listings";
 import { MAX_NOTE_LENGTH } from "./memory";
+import { laborShortfall, MIN_LABOR_HOURS } from "@/lib/repair-chat/pricing";
 import { customerText } from "./customer-text";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
 import { buildFlatQuote, buildLaborQuote, buildPartsQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
@@ -65,6 +66,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - If staff ask for text to send a customer, write it with customer prices only, never cost or margin (the card's "copy for customer" button does the same). Put any note for staff first; then a line "—— 发给客人 ——" and the customer text, with nothing after it, so staff can copy everything below that line.
 
 # Shop labor rules
+- Minimum labor is per order, not per job: at least 0.5 h in total. When the labor jobs you quote in one reply add up to less, a "最低工时补足" card for the difference is added automatically after the others; count it in totals. ALLDATA drafts get a "Minimum labor charge" line added the same way when their labor lines total under 0.5 h.
 - Jobs done at the same time in the same place (front pads + front rotors, pads + calipers on one axle, water pump with the timing belt): the job with the most hours is charged in full and every other job at half its hours. Example: front pads 0.9 h + front rotors 0.9 h = 0.9 + 0.45 = 1.35 h. Quote both with get_estimate, each with done_with_service_id / done_with_position pointing at the other: the cards then already show the halved hours. When one of them has no labor job (priced with find_parts), apply the rule yourself and say so. Use the charged hours in ALLDATA drafts (label the reduced line "同时施工 50%").
 - Labor-guide times for struts/shocks, control arms, wheel bearings/hubs, CV axles, tie rods and calipers are per side. When staff ask for both sides (两边 / 一对 / left and right), call get_estimate with both_sides true: the card, the customer text and your numbers then all show labor × 2 and both sides' parts. Never double in your reply what the card shows single. Pads and rotors come as an axle set, so they are never both_sides. Left and right are often different part numbers: tell staff to order one of each.
 - Tires must meet the vehicle's load index and speed rating (the placard or the original tire). Never offer or approve a lower load index or speed rating, and a customer's written consent or waiver doesn't change that: say the shop can't install it and give tires that meet the spec.
@@ -551,7 +553,7 @@ export async function runWorkbenchTool(
     const charged = !shared
       ? job
       : shared.halved
-        ? { ...job, halved: true, laborHours: shared.chargedHours, laborNote: `与「${shared.otherName}」同时施工，工时按一半（原 ${job.laborHours} h → ${shared.chargedHours} h）。${job.laborNote}` }
+        ? { ...job, laborHours: shared.chargedHours, laborNote: `与「${shared.otherName}」同时施工，工时按一半（原 ${job.laborHours} h → ${shared.chargedHours} h）。${job.laborNote}` }
         : { ...job, laborNote: `与「${shared.otherName}」同时施工：本项工时全收，对方按一半。${job.laborNote}` };
     return quoteOutcome(buildLaborQuote(describeVehicle(vehicle), charged, newEstimateId()));
   }
@@ -628,4 +630,26 @@ export const WORKBENCH_PROFILE: ChatProfile<WorkbenchEvent> = {
   statusEvent: (name) => ({ type: "status", status: statusForTool(name) }),
   toolFailure: (catalogDown) =>
     catalogDown ? "WorldPac is not responding right now. Tell staff to try again in a minute." : "The lookup failed. Tell staff to try again.",
+  // The shop's minimum labor is per order: one top-up card when this reply's labor jobs add up to less.
+  finishTurn: (events, newEstimateId) => {
+    const labor = events.flatMap((e) => (e.type === "quote" && e.quote.kind === "labor" && e.quote.labor && e.quote.labor.hours > 0 ? [e.quote] : []));
+    const hours = laborShortfall(labor.map((q) => q.labor!.hours));
+    if (!hours) return [];
+    const total = Math.round(labor.reduce((sum, q) => sum + q.labor!.hours, 0) * 100) / 100;
+    const quote = buildLaborQuote(
+      labor[0].vehicle,
+      {
+        serviceName: "最低工时补足（整单不足 0.5 小时）",
+        position: "",
+        laborHours: hours,
+        laborNote: `店里每单最低收 ${MIN_LABOR_HOURS} h 工时；上面几项一共 ${total} h。`,
+        primaryPartName: "",
+        otherPartNames: [],
+        partsNote: "",
+        partOptions: [],
+      },
+      newEstimateId(),
+    );
+    return [{ type: "quote", quote }];
+  },
 };

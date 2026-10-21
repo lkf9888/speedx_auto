@@ -3,7 +3,7 @@
  * public never sees — every part option, the shop's cost, margin, labor hours
  * and the referral price — plus a customer-ready text with no cost in it.
  */
-import { chargedHours, MIN_LABOR_HOURS, WALK_IN_LABOR_RATE, REFERRAL_LABOR_MULTIPLIER, type EstimateCard } from "@/lib/repair-chat/pricing";
+import { WALK_IN_LABOR_RATE, REFERRAL_LABOR_MULTIPLIER, type EstimateCard } from "@/lib/repair-chat/pricing";
 import type { StaffPartOption } from "@/lib/worldpac/catalog";
 import { customerText } from "./customer-text";
 import { surchargeOf } from "./surcharge";
@@ -85,13 +85,11 @@ export interface LaborJob {
   otherPartNames: string[];
   partsNote: string;
   partOptions: StaffPartOption[];
-  /** Done together with another job and charged at half: the shop's minimum doesn't apply. */
-  halved?: boolean;
 }
 
 export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env: NodeJS.ProcessEnv = process.env, now = new Date()): StaffQuote {
   const field = costField(env);
-  const hours = job.halved ? job.laborHours : chargedHours(job.laborHours);
+  const hours = job.laborHours;
   const walkIn = money(hours * WALK_IN_LABOR_RATE);
   const referral = money(hours * WALK_IN_LABOR_RATE * REFERRAL_LABOR_MULTIPLIER);
   const options = job.partOptions.map((p) => {
@@ -134,7 +132,6 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
     );
   }
   const notes = [
-    hours > job.laborHours ? `工时手册 ${job.laborHours} h，按店里最低 ${MIN_LABOR_HOURS} h 收。` : "",
     job.laborNote && `工时说明：${job.laborNote}`,
     job.partsNote && `零件：${job.partsNote}`,
     job.otherPartNames.length ? `可能还需要：${job.otherPartNames.join("、")}` : "",

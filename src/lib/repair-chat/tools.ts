@@ -431,7 +431,6 @@ async function laborQuote(api: CatalogApi, vehicle: VehicleRef, serviceId: numbe
   if (shared?.halved) {
     return {
       ...quoted,
-      halved: true,
       laborHours: shared.chargedHours,
       laborNote: `Done together with ${shared.otherName}: labor charged at half (${quoted.laborHours} h → ${shared.chargedHours} h). ${quoted.laborNote}`.trim(),
     };

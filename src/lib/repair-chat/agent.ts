@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { decodeVehicleKey, describeVehicle, type CatalogApi } from "@/lib/worldpac/catalog";
+import { minimumLaborCard } from "./pricing";
 import { WorldpacError } from "@/lib/worldpac/client";
 import { detectCustomerLanguage, safetyWarning, SYSTEM_PROMPT, turnContext } from "./prompt";
 import { matchScript } from "./script";
@@ -79,6 +80,8 @@ export interface ChatProfile<E extends { type: string }> {
   preface?(message: string, language: string): string | null;
   /** What the model is told when a lookup fails. */
   toolFailure(catalogDown: boolean): string;
+  /** Cards added once the reply's tools have run (the order's minimum labor). */
+  finishTurn?(events: E[], newEstimateId: () => string, cardLocale: "en" | "zh-CN" | "zh-TW"): E[];
 }
 
 export const PUBLIC_PROFILE: ChatProfile<ChatEvent> = {
@@ -102,6 +105,11 @@ export const PUBLIC_PROFILE: ChatProfile<ChatEvent> = {
     catalogDown
       ? "The parts catalog is temporarily unavailable. Offer to have the team confirm the price by WhatsApp or phone."
       : "Lookup failed. Offer to have the team confirm by WhatsApp or phone.",
+  finishTurn: (events, newEstimateId, cardLocale) => {
+    const cards = events.filter((e): e is Extract<ChatEvent, { type: "estimate" }> => e.type === "estimate").map((e) => e.estimate);
+    const card = minimumLaborCard(cards, cardLocale, newEstimateId());
+    return card ? [{ type: "estimate", estimate: { ...card, lang: cardLocale } }] : [];
+  },
 };
 
 const SAFE_LABEL = /[^A-Za-z0-9 .,/()+-]/g;
@@ -178,6 +186,7 @@ export async function runChat<E extends { type: string } = ChatEvent>(
       (block): block is Anthropic.Beta.BetaToolUseBlock => block.type === "tool_use",
     );
     if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
+      profile.finishTurn?.([...events], newEstimateId, cardLocale).forEach(emit);
       const warning = profile.preface?.(request.message, language) ?? null;
       const answer = matchScript(
         toPlainText(

@@ -77,8 +77,6 @@ export type ServiceQuote =
       otherPartNames: string[];
       /** Why parts are not priced, when they aren't (e.g. fluids by volume). */
       partsNote: string;
-      /** Done together with another job and charged at half: the shop's minimum doesn't apply. */
-      halved?: boolean;
     }
   | { status: "need_position"; positions: string[] }
   | { status: "need_details"; questions: VehicleQuestion[] }
@@ -877,8 +875,6 @@ async function extraPartData(api: CatalogApi, vehicle: VehicleRef, kind: ExtraPa
     primaryPartName: rule.part,
     otherPartNames: [],
     partsNote: BY_NAME_NOTE,
-    // Shop time, not a guide time: the minimum and the half-time rule don't apply.
-    halved: true,
   };
   return { status: "found" as const, pna, common, count, kind };
 }

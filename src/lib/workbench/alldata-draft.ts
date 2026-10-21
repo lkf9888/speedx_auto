@@ -5,6 +5,7 @@
  * the button on the draft card. ALLDATA blocks server-side sign-in, so the
  * server never talks to ALLDATA.
  */
+import { laborShortfall } from "@/lib/repair-chat/labor-minimum";
 
 export type DraftLineKind = "part" | "labor";
 
@@ -91,6 +92,12 @@ export function parseDraftInput(input: Record<string, unknown>, id: string, now 
       unitCost: kind === "part" && unitCost !== null && unitCost >= 0 ? money(unitCost) : null,
       taxable: line.taxable !== false,
     });
+  }
+  // The shop bills at least 0.5 h of labor per order.
+  const laborLines = lines.filter((l) => l.kind === "labor");
+  const shortfall = laborShortfall(laborLines.map((l) => l.quantity));
+  if (shortfall && lines.length < MAX_DRAFT_LINES) {
+    lines.push({ kind: "labor", description: "Minimum labor charge (order under 0.5 h)", partNumber: "", quantity: shortfall, unitPrice: laborLines[0].unitPrice, unitCost: null, taxable: true });
   }
   const customerRaw = (input.customer ?? null) as Record<string, unknown> | null;
   const customer =

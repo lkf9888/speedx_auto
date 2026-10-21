@@ -1,6 +1,9 @@
 import type { PartOption, ServiceQuote } from "@/lib/worldpac/catalog";
 import { flatWord, flatWordEn, type FlatQuote } from "./flat-price";
 import type { TireOption } from "./tires";
+import { laborShortfall, MIN_LABOR_HOURS } from "./labor-minimum";
+
+export { laborShortfall, MIN_LABOR_HOURS };
 
 /** Posted shop labor rate for walk-in customers, CAD per hour. */
 export const WALK_IN_LABOR_RATE = 120;
@@ -80,12 +83,28 @@ export function estimateRanges(card: EstimateCard): EstimateRanges {
   };
 }
 
-/** The shop charges at least this much labor for any job. */
-export const MIN_LABOR_HOURS = 0.5;
-
-/** Hours charged for a job: the labor guide's, but never under the shop's minimum. */
-export function chargedHours(guideHours: number): number {
-  return guideHours > 0 ? Math.max(MIN_LABOR_HOURS, guideHours) : 0;
+/** The order's minimum-labor line as a card, or null when the jobs already reach it. */
+export function minimumLaborCard(cards: EstimateCard[], locale: string, id: string, now = new Date()): EstimateCard | null {
+  const labor = cards.filter((c) => (c.kind ?? "labor") === "labor" && c.laborHours > 0);
+  const hours = laborShortfall(labor.map((c) => c.laborHours));
+  if (!hours) return null;
+  const total = Math.round(labor.reduce((sum, c) => sum + c.laborHours, 0) * 100) / 100;
+  return buildEstimate(
+    labor[0].vehicle,
+    {
+      status: "ok",
+      serviceName: flatWord(locale, "min_labor"),
+      position: "",
+      laborHours: hours,
+      laborNote: `The shop charges at least ${MIN_LABOR_HOURS} h of labor per order; the jobs above add up to ${total} h.`,
+      primaryPartName: "",
+      partOptions: [],
+      otherPartNames: [],
+      partsNote: "",
+    },
+    id,
+    now,
+  );
 }
 
 export function laborCost(hours: number, referral = false): number {
@@ -111,7 +130,7 @@ export function buildEstimate(
   const totals = partOptions.map((p) => p.total);
   const partsLow = totals.length ? Math.min(...totals) : 0;
   const partsHigh = totals.length ? Math.max(...totals) : 0;
-  const hours = quote.halved ? quote.laborHours : chargedHours(quote.laborHours);
+  const hours = quote.laborHours;
   const laborWalkIn = laborCost(hours);
   const laborReferral = laborCost(hours, true);
   return {
@@ -132,7 +151,7 @@ export function buildEstimate(
     totalHigh: money(partsHigh + laborWalkIn),
     referralTotalLow: money(partsLow + laborReferral),
     referralTotalHigh: money(partsHigh + laborReferral),
-    laborNote: hours > quote.laborHours ? `Minimum labor charge ${MIN_LABOR_HOURS} h (labor guide ${quote.laborHours} h). ${quote.laborNote}`.trim() : quote.laborNote,
+    laborNote: quote.laborNote,
     otherPartNames: quote.otherPartNames,
     partsNote: quote.partsNote ?? "",
     createdAt: now.toISOString(),
