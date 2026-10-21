@@ -8,7 +8,7 @@ import type { PriceGuideCopy } from "@/i18n/types";
 export const enPriceGuide: PriceGuideCopy = {
   metaTitle: "Car Repair Prices in Vancouver & Richmond, 2026",
   metaDescription:
-    "Real 2026 repair prices from a Richmond, BC shop: brake pads, batteries, alternators, struts, oil changes and more, listed by vehicle. Parts and labor, before tax.",
+    "Real 2026 repair prices from a Richmond, BC shop, by vehicle: brake pads, batteries, alternators, struts, oil changes. Or get a free online estimate.",
   eyebrow: "Price guide",
   title: "Car Repair Prices in Richmond and Metro Vancouver (2026)",
   navLabel: "Price guide",
@@ -99,7 +99,7 @@ export const enPriceGuide: PriceGuideCopy = {
 export const zhCNPriceGuide: PriceGuideCopy = {
   metaTitle: "温哥华修车价格参考 2026：刹车片、电瓶、减震",
   metaDescription:
-    "列治文修车厂的 2026 年真实维修价格：刹车片、电瓶、发电机、减震器、换机油等，按车型列出，含配件和工时，税前价格。",
+    "列治文修车厂的 2026 年真实维修价格：刹车片、电瓶、发电机、减震器、换机油等，按车型列出，含配件和工时。也可网上免费估价，几分钟出参考价。",
   eyebrow: "价格参考",
   title: "大温哥华汽车维修价格参考（2026）",
   navLabel: "价格参考",
@@ -185,7 +185,7 @@ export const zhCNPriceGuide: PriceGuideCopy = {
 export const zhTWPriceGuide: PriceGuideCopy = {
   metaTitle: "溫哥華維修價錢參考 2026：煞車片、電池、避震",
   metaDescription:
-    "列治文車房的 2026 年真實維修價錢：煞車片、電池、發電機、避震器、換機油等，按車款列出，連零件及工時，未連稅價錢。",
+    "列治文車房的 2026 年真實維修價錢：煞車片、電池、發電機、避震器、換機油等，按車款列出，連零件及工時。亦可網上免費估價，幾分鐘有參考價。",
   eyebrow: "價錢參考",
   title: "大溫哥華汽車維修價錢參考（2026）",
   navLabel: "價錢參考",

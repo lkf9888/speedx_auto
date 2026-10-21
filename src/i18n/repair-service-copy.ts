@@ -87,7 +87,7 @@ const enSeeds: ServiceSeeds = {
   maintenance: {
     metaTitle: "Oil Change & Car Maintenance in Richmond, BC",
     metaDescription:
-      "Oil changes from $95 with oil and filter, tire changes, A/C recharge, belts, filters, and scheduled maintenance in Richmond near YVR. Labor by labor-guide times.",
+      "Oil changes from $95 with oil and filter, tire changes, A/C recharge and scheduled maintenance in Richmond near YVR. Free online estimate for your car.",
     eyebrow: "Maintenance",
     title: "Oil Change and Scheduled Maintenance",
     serviceType: "Vehicle maintenance",
@@ -197,7 +197,7 @@ const enSeeds: ServiceSeeds = {
   brakes: {
     metaTitle: "Brake Repair in Richmond, BC: Pads, Rotors, Fluid",
     metaDescription:
-      "Brake pads, rotors, calipers, and brake fluid in Richmond near YVR. Front pads on most 2015–2020 cars: $185–$444 including parts. Priced by labor-guide times.",
+      "Brake pads, rotors, calipers and fluid in Richmond near YVR. Front pads on most 2015–2020 cars: $185–$444 with parts. Free online estimate for your car.",
     eyebrow: "Brakes",
     title: "Brake Inspection and Repair",
     serviceType: "Brake repair",
@@ -296,7 +296,7 @@ const enSeeds: ServiceSeeds = {
   diagnostics: {
     metaTitle: "Check Engine Light & Car Electrical Repair in Richmond",
     metaDescription:
-      "Check-engine light, battery, alternator, starter, and sensor diagnosis in Richmond near YVR. Real price examples; Labor by labor-guide times.",
+      "Check-engine light, battery, alternator, starter and sensor diagnosis in Richmond near YVR. Real price examples and a free online estimate for your car.",
     eyebrow: "Diagnostics and electrical",
     title: "Check-Engine Light, Battery, and Electrical Diagnosis",
     serviceType: "Vehicle diagnostics",
@@ -390,7 +390,7 @@ const enSeeds: ServiceSeeds = {
   suspension: {
     metaTitle: "Suspension & Steering Repair in Richmond, BC",
     metaDescription:
-      "Struts, shocks, sway bar links, wheel bearings, and CV axles in Richmond near YVR. Real price examples; Labor by labor-guide times.",
+      "Struts, shocks, sway bar links, wheel bearings and CV axles in Richmond near YVR. Real price examples and a free online estimate for your car.",
     eyebrow: "Suspension and steering",
     title: "Suspension and Steering Repair",
     serviceType: "Suspension and steering repair",
@@ -489,7 +489,7 @@ const enSeeds: ServiceSeeds = {
   "tesla-ev": {
     metaTitle: "Tesla & EV Repair in Richmond, BC",
     metaDescription:
-      "Independent Tesla and EV repair in Richmond near YVR: high-voltage battery checks, drive motor repair, fault-code diagnosis, brakes, suspension, and tires.",
+      "Independent Tesla and EV repair in Richmond near YVR: battery checks, drive motor repair, fault codes, brakes, suspension and tires. Free online estimate.",
     eyebrow: "Tesla and electric vehicles",
     title: "Tesla and Electric Vehicle Repair",
     serviceType: "Electric vehicle repair",
@@ -602,7 +602,7 @@ const zhCNSeeds: ServiceSeeds = {
   maintenance: {
     metaTitle: "列治文换机油与汽车保养",
     metaDescription:
-      "列治文换机油 $95 起（含机油机滤），换胎、空调加冷媒、皮带、滤芯、定期保养。工时费按标准工时计费。",
+      "列治文换机油 $95 起（含机油机滤），换胎、空调加冷媒、定期保养，靠近 YVR。网上免费估价，几分钟出参考价。",
     eyebrow: "保养",
     title: "换机油与定期保养",
     serviceType: "汽车保养",
@@ -708,7 +708,7 @@ const zhCNSeeds: ServiceSeeds = {
   brakes: {
     metaTitle: "列治文刹车维修：刹车片、刹车盘、刹车油",
     metaDescription:
-      "列治文刹车片、刹车盘、卡钳、刹车油维修，靠近 YVR。多数 2015–2020 年车型换前刹车片含配件 $185–$444。工时费按标准工时计费。",
+      "列治文刹车片、刹车盘、卡钳、刹车油维修，靠近 YVR。多数 2015–2020 年车型换前刹车片含配件 $185–$444。网上免费估价。",
     eyebrow: "刹车",
     title: "刹车检查与维修",
     serviceType: "刹车维修",
@@ -802,7 +802,7 @@ const zhCNSeeds: ServiceSeeds = {
   diagnostics: {
     metaTitle: "列治文发动机故障灯检测与汽车电路维修",
     metaDescription:
-      "列治文发动机故障灯、电瓶、发电机、启动马达、传感器检测与维修，靠近 YVR。附真实报价实例；工时费按标准工时计费。",
+      "列治文发动机故障灯、电瓶、发电机、启动马达、传感器检测与维修，靠近 YVR。附真实报价实例，也可网上免费估价。",
     eyebrow: "故障诊断与电路",
     title: "发动机故障灯、电瓶与电路诊断",
     serviceType: "汽车故障诊断",
@@ -889,7 +889,7 @@ const zhCNSeeds: ServiceSeeds = {
   suspension: {
     metaTitle: "列治文悬挂与转向维修",
     metaDescription:
-      "列治文减震器、平衡杆连杆、轮毂轴承、半轴维修，靠近 YVR。附真实报价实例；工时费按标准工时计费。",
+      "列治文减震器、平衡杆连杆、轮毂轴承、半轴维修，靠近 YVR。附真实报价实例，也可网上免费估价。",
     eyebrow: "悬挂与转向",
     title: "悬挂与转向维修",
     serviceType: "悬挂与转向维修",
@@ -982,7 +982,7 @@ const zhCNSeeds: ServiceSeeds = {
   "tesla-ev": {
     metaTitle: "列治文特斯拉维修 · 电动车维修",
     metaDescription:
-      "列治文独立特斯拉和电动车维修，靠近 YVR：高压电池检测、驱动电机维修、故障码诊断、刹车、悬挂、轮胎。工时费按标准工时计费。普通话、粤语、英语服务。",
+      "列治文独立特斯拉和电动车维修，靠近 YVR：高压电池检测、驱动电机维修、故障码诊断、刹车、悬挂、轮胎。可网上免费估价。普通话、粤语、英语服务。",
     eyebrow: "特斯拉与电动车",
     title: "特斯拉与电动车维修",
     serviceType: "电动车维修",
@@ -1086,7 +1086,7 @@ const zhTWSeeds: ServiceSeeds = {
   maintenance: {
     metaTitle: "列治文換機油及汽車保養",
     metaDescription:
-      "列治文車房換機油 $95 起（已包機油及機油格），換胎、冷氣加雪種、皮帶、濾網、定期保養。工時費按標準工時收費。",
+      "列治文車房換機油 $95 起（已包機油及機油格），換胎、冷氣加雪種、定期保養，鄰近 YVR。網上免費估價，幾分鐘有參考價。",
     eyebrow: "保養",
     title: "換機油及定期保養",
     serviceType: "汽車保養",
@@ -1192,7 +1192,7 @@ const zhTWSeeds: ServiceSeeds = {
   brakes: {
     metaTitle: "列治文煞車維修：煞車片、煞車碟、煞車油",
     metaDescription:
-      "列治文車房煞車片、煞車碟、卡鉗、煞車油維修，鄰近 YVR。大部分 2015–2020 年車款換前煞車片連零件 $185–$444。工時費按標準工時收費。",
+      "列治文車房煞車片、煞車碟、卡鉗、煞車油維修，鄰近 YVR。大部分 2015–2020 年車款換前煞車片連零件 $185–$444。網上免費估價。",
     eyebrow: "煞車",
     title: "煞車檢查及維修",
     serviceType: "煞車維修",
@@ -1286,7 +1286,7 @@ const zhTWSeeds: ServiceSeeds = {
   diagnostics: {
     metaTitle: "列治文引擎故障燈檢查及汽車電路維修",
     metaDescription:
-      "列治文車房引擎故障燈、電池、發電機、摩打、感應器檢查及維修，鄰近 YVR。附真實報價實例；工時費按標準工時收費。",
+      "列治文車房引擎故障燈、電池、發電機、摩打、感應器檢查及維修，鄰近 YVR。附真實報價實例，亦可網上免費估價。",
     eyebrow: "故障診斷及電路",
     title: "引擎故障燈、電池及電路診斷",
     serviceType: "汽車故障診斷",
@@ -1373,7 +1373,7 @@ const zhTWSeeds: ServiceSeeds = {
   suspension: {
     metaTitle: "列治文避震及轉向維修",
     metaDescription:
-      "列治文車房避震器、平衡桿連桿、輪軸承、半軸維修，鄰近 YVR。附真實報價實例；工時費按標準工時收費。",
+      "列治文車房避震器、平衡桿連桿、輪軸承、半軸維修，鄰近 YVR。附真實報價實例，亦可網上免費估價。",
     eyebrow: "避震及轉向",
     title: "避震及轉向維修",
     serviceType: "避震及轉向維修",
@@ -1466,7 +1466,7 @@ const zhTWSeeds: ServiceSeeds = {
   "tesla-ev": {
     metaTitle: "列治文 Tesla 維修 · 電動車維修",
     metaDescription:
-      "列治文獨立 Tesla 及電動車維修，鄰近 YVR：高壓電池檢測、電動馬達維修、故障碼診斷、煞車、避震、輪胎。工時費按標準工時收費。粵語、普通話、英語服務。",
+      "列治文獨立 Tesla 及電動車維修，鄰近 YVR：高壓電池檢測、電動馬達維修、故障碼診斷、煞車、避震、輪胎。可網上免費估價。粵語、普通話、英語服務。",
     eyebrow: "Tesla 及電動車",
     title: "Tesla 及電動車維修",
     serviceType: "電動車維修",

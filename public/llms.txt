@@ -15,14 +15,16 @@ Primary pages:
 
 Auto repair facts (details and price examples on the auto repair page):
 
-- Labor: $120 CAD per hour before tax, billed by industry-standard labor-guide times (ALLDATA)
+- Labor: billed by industry-standard labor-guide times (ALLDATA)
 - Parts: WorldPac, quoted at list price
 - Flat prices before tax: oil change from $95 (oil and filter included), tire change from $25 per tire, A/C recharge $150 (R-134a) or $230 (R-1234yf)
 - Electric vehicles: mainly Tesla; high-voltage battery checks, drive motor repair, fault-code diagnosis (https://speedxrental.com/en/auto-repair/tesla-ev)
 - Body work and paint: quoted case by case; transmission repair and auto glass replacement are not offered
 - Languages: English, Cantonese, Mandarin
 - Payment: cash, credit card, WeChat Pay
-- Appointments required; an online AI estimate assistant on the auto repair page gives ballpark prices
+- Appointments required
+- Online estimate: a free AI estimate assistant at https://speedxrental.com/en/auto-repair#estimate (also /zh-CN/ and /zh-TW/). Describe the vehicle and the problem, photos welcome; it suggests likely causes and gives a price range from labor-guide times and current parts list prices, widened 10% each way. The customer leaves a name and phone number to see it; the final quote follows an inspection
+- Real 2026 price examples by vehicle (brake pads, batteries, alternators, struts and more): https://speedxrental.com/en/auto-repair/prices
 
 Public contact details:
 

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { en } from "@/i18n/en";
 import { zhCN } from "@/i18n/zh-CN";
@@ -144,5 +146,28 @@ describe("localized auto repair copy", () => {
 
     expect(strip(zhTW.autoRepair)).not.toMatch(simplifiedOnly);
     expect(strip(zhCN.autoRepair)).not.toMatch(traditionalOnly);
+  });
+});
+
+describe("repair search snippets", () => {
+  const estimate = { en: /free online estimate/i, "zh-CN": /网上免费估价/, "zh-TW": /網上免費估價/ };
+
+  it.each(dictionaries)("mention the online estimate in every %s repair description", (locale, dict) => {
+    const repair = dict.autoRepair;
+    const descriptions = [
+      repair.metaDescription,
+      repair.priceGuide.metaDescription,
+      ...repairServiceSlugs.map((slug) => repair.services[slug].metaDescription),
+    ];
+    for (const description of descriptions) {
+      expect(description).toMatch(estimate[locale]);
+    }
+  });
+
+  it("keeps the hourly rate out of llms.txt and points AI readers at the estimate", () => {
+    const llms = readFileSync(join(process.cwd(), "public", "llms.txt"), "utf8");
+    expect(llms).not.toMatch(/per hour|\/h\b|\$120/i);
+    expect(llms).toContain("https://speedxrental.com/en/auto-repair#estimate");
+    expect(llms).toContain("https://speedxrental.com/en/auto-repair/prices");
   });
 });

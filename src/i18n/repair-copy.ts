@@ -18,7 +18,7 @@ import type { AutoRepairCopy } from "@/i18n/types";
 export const enAutoRepair: AutoRepairCopy = {
   metaTitle: "Auto Repair & Tesla Service in Richmond, BC",
   metaDescription:
-    "Richmond auto repair near YVR: maintenance, brakes, diagnostics, suspension and Tesla/EV service. Labor billed by industry-standard times. English, Cantonese, Mandarin.",
+    "Richmond auto repair near YVR: brakes, maintenance, diagnostics, suspension and Tesla/EV. Free online estimate in minutes. English, Cantonese, Mandarin.",
   eyebrow: "Auto repair · Richmond, BC",
   title: "Auto Repair & EV Service in Richmond, BC",
   summary:
@@ -257,7 +257,7 @@ export const enAutoRepair: AutoRepairCopy = {
 export const zhCNAutoRepair: AutoRepairCopy = {
   metaTitle: "列治文汽车维修 · 特斯拉电动车维修",
   metaDescription:
-    "列治文修车厂，靠近温哥华机场：保养、刹车、故障诊断、悬挂转向、特斯拉电动车维修。工时费按行业标准工时计费。普通话、粤语、英语服务。",
+    "列治文修车厂，靠近温哥华机场：保养、刹车、故障诊断、悬挂转向、特斯拉电动车维修。网上免费估价，几分钟出参考价。普通话、粤语、英语服务。",
   eyebrow: "汽车维修 · 列治文",
   title: "列治文汽车与电动车机械维修",
   heroSummary:
@@ -452,7 +452,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
 const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide" | "landing"> = {
   metaTitle: "列治文車房 · 汽車維修與 Tesla 電動車維修",
   metaDescription:
-    "列治文車房，近溫哥華機場：保養、煞車、故障診斷、避震轉向、Tesla 電動車維修。工時費按行業標準工時收費。粵語、普通話、英語服務。",
+    "列治文車房，近溫哥華機場：保養、煞車、故障診斷、避震轉向、Tesla 電動車維修。網上免費估價，幾分鐘有參考價。粵語、普通話、英語服務。",
   eyebrow: "汽車維修 · 列治文",
   title: "列治文汽車與電動車機械維修",
   heroSummary:
