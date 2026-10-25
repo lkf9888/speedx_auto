@@ -5,6 +5,7 @@ import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
 import { Container } from "@/components/Container";
 import { ContactBar } from "@/components/ContactBar";
+import { HostingEstimateChat } from "@/components/HostingEstimateChat";
 import { LocationMap } from "@/components/LocationMap";
 import { StructuredData } from "@/components/StructuredData";
 import { company } from "@/lib/company";
@@ -84,11 +85,15 @@ export default async function HostingPage({
                 intent="hosting"
                 placement="hero"
                 pagePath={pagePath}
+                quoteHref="#income-estimate"
+                quoteLabel={dict.hostingEstimate.cta}
               />
             </div>
           </div>
         </Container>
       </section>
+
+      <HostingEstimateChat locale={locale} dict={dict} pagePath={pagePath} />
 
       <section className="border-y border-ink-100 bg-white py-12">
         <Container>
@@ -236,6 +241,8 @@ export default async function HostingPage({
                 placement="middle"
                 pagePath={pagePath}
                 theme="dark"
+                quoteHref="#income-estimate"
+                quoteLabel={dict.hostingEstimate.cta}
               />
             </div>
           </div>

@@ -21,6 +21,8 @@ interface ContactBarProps {
   theme?: "light" | "dark";
   /** Anchor of the AI estimate assistant; adds the prominent quote button above the contact buttons. */
   quoteHref?: string;
+  /** Text of that button; the repair wording by default. */
+  quoteLabel?: string;
   /** Prefilled WhatsApp message, so the shop can tell which page or ad the chat came from. */
   whatsappText?: string;
 }
@@ -34,6 +36,7 @@ export function ContactBar({
   variant = "inline",
   theme = "light",
   quoteHref,
+  quoteLabel,
   whatsappText,
 }: ContactBarProps) {
   const whatsappHref = whatsappText
@@ -137,7 +140,7 @@ export function ContactBar({
           data-ai-quote-cta
           className="mb-3 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 to-brand-700 px-5 py-3.5 text-base font-bold text-white shadow-lg shadow-brand-500/30 transition hover:from-brand-600 hover:to-brand-800 sm:inline-flex sm:w-auto"
         >
-          <SparkleIcon /> {dict.cta.aiQuote}
+          <SparkleIcon /> {quoteLabel ?? dict.cta.aiQuote}
         </a>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
