@@ -19,7 +19,9 @@ describe("income estimate", () => {
     const card = out.card;
     expect(MANAGEMENT_COMMISSION).toBe(0.3);
     // TATO's estimateVehicle gives $8,571 gross for this car over the same twelve months.
-    expect(card.annualNet).toBe(6000);
+    expect(card.annualNet).toBe(card.months.reduce((sum, m) => sum + m.net, 0));
+    expect(card.annualNet).toBeGreaterThanOrEqual(5995);
+    expect(card.annualNet).toBeLessThanOrEqual(6000);
     expect(card.months).toHaveLength(12);
     expect(card.months[0]).toMatchObject({ month: 11, year: 2026 });
     expect(card.months[11]).toMatchObject({ month: 10, year: 2027 });
@@ -92,11 +94,11 @@ describe("hosting estimate endpoints", () => {
       pending: { text: string; cards: Array<{ annualNet: number }> };
     };
     expect(released.pending.text).toContain("$6,000");
-    expect(released.pending.cards[0].annualNet).toBe(6000);
+    expect(released.pending.cards[0].annualNet).toBe(5998);
     const email = (d.mailer as ReturnType<typeof vi.fn>).mock.calls[0][0] as { subject: string; text: string };
     expect(email.subject).toContain("Amy Chen 604-555-0100");
     expect(email.text).toContain("2021 Toyota RAV4");
-    expect(email.text).toContain("$6000");
+    expect(email.text).toContain("$5998");
     // Name and phone never reach the AI model.
     expect(JSON.stringify(seen)).not.toContain("604-555-0100");
     expect(JSON.stringify(seen)).not.toContain("Amy");
@@ -142,7 +144,7 @@ describe("hosting page estimate chat", () => {
     await userEvent.click(within(gate).getByRole("button", { name: zhCN.hostingEstimate.gate.submit }));
 
     const report = await screen.findByTestId("income-report");
-    expect(report).toHaveTextContent("$6,000");
+    expect(report).toHaveTextContent("$5,998");
     expect(report).toHaveTextContent(zhCN.hostingEstimate.report.afterFee);
     expect(within(report).getAllByRole("listitem").length).toBeGreaterThanOrEqual(12);
     expect(screen.getByText("大约每年 $6,000 净收益。")).toBeInTheDocument();

@@ -169,14 +169,14 @@ export function estimateIncome(input: { make: string; model: string; year: numbe
   // Twelve months starting next month: the earliest a car could be listed.
   const start = today.getMonth() + 1; // 0-based this month + 1 = next month, 0-based
   const months: IncomeMonth[] = [];
-  let annual = 0;
   for (let i = 0; i < 12; i += 1) {
     const absolute = start + i;
     const month = (absolute % 12) + 1;
     const gross = level * (season[String(month)] ?? 1);
-    annual += gross * share;
     months.push({ month, year: today.getFullYear() + Math.floor(absolute / 12), net: Math.round(gross * share) });
   }
+  // The total is the sum of the months shown, so an owner adding up the chart gets the same figure.
+  const annual = months.reduce((sum, m) => sum + m.net, 0);
   // As in TATO: the annual band is narrower than a single month's, since a slow month and a busy one partly cancel.
   return {
     status: "ok",
