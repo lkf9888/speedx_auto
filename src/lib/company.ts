@@ -11,6 +11,9 @@ export const company = {
   addressFull: "2980 Number 3 Rd, Richmond, BC V6X 2B3",
   googleMapsQuery: "SPEEDX+AUTO+2980+Number+3+Rd+Richmond+BC",
   turoHostUrl: "https://turo.com/ca/en/host/31630256",
+  /** The direct-booking site (TATO), framed on /rent. Overridable to
+   *  try the page against a local TATO (`http://localhost:3000/s/speedx`). */
+  rentalSiteUrl: process.env.NEXT_PUBLIC_RENTAL_SITE_URL || "https://rent.speedxrental.com",
   hours: "Mon–Sat · 10:00 AM – 6:30 PM",
   stats: {
     rankInBC: "Established",

@@ -9,6 +9,7 @@ import {
 
 const expectedEnglishPaths: Record<RouteKey, string> = {
   home: "/en",
+  rent: "/en/rent",
   hosting: "/en/hosting",
   autoRepair: "/en/auto-repair",
   repairMaintenance: "/en/auto-repair/maintenance",
@@ -27,6 +28,7 @@ describe("site route catalog", () => {
   it("keeps every customer-facing route in one typed catalog", () => {
     expect(Object.keys(routePaths)).toEqual([
       "home",
+      "rent",
       "hosting",
       "autoRepair",
       "repairMaintenance",

@@ -30,6 +30,7 @@ export function landingPath(locale: Locale, slug: RepairLandingSlug): string {
 
 export const routePaths = {
   home: "",
+  rent: "/rent",
   hosting: "/hosting",
   autoRepair: "/auto-repair",
   repairMaintenance: "/auto-repair/maintenance",

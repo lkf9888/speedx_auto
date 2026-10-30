@@ -10,6 +10,7 @@ export const zhCN: Dictionary = {
   },
   nav: {
     home: "首页",
+    rent: "租车",
     hosting: "车辆托管",
     autoRepair: "汽车维修",
     services: "服务项目",
@@ -35,6 +36,13 @@ export const zhCN: Dictionary = {
         },
       },
     },
+  },
+  rent: {
+    metaTitle: "列治文租车",
+    metaDescription:
+      "直接在 SPEEDX AUTO 官网订车：选日期、看全部费用、在线付款、在线签租车合同。取车地点在列治文 2980 Number 3 Rd，靠近温哥华机场。",
+    frameTitle: "SPEEDX AUTO 租车预订",
+    openFull: "在新窗口打开租车页面",
   },
   cta: {
     contactWeChat: "加微信",

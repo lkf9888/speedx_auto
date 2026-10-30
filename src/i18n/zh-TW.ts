@@ -10,6 +10,7 @@ export const zhTW: Dictionary = {
   },
   nav: {
     home: "首頁",
+    rent: "租車",
     hosting: "車輛託管",
     autoRepair: "汽車維修",
     services: "服務項目",
@@ -35,6 +36,13 @@ export const zhTW: Dictionary = {
         },
       },
     },
+  },
+  rent: {
+    metaTitle: "列治文租車",
+    metaDescription:
+      "直接在 SPEEDX AUTO 官網訂車：選日期、看全部費用、線上付款、線上簽租車合約。取車地點在列治文 2980 Number 3 Rd，靠近溫哥華機場。",
+    frameTitle: "SPEEDX AUTO 租車預訂",
+    openFull: "在新視窗開啟租車頁面",
   },
   cta: {
     contactWeChat: "加微信",

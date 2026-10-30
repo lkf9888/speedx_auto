@@ -6,8 +6,8 @@ describe("sitemap", () => {
     const entries = sitemap();
     const urls = entries.map((entry) => entry.url);
 
-    expect(entries).toHaveLength(39);
-    expect(new Set(urls).size).toBe(39);
+    expect(entries).toHaveLength(42);
+    expect(new Set(urls).size).toBe(42);
     expect(urls).toContain(
       "https://speedxrental.com/zh-TW/auto-repair/suspension",
     );

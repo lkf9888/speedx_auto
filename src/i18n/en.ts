@@ -9,6 +9,7 @@ export const en = {
   },
   nav: {
     home: "Home",
+    rent: "Rent a Car",
     hosting: "Host With Us",
     autoRepair: "Auto Repair",
     services: "Services",
@@ -34,6 +35,13 @@ export const en = {
         },
       },
     },
+  },
+  rent: {
+    metaTitle: "Rent a Car in Richmond",
+    metaDescription:
+      "Book a SPEEDX AUTO car directly: pick dates, see the full price, pay online and sign the rental agreement. Pickup at 2980 Number 3 Rd, Richmond, near YVR.",
+    frameTitle: "SPEEDX AUTO car rental booking",
+    openFull: "Open the booking site in a full window",
   },
   cta: {
     contactWeChat: "Add WeChat",
