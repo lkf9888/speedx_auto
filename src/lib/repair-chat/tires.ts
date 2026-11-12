@@ -2,9 +2,13 @@
  * New tires the shop sells, from a partner's price list.
  *
  * The list holds retail prices only (no cost, no supplier details) and lives
- * outside this public repo: a Render Secret File named tires.json (Render puts
- * it in /etc/secrets and in the app's root folder), or the path in
- * TIRE_PRICES_FILE. Without it, tire questions go to the team.
+ * outside this public repo. Where it comes from, first match wins:
+ * - TIRE_PRICES_GZ_B64: the file gzipped and base64-encoded, for hosts that
+ *   only take environment variables (Railway);
+ * - the path in TIRE_PRICES_FILE;
+ * - a Render Secret File named tires.json (Render puts it in /etc/secrets and
+ *   in the app's root folder).
+ * Without it, tire questions go to the team.
  *
  * What a customer sees per tire is one all-in number: retail price plus the
  * BC tire eco fee, rounded to whole dollars, plus the shop's posted tire
@@ -12,6 +16,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
 import { FLAT_PRICES } from "./flat-price";
 
 export type TireSeason = "all_season" | "all_weather" | "winter" | "off_road" | "trailer";
@@ -98,6 +103,11 @@ function isListing(value: unknown): value is TireListing {
 /** The price list, or null when the file isn't there (or is broken). */
 export function loadTireList(path?: string): TireListing[] | null {
   if (path) return readTireList(path);
+  const packed = process.env.TIRE_PRICES_GZ_B64?.trim();
+  if (packed) {
+    const listings = readPackedTireList(packed);
+    if (listings) return listings;
+  }
   const paths = candidatePaths();
   for (const candidate of paths) {
     const listings = readTireList(candidate);
@@ -113,17 +123,7 @@ export function loadTireList(path?: string): TireListing[] | null {
 function readTireList(path: string): TireListing[] | null {
   if (cached?.path === path) return cached.listings;
   try {
-    const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
-    if (!Array.isArray(raw)) throw new Error("not a list");
-    // Copy only the fields we use, so nothing else in the file can travel further.
-    const listings = raw.filter(isListing).map(({ category, brand, size, pattern, load, price }) => ({
-      category,
-      brand,
-      size,
-      pattern,
-      load,
-      price,
-    }));
+    const listings = parseTireList(readFileSync(path, "utf8"));
     cached = { path, listings };
     return listings;
   } catch (error) {
@@ -134,9 +134,44 @@ function readTireList(path: string): TireListing[] | null {
   }
 }
 
+/** The list from TIRE_PRICES_GZ_B64 (gzip, then base64). */
+function readPackedTireList(packed: string): TireListing[] | null {
+  const key = `env:${packed.length}:${packed.slice(-16)}`;
+  if (cached?.path === key) return cached.listings;
+  try {
+    const listings = parseTireList(gunzipSync(Buffer.from(packed, "base64")).toString("utf8"));
+    cached = { path: key, listings };
+    return listings;
+  } catch (error) {
+    // Same broken value every request: say so once, then quietly use the file.
+    if (reportedPacked !== key) {
+      reportedPacked = key;
+      console.error("TIRE_PRICES_GZ_B64 unreadable", (error as Error).message);
+    }
+    return null;
+  }
+}
+
+let reportedPacked: string | null = null;
+
+function parseTireList(text: string): TireListing[] {
+  const raw = JSON.parse(text) as unknown;
+  if (!Array.isArray(raw)) throw new Error("not a list");
+  // Copy only the fields we use, so nothing else in the file can travel further.
+  return raw.filter(isListing).map(({ category, brand, size, pattern, load, price }) => ({
+    category,
+    brand,
+    size,
+    pattern,
+    load,
+    price,
+  }));
+}
+
 export function resetTireListCache(): void {
   cached = null;
   reportedMissing = false;
+  reportedPacked = null;
 }
 
 const SEASONS: TireSeason[] = ["all_season", "all_weather", "winter", "off_road"];

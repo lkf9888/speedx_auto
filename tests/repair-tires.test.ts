@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import { summarizeEstimateForModel } from "@/lib/repair-chat/pricing";
 import { runTool, type ChatEvent } from "@/lib/repair-chat/tools";
@@ -75,6 +76,24 @@ describe("tire price file", () => {
   afterEach(() => {
     resetTireListCache();
     delete process.env.TIRE_PRICES_FILE;
+    delete process.env.TIRE_PRICES_GZ_B64;
+  });
+
+  it("reads the list from TIRE_PRICES_GZ_B64 (gzip + base64) before any file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tires-"));
+    process.env.TIRE_PRICES_FILE = join(dir, "tires.json");
+    writeFileSync(process.env.TIRE_PRICES_FILE, JSON.stringify([{ ...LIST[0], brand: "FromFile" }]));
+    const packed = gzipSync(JSON.stringify([{ ...LIST[0], cost: 77 }, { brand: "broken" }])).toString("base64");
+    process.env.TIRE_PRICES_GZ_B64 = `${packed}\n`;
+    expect(loadTireList()).toEqual([LIST[0]]);
+  });
+
+  it("falls back to the file when TIRE_PRICES_GZ_B64 is unreadable", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tires-"));
+    process.env.TIRE_PRICES_FILE = join(dir, "tires.json");
+    writeFileSync(process.env.TIRE_PRICES_FILE, JSON.stringify([LIST[0]]));
+    process.env.TIRE_PRICES_GZ_B64 = "not-gzip";
+    expect(loadTireList()).toEqual([LIST[0]]);
   });
 
   it("loads only the fields it needs and ignores bad rows", () => {
