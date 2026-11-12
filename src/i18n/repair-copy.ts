@@ -140,7 +140,8 @@ export const enAutoRepair: AutoRepairCopy = {
     quoteBody:
       "We do body and paint work, but it is quoted individually. Send photos of the damage by WhatsApp or WeChat and the team will reply with a quote.",
     notOfferedTitle: "Not offered",
-    notOfferedBody: "We don't repair or rebuild transmissions, and we don't replace windshields or other auto glass.",
+    notOfferedBody:
+      "We don't repair or rebuild transmissions, do wheel alignments, or repair exhaust systems and mufflers, and we don't replace windshields or other auto glass.",
   },
   ev: {
     title: "Tesla and electric vehicle service",
@@ -230,6 +231,10 @@ export const enAutoRepair: AutoRepairCopy = {
       answer: "No. We don't repair or rebuild transmissions.",
     },
     {
+      question: "Do you do wheel alignments or exhaust work?",
+      answer: "No. We don't do wheel alignments, and we don't repair exhaust systems or mufflers.",
+    },
+    {
       question: "Where do your parts come from?",
       answer:
         "From WorldPac, quoted at list price. Where several brands fit your vehicle, the estimate shows the options so you can choose.",
@@ -248,7 +253,7 @@ export const enAutoRepair: AutoRepairCopy = {
   ctaTitle: "Book your repair",
   ctaBody:
     "Send the vehicle details and the problem by WhatsApp or WeChat, or call SPEEDX AUTO to book an appointment.",
-  lastUpdated: "Updated October 13, 2026",
+  lastUpdated: "Updated November 12, 2026",
   services: enRepairServices,
   priceGuide: enPriceGuide,
   landing: enRepairLanding,
@@ -379,7 +384,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
     quoteTitle: "钣金喷漆：单独报价",
     quoteBody: "钣金和喷漆可以做，需要单独报价。请通过 WhatsApp 或微信发送损伤照片，客服会回复报价。",
     notOfferedTitle: "不提供",
-    notOfferedBody: "不做变速箱维修或大修，也不更换挡风玻璃和车窗玻璃。",
+    notOfferedBody: "不做变速箱维修或大修、四轮定位、排气管和消音器维修，也不更换挡风玻璃和车窗玻璃。",
   },
   ev: {
     title: "特斯拉与电动车维修",
@@ -431,6 +436,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
     { question: "怎么付款？", answer: "现金、信用卡或微信支付。" },
     { question: "做钣金喷漆吗？", answer: "做，需要单独报价。请通过 WhatsApp 或微信发送损伤照片，客服会回复报价。" },
     { question: "修变速箱吗？", answer: "不修。我们不做变速箱维修或大修。" },
+    { question: "做四轮定位或修排气管吗？", answer: "不做。我们不做四轮定位，也不修排气管和消音器。" },
     { question: "配件从哪里来？", answer: "来自 WorldPac，按标价报价。同一配件有多个品牌适配时，估价单会列出选项供您选择。" },
     {
       question: "联系时应提供什么？",
@@ -443,7 +449,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
   ],
   ctaTitle: "预约维修",
   ctaBody: "通过 WhatsApp 或微信发送车辆资料和问题，或直接致电 SPEEDX AUTO 预约。",
-  lastUpdated: "更新于 2026 年 10 月 13 日",
+  lastUpdated: "更新于 2026 年 11 月 12 日",
   services: zhCNRepairServices,
   priceGuide: zhCNPriceGuide,
   landing: zhCNRepairLanding,
@@ -574,7 +580,7 @@ const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide" | "landing"> = {
     quoteTitle: "鈑金噴油：另行報價",
     quoteBody: "鈑金及噴油可以做，需另行報價。請透過 WhatsApp 或微信傳送損傷相片，客服會回覆報價。",
     notOfferedTitle: "不提供",
-    notOfferedBody: "不做波箱（變速箱）維修或大修，亦不更換擋風玻璃及車窗玻璃。",
+    notOfferedBody: "不做波箱（變速箱）維修或大修、四輪定位、排氣系統及消音器維修，亦不更換擋風玻璃及車窗玻璃。",
   },
   ev: {
     title: "Tesla 及電動車維修",
@@ -625,6 +631,7 @@ const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide" | "landing"> = {
     { question: "可以怎樣付款？", answer: "現金、信用卡或微信支付。" },
     { question: "有沒有做鈑金噴油？", answer: "有，需另行報價。請透過 WhatsApp 或微信傳送損傷相片，客服會回覆報價。" },
     { question: "有沒有維修波箱？", answer: "沒有。我們不做波箱（變速箱）維修或大修。" },
+    { question: "有沒有做四輪定位或維修排氣喉？", answer: "沒有。我們不做四輪定位，亦不維修排氣系統及消音器。" },
     { question: "零件從哪裡來？", answer: "來自 WorldPac，按標價報價。同一零件有多個品牌適用時，估價單會列出選項供您選擇。" },
     {
       question: "聯絡時應提供甚麼資料？",
@@ -637,7 +644,7 @@ const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide" | "landing"> = {
   ],
   ctaTitle: "預約維修",
   ctaBody: "透過 WhatsApp 或微信傳送車輛資料和問題，或直接致電 SPEEDX AUTO 預約。",
-  lastUpdated: "更新於 2026 年 10 月 13 日",
+  lastUpdated: "更新於 2026 年 11 月 12 日",
 };
 
 export const zhTWAutoRepair: AutoRepairCopy = {

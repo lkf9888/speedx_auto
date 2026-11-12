@@ -40,7 +40,9 @@ describe("sitemap", () => {
     const priceGuides = sitemap().filter((entry) => entry.url.endsWith("/auto-repair/prices"));
 
     expect(repairPages).toHaveLength(18);
-    expect(repairPages.every((entry) => entry.lastModified === "2026-10-13")).toBe(true);
+    const updated = /\/auto-repair(\/suspension)?$/;
+    expect(repairPages.filter((entry) => updated.test(entry.url)).every((entry) => entry.lastModified === "2026-11-12")).toBe(true);
+    expect(repairPages.filter((entry) => !updated.test(entry.url)).every((entry) => entry.lastModified === "2026-10-13")).toBe(true);
     expect(priceGuides.map((entry) => entry.lastModified)).toEqual(["2026-10-13", "2026-10-13", "2026-10-13"]);
     expect(sitemap().find((entry) => entry.url.endsWith("/en/hosting"))?.lastModified).toBe("2026-08-11");
   });
