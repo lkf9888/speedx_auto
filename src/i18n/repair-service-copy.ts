@@ -468,7 +468,7 @@ const enSeeds: ServiceSeeds = {
       {
         question: "Does pulling always mean the vehicle needs an alignment?",
         answer:
-          "No. Tires, brakes, steering, and suspension parts can all cause pulling, so we inspect first.",
+          "No. Tires, brakes, steering, and suspension parts can all cause pulling, so we inspect first. We don't do alignments ourselves; if the inspection shows the car needs one, we'll tell you.",
       },
       {
         question: "Can worn suspension cause uneven tire wear?",
@@ -962,7 +962,7 @@ const zhCNSeeds: ServiceSeeds = {
       },
       {
         question: "跑偏一定是要做四轮定位吗？",
-        answer: "不一定。轮胎、刹车、转向和悬挂部件都可能导致跑偏，所以我们先检查。",
+        answer: "不一定。轮胎、刹车、转向和悬挂部件都可能导致跑偏，所以我们先检查。我们本身不做四轮定位；检查后如果确实需要，会告诉您。",
       },
       {
         question: "悬挂磨损会导致轮胎偏磨吗？",
@@ -1446,7 +1446,7 @@ const zhTWSeeds: ServiceSeeds = {
       },
       {
         question: "走偏一定要做四輪定位嗎？",
-        answer: "不一定。輪胎、煞車、轉向和避震部件都可能導致走偏，所以我們先檢查。",
+        answer: "不一定。輪胎、煞車、轉向和避震部件都可能導致走偏，所以我們先檢查。我們本身不做四輪定位；檢查後如確實需要，會告訴您。",
       },
       {
         question: "避震磨損會令輪胎偏磨嗎？",

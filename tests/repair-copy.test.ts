@@ -93,6 +93,16 @@ describe("localized auto repair copy", () => {
     expect(zhTW.autoRepair.scope.notOfferedBody).toMatch(/變速箱/);
   });
 
+  it("states that wheel alignments and exhaust work are not offered", () => {
+    expect(en.autoRepair.scope.notOfferedBody).toMatch(/alignment/i);
+    expect(en.autoRepair.scope.notOfferedBody).toMatch(/exhaust/i);
+    expect(zhCN.autoRepair.scope.notOfferedBody).toMatch(/四轮定位.*排气管/);
+    expect(zhTW.autoRepair.scope.notOfferedBody).toMatch(/四輪定位.*排氣/);
+    const llms = readFileSync(join(process.cwd(), "public", "llms.txt"), "utf8");
+    expect(llms).toMatch(/wheel alignment/);
+    expect(llms).toMatch(/exhaust and muffler/);
+  });
+
   it.each(dictionaries)("quotes the posted oil change prices in the %s FAQ", (_, dict) => {
     const faqText = JSON.stringify(dict.autoRepair.faqs);
     const { oil } = FLAT_PRICES;
