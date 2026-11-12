@@ -468,7 +468,8 @@ async function estimateEachVariant(
     // The label usually names the option already ("… 2.4 L4"); add it when it doesn't.
     cards.push({ option, card: buildEstimate(label.includes(option) ? label : `${label} (${question.label}: ${option})`, quote, newEstimateId()) });
   }
-  if (cards.length < 2) return null;
+  // Every option priced, or none: cards for only some engines mislead a customer whose engine is the missing one.
+  if (cards.length < question.options.length) return null;
   // The detail doesn't change the price (same hours and parts for every trim): one card is enough.
   const same = (c: EstimateCard) => JSON.stringify([c.laborHours, c.partOptions.map((p) => [p.description, p.unitListPrice, p.quantity])]);
   if (new Set(cards.map(({ card }) => same(card))).size === 1) {

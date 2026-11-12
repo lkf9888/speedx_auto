@@ -460,7 +460,8 @@ async function quoteEachVariant(
     // The label usually names the chosen option already ("… 2.4 L4"); add it when it doesn't.
     quotes.push(buildLaborQuote(label.includes(option) ? label : `${label}（${question.label}: ${option}）`, job, newEstimateId()));
   }
-  if (quotes.length < 2) return null;
+  // Every option priced, or none: quotes for only some engines mislead when staff have the missing one.
+  if (quotes.length < question.options.length) return null;
   // The detail doesn't change the price: one card is enough.
   const same = (q: StaffQuote) => JSON.stringify([q.labor?.hours, q.options.map((o) => [o.label, o.partNumber, o.unitPrice, o.quantity])]);
   if (new Set(quotes.map(same)).size === 1) {

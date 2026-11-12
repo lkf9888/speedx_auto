@@ -49,6 +49,32 @@ describe("public estimates for each configuration", () => {
     expect(out.content).not.toMatch(/cost|dealer/i);
   });
 
+  it("asks instead of showing only some engines when one can't be priced yet", async () => {
+    // The V8 needs the drive type before the labor guide gives a time (2009 Colorado, 2026-11-12).
+    const api: CatalogApi = {
+      async get() {
+        throw new Error("unused");
+      },
+      async post<T>(path: string, data: unknown) {
+        const d = data as Record<string, unknown>;
+        const engine = (d.refinedVehAttrIDs as Array<{ name?: string; value?: number }> | undefined)?.find((a) => a.name === "EngineBase");
+        const engines = ["2.9 L4", "3.7 L5", "5.3 V8"];
+        if (path === "vehicle/refine") return { recommendedVehAttrs: [{ attrName: "EngineBase", attrDesc: "Engine", vehAttrs: engines.map((value, i) => ({ isEnabled: true, value: { key: 20 + i, value } })) }] } as T;
+        if (path === "labor-ops-list") {
+          if (!engine) return { vehAttrOptions: [{ attrName: "EngineBase", attrDesc: "Engine", vehAttrs: engines.map((value) => ({ value: { value } })) }] } as T;
+          if (engine.value === 22) return { vehAttrOptions: [{ attrName: "DriveType", attrDesc: "Drive Type", vehAttrs: [{ value: { value: "4WD" } }, { value: { value: "RWD" } }] }] } as T;
+          return { laborOperations: [{ applicationID: 1, assetName: "a", position: { description: "" } }] } as T;
+        }
+        if (path === "labor-ops-details") return { laborOperation: { estimateTimeHour: 5.9, laborCategoryName: "Valve Cover Gasket R&R", applications: [] } } as T;
+        if (path === "category/details") return {} as T;
+        throw new Error(path);
+      },
+    };
+    const out = await runTool(api, "get_estimate", { vehicle_key: encodeVehicleKey({ baseVehicleId: (nextBase += 1), label: "2009 Chevrolet Colorado", attributes: [] }), service_id: 9, position: null }, () => "E-1", "en");
+    expect(cards(out.events)).toEqual([]);
+    expect(JSON.parse(out.content).status).toBe("need_details");
+  });
+
   it("still asks when there are too many options to show", async () => {
     const out = await runTool(engineCatalog(["1.5 L4", "1.8 L4", "2.0 L4", "2.4 L4"]), "get_estimate", { vehicle_key: encodeVehicleKey(vehicle()), service_id: 9, position: null }, () => "E-1", "en");
     expect(cards(out.events)).toEqual([]);
