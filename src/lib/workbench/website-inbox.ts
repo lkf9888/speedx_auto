@@ -22,8 +22,12 @@ export function websiteConversationId(thread: string): string {
 export interface WebsiteContact {
   name: string;
   phone: string;
+  wechat?: string;
+  email?: string;
   locale: string;
   booking?: { date: string; time: string };
+  /** The customer asked to be called back. */
+  callback?: boolean;
 }
 
 export interface WebsiteExchange {
@@ -41,13 +45,19 @@ export interface WebsiteExchange {
   failed?: boolean;
 }
 
-function visitor(contact: WebsiteContact, previous?: WebsiteVisitor): WebsiteVisitor {
+function visitor(contact: WebsiteContact, previous?: WebsiteVisitor, now = Date.now()): WebsiteVisitor {
   const booking = contact.booking ?? previous?.booking;
+  const wechat = contact.wechat || previous?.wechat;
+  const email = contact.email || previous?.email;
+  const callbackAt = contact.callback ? now : previous?.callbackAt;
   return {
     name: contact.name || previous?.name || "",
     phone: contact.phone || previous?.phone || "",
+    ...(wechat ? { wechat } : {}),
+    ...(email ? { email } : {}),
     locale: contact.locale,
     ...(booking ? { booking } : {}),
+    ...(callbackAt ? { callbackAt } : {}),
   };
 }
 
@@ -97,7 +107,7 @@ export class WebsiteInbox {
         WEBSITE_CUSTOMER,
         (c) => {
           c.turns.push(question, answer);
-          c.website = visitor(entry.contact, c.website);
+          c.website = visitor(entry.contact, c.website, this.now());
           if (entry.vehicle) c.vehicle = entry.vehicle;
           if (!c.title) c.title = entry.question.replace(/\s+/g, " ").trim().slice(0, TITLE_LENGTH);
           delete c.archived;
@@ -111,7 +121,7 @@ export class WebsiteInbox {
   async contact(thread: string, contact: WebsiteContact): Promise<void> {
     await this.store
       .change(websiteConversationId(thread), WEBSITE_CUSTOMER, (c) => {
-        c.website = visitor(contact, c.website);
+        c.website = visitor(contact, c.website, this.now());
         for (const turn of c.turns) delete turn.held;
         delete c.archived;
       })

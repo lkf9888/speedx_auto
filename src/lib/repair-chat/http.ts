@@ -14,7 +14,7 @@ import {
   type LeadNotifier,
 } from "@/lib/repair-chat/lead";
 import { isBookable, bookableDays, parseClosedDates, SLOT_TIMES } from "@/lib/repair-chat/booking";
-import { composeBookingEmail, createFollowUpHandler, createMailer, type Mailer } from "@/lib/repair-chat/followup";
+import { composeBookingEmail, composeCallbackEmail, createFollowUpHandler, createMailer, type Mailer } from "@/lib/repair-chat/followup";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 import { SessionStore, type ChatSession } from "@/lib/repair-chat/session";
 import { registerShutdownFlush } from "@/lib/repair-chat/shutdown";
@@ -245,14 +245,31 @@ export async function handleLead(
     return Response.json({ error: "busy" }, { status: 429 });
   }
   const sessionId = typeof raw?.sessionId === "string" && /^[a-f0-9]{32}$/.test(raw.sessionId) ? raw.sessionId : null;
+  // "Call me back" from the chat, not the "your estimate is ready" form.
+  const callback = raw?.reason === "callback";
   const at = new Date().toISOString();
-  const session = deps.sessions.get(sessionId) ?? deps.sessions.create(lead, locale, { thread: sessionId });
+  const known = deps.sessions.get(sessionId);
+  const session = known ?? deps.sessions.create(lead, locale, { thread: sessionId });
+  // A session lost to a restart: the browser's copy of the conversation goes in the shop's email.
+  if (!known) deps.sessions.seed(session.id, readHistory(raw?.history));
   const firstTime = !session.lead || session.id !== sessionId;
   deps.sessions.attachLead(session.id, lead);
-  await deps.inbox?.()?.contact(session.thread, { ...lead, locale });
+  await deps.inbox?.()?.contact(session.thread, { ...lead, locale, ...(callback ? { callback: true } : {}) });
   if (firstTime) {
     await deps.notify({ type: "lead_started", lead, locale, at });
     await Promise.all(session.estimates.map((card) => deps.notify(estimateLeadEvent(lead, locale, card))));
+  }
+  // One callback email per visit: a resubmitted form updates the contact details only.
+  if (callback && !session.callbackRequested) {
+    session.callbackRequested = true;
+    const email = composeCallbackEmail(lead, locale, session);
+    try {
+      await (deps.mailer ?? createMailer())(email);
+    } catch (error) {
+      // Never lose a callback request: keep the full email in the log if sending fails.
+      console.error("repair-callback email failed", (error as Error).message, JSON.stringify(email));
+    }
+    await deps.notify({ type: "callback_requested", lead, locale, at });
   }
   if (session.booking && session.bookingNeedsContact) {
     deps.sessions.recordBooking(session.id, session.booking);
@@ -260,6 +277,19 @@ export async function handleLead(
   }
   const pending = deps.sessions.takeReply(session.id) ?? null;
   return Response.json({ ok: true, sessionId: session.id, pending });
+}
+
+/** The browser's copy of the conversation, for a lead whose session the server lost. */
+function readHistory(raw: unknown): Array<{ role: "user" | "assistant"; text: string }> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(-MAX_HISTORY)
+    .flatMap((t) => {
+      const turn = t as Record<string, unknown>;
+      return (turn?.role === "user" || turn?.role === "assistant") && typeof turn.text === "string" && turn.text.trim()
+        ? [{ role: turn.role, text: turn.text.slice(0, MAX_TURN_TEXT) }]
+        : [];
+    });
 }
 
 /** Sent by the browser (sendBeacon) when the visitor leaves the page. */
@@ -351,7 +381,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
         pendingNotices.push(
           inbox.exchange({
             thread: session.thread,
-            contact: { name: session.lead?.name ?? "", phone: session.lead?.phone ?? "", locale: request_.locale, booking: session.booking },
+            contact: { name: session.lead?.name ?? "", phone: session.lead?.phone ?? "", wechat: session.lead?.wechat, email: session.lead?.email, locale: request_.locale, booking: session.booking },
             question: request_.message,
             photos: request_.photos,
             reply,

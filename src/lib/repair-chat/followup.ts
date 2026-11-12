@@ -12,6 +12,7 @@ import { fallbackOptions, MODEL } from "./agent";
 import { estimateRanges, type EstimateCard } from "./pricing";
 import { matchScript } from "./script";
 import type { ChatSession, FinishReason, FollowUpHandler } from "./session";
+import { contactLines, type Lead } from "./lead";
 
 export interface OutgoingEmail {
   subject: string;
@@ -99,8 +100,7 @@ export function composeFollowUpEmail(
   const lines = [
     "网站维修估价助手有一位客户需要回访。",
     "",
-    `客户姓名：${session.lead?.name ?? "（未留）"}`,
-    `客户电话：${session.lead?.phone ?? "（未留）"}`,
+    ...contactLines(session.lead),
     `使用语言：${LANGUAGE_LABEL[session.locale] ?? session.locale}`,
     `开始时间：${localTime(session.startedAt)}`,
     `最后活动：${localTime(session.lastActivityAt)}`,
@@ -178,9 +178,32 @@ export function createFollowUpHandler(client: () => MessagesClient | null, maile
   };
 }
 
+/** Email to the shop the moment a visitor asks to be called back, with the conversation so far. */
+export function composeCallbackEmail(lead: Lead, locale: string, session: ChatSession | undefined): OutgoingEmail {
+  const transcript = session?.transcript ?? [];
+  const vehicle = session?.estimates[0]?.vehicle ?? "";
+  return {
+    subject: `【网站回电请求】${lead.name} ${lead.phone}${vehicle ? ` · ${vehicle}` : ""}`,
+    text: [
+      "网站维修估价助手上有客户请师傅回电，请尽快致电（或 WhatsApp / 微信）联系。",
+      "",
+      ...contactLines(lead),
+      `使用语言：${LANGUAGE_LABEL[locale] ?? locale}`,
+      "",
+      "—— 已给出的估价 ——",
+      ...(session?.estimates.length ? session.estimates.map(estimateLine) : ["（还没有估价）"]),
+      "",
+      "—— 到目前为止的对话 ——",
+      ...(transcript.length
+        ? transcript.map((line) => `${line.role === "user" ? "客户" : "助手"}（${localTime(line.at)}）：\n${line.text}\n`)
+        : ["（没有对话记录，请直接致电了解需求）"]),
+    ].join("\n"),
+  };
+}
+
 /** Email to the shop when a visitor requests an appointment from the booking card. */
 export function composeBookingEmail(
-  lead: { name: string; phone: string },
+  lead: Lead,
   locale: string,
   booking: { date: string; time: string },
   session: ChatSession | undefined,
@@ -193,8 +216,7 @@ export function composeBookingEmail(
     text: [
       "网站维修估价助手收到一个预约请求，请致电或 WhatsApp 跟客户确认。",
       "",
-      `客户姓名：${lead.name}`,
-      `客户电话：${lead.phone}`,
+      ...contactLines(lead),
       `使用语言：${LANGUAGE_LABEL[locale] ?? locale}`,
       `希望到店：${bookingLabel(booking)}`,
       `来源：${source === "chat" ? "客户在聊天中向 AI 助手提出" : "客户在预约卡片上选择"}`,

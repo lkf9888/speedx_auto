@@ -14,6 +14,11 @@ export function WebsiteVisitorBar({ visitor }: { visitor: WebsiteVisitor }) {
   return (
     <div data-testid="website-visitor" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[color:var(--wb-border)] bg-[color:var(--wb-notice)] px-4 py-2 text-xs text-[color:var(--wb-icon)]">
       <span className="font-semibold text-[color:var(--wb-text)]">🌐 网站咨询</span>
+      {visitor.callbackAt && (
+        <span data-testid="callback-badge" className="rounded-full bg-red-600 px-2 py-0.5 font-semibold text-white">
+          🔔 客人要求回电
+        </span>
+      )}
       {visitor.name ? (
         <>
           <span>{visitor.name}</span>
@@ -25,9 +30,15 @@ export function WebsiteVisitorBar({ visitor }: { visitor: WebsiteVisitor }) {
               WhatsApp
             </a>
           )}
+          {visitor.wechat && <span>微信 {visitor.wechat}</span>}
+          {visitor.email && (
+            <a href={`mailto:${visitor.email}`} className="text-[#008069] underline">
+              {visitor.email}
+            </a>
+          )}
         </>
       ) : (
-        <span>客人还没留姓名电话</span>
+        <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">客人没有留联系方式，无法回访</span>
       )}
       <span>客人用{LANGUAGE[visitor.locale] ?? visitor.locale}</span>
       {visitor.booking && (

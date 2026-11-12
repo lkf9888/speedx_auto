@@ -50,6 +50,7 @@ export function summarize(c: Conversation): ConversationSummary {
     turns: c.turns.length,
     ...(c.archived ? { archived: true } : {}),
     ...(c.website ? { website: c.website.name } : {}),
+    ...(c.website?.callbackAt ? { callback: true } : {}),
   };
 }
 

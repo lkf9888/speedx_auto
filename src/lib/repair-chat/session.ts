@@ -48,6 +48,8 @@ export interface ChatSession {
   booking?: { date: string; time: string };
   /** A chat appointment request whose email waits for name and phone. */
   bookingNeedsContact?: boolean;
+  /** The shop was already emailed to call this visitor back. */
+  callbackRequested?: boolean;
   pending?: PendingReply;
 }
 

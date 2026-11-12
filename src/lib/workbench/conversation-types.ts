@@ -57,8 +57,12 @@ export interface Conversation {
 export interface WebsiteVisitor {
   name: string;
   phone: string;
+  wechat?: string;
+  email?: string;
   locale: string;
   booking?: { date: string; time: string };
+  /** When the customer asked to be called back. */
+  callbackAt?: number;
 }
 
 export interface ConversationSummary {
@@ -73,6 +77,8 @@ export interface ConversationSummary {
   archived?: boolean;
   /** A website customer's chat: their name, or "" before they give it. */
   website?: string;
+  /** The website customer asked to be called back. */
+  callback?: boolean;
 }
 
 /** Someone's question still being answered, so others see "查询中". */

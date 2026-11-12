@@ -609,7 +609,13 @@ export function Workbench({ email }: { email: string }) {
                   <span className="min-w-0 flex-1 border-b border-[color:var(--wb-border)] pb-3 -mb-3">
                     <span className="flex items-baseline justify-between gap-2">
                       <span data-testid="conversation-title" className="truncate text-[0.95rem] text-[color:var(--wb-text)]">
-                        {c.website !== undefined && <span className="mr-1 rounded bg-[#00a884]/15 px-1 text-xs font-semibold text-[#008069]">网站{c.website ? ` · ${c.website}` : ""}</span>}
+                        {c.callback && <span className="mr-1 rounded bg-red-600 px-1 text-xs font-semibold text-white">要回电</span>}
+                        {c.website !== undefined &&
+                          (c.website ? (
+                            <span className="mr-1 rounded bg-[#00a884]/15 px-1 text-xs font-semibold text-[#008069]">网站 · {c.website}</span>
+                          ) : (
+                            <span data-testid="no-contact-tag" className="mr-1 rounded bg-amber-100 px-1 text-xs font-semibold text-amber-900">网站 · 未留电话</span>
+                          ))}
                         {c.title || "新会话"}
                       </span>
                       <span className="shrink-0 text-xs text-[color:var(--wb-muted)]">{timeLabel(c.updatedAt)}</span>
@@ -793,7 +799,11 @@ export function Workbench({ email }: { email: string }) {
                   {turn.text && (
                     <div className="wa-bubble wa-bubble-in max-w-[92%] sm:max-w-[75%]">
                       <p className="text-xs font-semibold text-[#00a884]">{turn.source === "website" ? "网站 AI 客服" : "AI 助手"}</p>
-                      {turn.held && <p className="text-xs text-amber-800">客人还没留姓名电话，这条回复和报价卡客人还没看到</p>}
+                      {turn.held && (
+                        <p data-testid="held-notice" className="-mx-1 mb-1 rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
+                          ⚠ 客人没看到这条回复和报价：要先留姓名电话才能看，客人还没留
+                        </p>
+                      )}
                       <p className="whitespace-pre-wrap">{turn.text}</p>
                       <Meta at={turn.at} />
                     </div>

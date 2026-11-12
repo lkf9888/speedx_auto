@@ -33,6 +33,8 @@ const MAX_PHOTOS = 2;
 interface Lead {
   name: string;
   phone: string;
+  wechat?: string;
+  email?: string;
 }
 
 type KnownVehicle = { key: string; label: string } | null;
@@ -168,12 +170,15 @@ function LeadGate({
 }: {
   copy: ChatCopy;
   onStart: (lead: Lead) => Promise<boolean>;
-  /** Why we're asking: to show a ready estimate, or to pass an appointment request on. */
-  reason?: "estimate" | "appointment";
+  /** Why we're asking: to show a ready estimate, to pass an appointment request on, or to call the customer back. */
+  reason?: "estimate" | "appointment" | "callback";
 }) {
   const appointment = reason === "appointment";
+  const callback = reason === "callback";
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [wechat, setWechat] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -185,9 +190,18 @@ function LeadGate({
     if (digits < 10 || digits > 15 || !/^\+?[\d\s().-]+$/.test(phone.trim())) {
       return setError(copy.gate.invalidPhone);
     }
+    const cleanWechat = wechat.trim();
+    const cleanEmail = email.trim();
+    if (cleanWechat && !/^[A-Za-z0-9_+.-]{1,40}$/.test(cleanWechat)) return setError(copy.gate.invalidWechat);
+    if (cleanEmail && !/^[^\s@<>]{1,64}@[^\s@<>]+\.[^\s@<>]{2,}$/.test(cleanEmail)) return setError(copy.gate.invalidEmail);
     setError(null);
     setSubmitting(true);
-    const started = await onStart({ name: cleanName, phone: phone.trim() });
+    const started = await onStart({
+      name: cleanName,
+      phone: phone.trim(),
+      ...(cleanWechat ? { wechat: cleanWechat } : {}),
+      ...(cleanEmail ? { email: cleanEmail } : {}),
+    });
     setSubmitting(false);
     if (!started) setError(copy.gate.failed);
   }
@@ -196,9 +210,9 @@ function LeadGate({
     <form onSubmit={submit} noValidate className="space-y-4" aria-labelledby="repair-gate-title">
       <div>
         <h3 id="repair-gate-title" className="text-lg font-semibold text-ink-900">
-          {appointment ? copy.gate.appointmentTitle : copy.gate.title}
+          {callback ? copy.gate.callbackTitle : appointment ? copy.gate.appointmentTitle : copy.gate.title}
         </h3>
-        <p className="mt-1 text-sm leading-6 text-ink-600">{appointment ? copy.gate.appointmentIntro : copy.gate.intro}</p>
+        <p className="mt-1 text-sm leading-6 text-ink-600">{callback ? copy.gate.callbackIntro : appointment ? copy.gate.appointmentIntro : copy.gate.intro}</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm font-medium text-ink-700">
@@ -223,6 +237,28 @@ function LeadGate({
             className="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
           />
         </label>
+        <label className="block text-sm font-medium text-ink-700">
+          {copy.gate.wechat}
+          <input
+            value={wechat}
+            onChange={(event) => setWechat(event.target.value)}
+            autoComplete="off"
+            maxLength={40}
+            className="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
+          />
+        </label>
+        <label className="block text-sm font-medium text-ink-700">
+          {copy.gate.email}
+          <input
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            maxLength={120}
+            className="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
+          />
+        </label>
       </div>
       {error && (
         <p role="alert" className="text-sm text-amber-800">
@@ -236,7 +272,7 @@ function LeadGate({
           disabled={submitting}
           className="shrink-0 rounded-full bg-ink-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-40"
         >
-          {appointment ? copy.gate.appointmentSubmit : copy.gate.submit}
+          {callback ? copy.gate.callbackSubmit : appointment ? copy.gate.appointmentSubmit : copy.gate.submit}
         </button>
       </div>
     </form>
@@ -279,6 +315,8 @@ export function RepairChat({
   const seenTurns = useRef(1);
   /** The estimate-lead conversion is reported once per visit, however often contact details are sent. */
   const leadReported = useRef(false);
+  /** The "call me back" form is open. */
+  const [callbackOpen, setCallbackOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Tell the server the visit is over so the shop gets its follow-up email now
@@ -318,14 +356,14 @@ export function RepairChat({
       // The page may have the chat box half off screen (phones): bring the reply's first line into view.
       const top = el.getBoundingClientRect().top;
       if (top < 0 || top > window.innerHeight - 160) window.scrollBy({ top: top - 96, behavior: "instant" });
-    } else if (added || pending || awaitingLead) {
+    } else if (added || pending || awaitingLead || callbackOpen) {
       log.scrollTop = log.scrollHeight;
       const bottom = log.getBoundingClientRect().bottom;
       if (turns.length > 1 && (bottom > window.innerHeight || bottom < 120)) {
         window.scrollBy({ top: bottom - window.innerHeight + 140, behavior: "instant" });
       }
     }
-  }, [turns, pending, awaitingLead]);
+  }, [turns, pending, awaitingLead, callbackOpen]);
 
   /** Add an assistant reply; the first reply with an estimate also gets the booking card. */
   function appendReply(text: string, estimates: EstimateCard[], localOnly = false) {
@@ -333,6 +371,41 @@ export function RepairChat({
       const booking = estimates.length > 0 && !prev.some((t) => t.booking);
       return [...prev, { role: "assistant", text, estimates, localOnly, booking, at: Date.now() }];
     });
+  }
+
+  /** Contact details from the "call me back" form: the shop is emailed to call; nothing is held. */
+  async function requestCallback(next: Lead): Promise<boolean> {
+    let held: { text: string; estimates: EstimateCard[] } | null = null;
+    try {
+      const response = await fetch("/api/repair-lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          locale,
+          lead: next,
+          sessionId,
+          reason: "callback",
+          history: turns.filter((t) => t.text.trim() && !t.localOnly).map((t) => ({ role: t.role, text: t.text })),
+        }),
+      });
+      if (!response.ok) return false;
+      const data = (await response.json()) as { sessionId?: string; pending?: { text: string; estimates: EstimateCard[] } | null };
+      if (typeof data.sessionId === "string") setSessionId(data.sessionId);
+      held = data.pending ?? null;
+    } catch {
+      return false;
+    }
+    setLead(next);
+    setCallbackOpen(false);
+    setAwaitingLead(false);
+    if (!leadReported.current) {
+      leadReported.current = true;
+      emitRepairLead("estimate_lead", locale);
+    }
+    // A reply held for contact details while the callback form was open: show it now.
+    if (held) appendReply(held.text, held.estimates);
+    appendReply(copy.callback.thanks, [], true);
+    return true;
   }
 
   /** Name and phone given on the "estimate ready" form: release the held reply. */
@@ -508,6 +581,7 @@ export function RepairChat({
   function reset() {
     setTurns([greeting]);
     setAwaitingLead(false);
+    setCallbackOpen(false);
     setVehicle(null);
     setInput("");
     setPhotos([]);
@@ -632,6 +706,23 @@ export function RepairChat({
             {awaitingLead && (
               <div data-testid="lead-gate" className="rounded-xl bg-white p-4 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
                 <LeadGate copy={copy} onStart={unlock} reason={awaitingLead || "estimate"} />
+              </div>
+            )}
+            {!lead && !awaitingLead && !capped && callbackOpen && (
+              <div data-testid="callback-form" className="rounded-xl bg-white p-4 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
+                <LeadGate copy={copy} onStart={requestCallback} reason="callback" />
+              </div>
+            )}
+            {!lead && !awaitingLead && !capped && !callbackOpen && !pending && turns.length > 1 && turns[turns.length - 1].role === "assistant" && turns[turns.length - 1].estimates.length === 0 && (
+              <div data-testid="callback-offer" className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/90 px-3 py-2 text-sm text-[#3b4a54] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
+                <span>{copy.callback.offer}</span>
+                <button
+                  type="button"
+                  onClick={() => setCallbackOpen(true)}
+                  className="shrink-0 rounded-full bg-[#008069] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#006e5a]"
+                >
+                  📞 {copy.callback.button}
+                </button>
               </div>
             )}
             {pending && status && (
