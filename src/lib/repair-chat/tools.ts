@@ -489,10 +489,26 @@ async function estimateEachVariant(
   );
 }
 
+/**
+ * The model sometimes passes the vehicle_key from before it recorded a
+ * detail (engine, drive) with set_vehicle_details. When the conversation's
+ * latest vehicle is the same car with those details added, use it instead,
+ * so the detail the customer gave isn't lost.
+ */
+export function withLatestVehicle(input: Record<string, unknown>, knownVehicleKey: string | null): Record<string, unknown> {
+  if (typeof input.vehicle_key !== "string" || !knownVehicleKey || input.vehicle_key === knownVehicleKey) return input;
+  const given = decodeVehicleKey(input.vehicle_key);
+  const latest = decodeVehicleKey(knownVehicleKey);
+  if (!given || !latest || given.baseVehicleId !== latest.baseVehicleId) return input;
+  const has = (v: VehicleRef, a: VehicleRef["attributes"][number]) => v.attributes.some((b) => b.name === a.name && b.id === a.id);
+  const refines = given.attributes.every((a) => has(latest, a)) && latest.attributes.length > given.attributes.length;
+  return refines ? { ...input, vehicle_key: knownVehicleKey } : input;
+}
+
 export async function runTool(
   api: CatalogApi,
   name: string,
-  input: Record<string, unknown>,
+  rawInput: Record<string, unknown>,
   newEstimateId: () => string,
   locale = "en",
   /** Vehicle confirmed earlier in the conversation, used when the model leaves vehicle_key out. */
@@ -502,6 +518,7 @@ export async function runTool(
   /** Wheel Mart Canada (value brands, live stock); null when it isn't set up. */
   wheelmart: () => WheelmartClient | null = getWheelmartClient,
 ): Promise<ToolOutcome> {
+  const input = withLatestVehicle(rawInput, knownVehicleKey);
   switch (name) {
     case "identify_vehicle": {
       const vin = typeof input.vin === "string" ? input.vin.trim() : "";

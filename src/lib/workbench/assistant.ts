@@ -5,7 +5,7 @@
  */
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ChatProfile } from "@/lib/repair-chat/agent";
-import { runTool as runPublicTool, statusForTool, TOOLS, type ChatEvent } from "@/lib/repair-chat/tools";
+import { runTool as runPublicTool, statusForTool, TOOLS, withLatestVehicle, type ChatEvent } from "@/lib/repair-chat/tools";
 import { ecoFee, loadTireList, mountingPerTire, sizeKey, type TireListing } from "@/lib/repair-chat/tires";
 import { shopToday } from "@/lib/repair-chat/prompt";
 import {
@@ -29,7 +29,7 @@ import { getTatoClient, type FleetCar, type FleetTrip, type TatoClient } from "@
 import { getWheelmartClient, type WheelmartClient } from "@/lib/wheelmart/client";
 import { liveWheelmartListings, tireMarkup } from "@/lib/wheelmart/listings";
 import { MAX_NOTE_LENGTH } from "./memory";
-import { laborShortfall, MIN_LABOR_HOURS } from "@/lib/repair-chat/pricing";
+import { laborShortfall, MIN_LABOR_HOURS, minimumLaborNote } from "@/lib/repair-chat/pricing";
 import { customerText } from "./customer-text";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
 import { buildFlatQuote, buildLaborQuote, buildPartsQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
@@ -508,13 +508,14 @@ const defaultDt = () => (dtTireConfigured() ? getDtTireClient() : null);
 export async function runWorkbenchTool(
   api: CatalogApi,
   name: string,
-  input: Record<string, unknown>,
+  rawInput: Record<string, unknown>,
   newEstimateId: () => string,
   knownVehicleKey: string | null,
   dt: () => DtTireClient | null = defaultDt,
   tato: () => TatoClient | null = getTatoClient,
   wheelmart: () => WheelmartClient | null = getWheelmartClient,
 ): Promise<{ content: string; isError: boolean; events: WorkbenchEvent[] }> {
+  const input = withLatestVehicle(rawInput, knownVehicleKey);
   if (name === "find_fleet_car") return findFleetCar(tato, input);
   if (name === "find_brand_tires") return findBrandTires(dt, input, knownVehicleKey, newEstimateId);
   if (name === "propose_memory") {
@@ -652,6 +653,7 @@ export const WORKBENCH_PROFILE: ChatProfile<WorkbenchEvent> = {
     );
     return [{ type: "quote", quote }];
   },
-  describeAdded: (added) =>
-    added.flatMap((e) => (e.type === "quote" ? [`A minimum labor card was added after the others: ${summarizeStaffQuote(e.quote)}`] : [])).join("\n"),
+  orderNote: (events) =>
+    // Staff cards show exact amounts, not the public 10% ranges.
+    minimumLaborNote(events.flatMap((e) => (e.type === "quote" && e.quote.kind === "labor" && e.quote.labor ? [e.quote.labor.hours] : [])), false),
 };

@@ -83,6 +83,15 @@ export function estimateRanges(card: EstimateCard): EstimateRanges {
   };
 }
 
+/** For the model, after a pricing tool: what the order minimum will add if no more labor jobs are priced. */
+export function minimumLaborNote(jobHours: number[], ranges = true): string {
+  const hours = laborShortfall(jobHours);
+  if (!hours) return "";
+  const total = Math.round(jobHours.reduce((sum, h) => sum + (h > 0 ? h : 0), 0) * 100) / 100;
+  const dollars = laborCost(hours);
+  return `Shop rule: the labor-guide jobs priced in this reply add up to ${total} h. The shop charges at least ${MIN_LABOR_HOURS} h of labor per order, so unless you price more labor jobs, a "minimum labor charge" card adds ${hours} h ($${dollars}${ranges ? ", before the 10% allowance" : ""}) after your reply. Include it in the total you give and say briefly why.`;
+}
+
 /** The order's minimum-labor line as a card, or null when the jobs already reach it. */
 export function minimumLaborCard(cards: EstimateCard[], locale: string, id: string, now = new Date()): EstimateCard | null {
   const labor = cards.filter((c) => (c.kind ?? "labor") === "labor" && c.laborHours > 0);

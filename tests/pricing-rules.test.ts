@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { encodeVehicleKey, isSoldByVolume, quoteService, sanitizePartQuotes, staffPartQuotes, type CatalogApi, type VehicleRef } from "@/lib/worldpac/catalog";
-import { buildEstimate, laborShortfall, minimumLaborCard } from "@/lib/repair-chat/pricing";
+import { buildEstimate, laborShortfall, minimumLaborCard, minimumLaborNote } from "@/lib/repair-chat/pricing";
 import { PUBLIC_PROFILE, runChat } from "@/lib/repair-chat/agent";
 import { WORKBENCH_PROFILE } from "@/lib/workbench/assistant";
 import { buildLaborQuote } from "@/lib/workbench/quote";
 import { parseDraftInput } from "@/lib/workbench/alldata-draft";
-import { runTool, type ChatEvent } from "@/lib/repair-chat/tools";
+import { runTool, withLatestVehicle, type ChatEvent } from "@/lib/repair-chat/tools";
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import { surchargeOf } from "@/lib/workbench/surcharge";
 
@@ -240,30 +240,68 @@ describe("surcharge on staff cards", () => {
   });
 });
 
-describe("the assistant's reply when a minimum labor card is added", () => {
-  it("is written again with the card in the total", async () => {
+describe("the assistant's reply when an order is under the minimum labor", () => {
+  it("knows the top-up from the pricing tool's result, and the card follows its reply", async () => {
     const requests: Array<{ messages: Array<{ role: string; content: unknown }> }> = [];
     const replies = [
       { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "get_estimate", input: {} }] },
-      { stop_reason: "end_turn", content: [{ type: "text", text: "About $80–$111." }] },
-      { stop_reason: "end_turn", content: [{ type: "text", text: "About $80–$111, plus the $32–$40 minimum labor: $112–$151 in all." }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "About $80–$111, plus $32–$40 minimum labor: $112–$151." }] },
     ];
     const client = { beta: { messages: { create: vi.fn(async (params: { messages: Array<{ role: string; content: unknown }> }) => (requests.push(structuredClone(params)), replies.shift()) as never) } } };
     const card = buildEstimate("2023 Mercedes-Benz GLC300", { status: "ok", serviceName: "Engine Air Filter Element R&R", position: "", laborHours: 0.2, laborNote: "", primaryPartName: "", partOptions: [], otherPartNames: [], partsNote: "" }, "E-1");
     const profile = { ...PUBLIC_PROFILE, runTool: async () => ({ content: "{}", isError: false, events: [{ type: "estimate" as const, estimate: card }] }) };
     const seen: ChatEvent[] = [];
     const result = await runChat(client, {} as CatalogApi, { history: [], message: "GLC air filter?", locale: "en", vehicleKey: null }, (e) => seen.push(e), () => "E-2", profile);
-    expect(result.text).toBe("About $80–$111, plus the $32–$40 minimum labor: $112–$151 in all.");
+    expect(result.text).toContain("$112–$151");
+    // One model call to price, one to reply: no second rewrite.
+    expect(client.beta.messages.create).toHaveBeenCalledTimes(2);
+    const toolResult = JSON.stringify(requests[1].messages.at(-1));
+    expect(toolResult).toContain("add up to 0.2 h");
+    expect(toolResult).toContain("adds 0.3 h ($36");
     expect(seen.filter((e) => e.type === "estimate").map((e) => (e as { estimate: EstimateCard }).estimate.id)).toEqual(["E-1", "E-2"]);
-    const note = JSON.stringify(requests[2].messages.at(-1));
-    expect(note).toContain("Shop system note");
-    expect(note).toContain("minimum labor charge card");
-    expect(client.beta.messages.create).toHaveBeenCalledTimes(3);
   });
 
-  it("isn't asked for when no card is added", async () => {
-    const client = { beta: { messages: { create: vi.fn(async () => ({ stop_reason: "end_turn", content: [{ type: "text", text: "Hello" }] }) as never) } } };
-    await runChat(client, {} as CatalogApi, { history: [], message: "hi", locale: "en", vehicleKey: null }, () => {}, () => "E-1");
-    expect(client.beta.messages.create).toHaveBeenCalledTimes(1);
+  it("says nothing when the order reaches the minimum, and no allowance for staff", () => {
+    expect(minimumLaborNote([0.6])).toBe("");
+    expect(minimumLaborNote([0.3, 0.15])).toContain("adds 0.05 h");
+    expect(minimumLaborNote([0.2], false)).not.toContain("allowance");
+  });
+
+  it("isn't added after a tool that priced nothing", async () => {
+    const requests: Array<{ messages: Array<{ role: string; content: unknown }> }> = [];
+    const replies = [
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "get_estimate", input: {} }] },
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t2", name: "identify_vehicle", input: {} }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "Done." }] },
+    ];
+    const client = { beta: { messages: { create: vi.fn(async (params: { messages: Array<{ role: string; content: unknown }> }) => (requests.push(structuredClone(params)), replies.shift()) as never) } } };
+    const card = buildEstimate("car", { status: "ok", serviceName: "Cabin Air Filter R&R", position: "", laborHours: 0.2, laborNote: "", primaryPartName: "", partOptions: [], otherPartNames: [], partsNote: "" }, "E-1");
+    const vehicle = { type: "vehicle" as const, vehicle: { key: "k", label: "car" } };
+    const profile = { ...PUBLIC_PROFILE, runTool: async (_api: CatalogApi, name: string) => ({ content: "{}", isError: false, events: name === "get_estimate" ? [{ type: "estimate" as const, estimate: card }] : [vehicle] }) };
+    await runChat(client, {} as CatalogApi, { history: [], message: "filter?", locale: "en", vehicleKey: null }, () => {}, () => "E-2", profile);
+    expect(JSON.stringify(requests[1].messages.at(-1))).toContain("Shop rule");
+    expect(JSON.stringify(requests[2].messages.at(-1))).not.toContain("Shop rule");
+  });
+});
+
+describe("the vehicle the model passes", () => {
+  const plain = encodeVehicleKey({ baseVehicleId: 30020, label: "2009 Chevrolet Colorado", attributes: [] });
+  const v8 = encodeVehicleKey({ baseVehicleId: 30020, label: "2009 Chevrolet Colorado", attributes: [{ name: "EngineBase", id: 2059, label: "5.3 V8" }] });
+  const other = encodeVehicleKey({ baseVehicleId: 999, label: "2010 Honda Fit", attributes: [] });
+
+  it("is replaced by the same car with the details recorded since", () => {
+    expect(withLatestVehicle({ vehicle_key: plain, service_id: 1 }, v8)).toEqual({ vehicle_key: v8, service_id: 1 });
+  });
+
+  it("is kept when the latest has a different trim, not just more details", () => {
+    const lx = encodeVehicleKey({ baseVehicleId: 30020, label: "car", attributes: [{ name: "SubModel", id: 1, label: "LX" }] });
+    const ex = encodeVehicleKey({ baseVehicleId: 30020, label: "car", attributes: [{ name: "SubModel", id: 2, label: "EX" }, { name: "EngineBase", id: 3, label: "2.4 L4" }] });
+    expect(withLatestVehicle({ vehicle_key: lx }, ex).vehicle_key).toBe(lx);
+  });
+
+  it("is kept when it's another car or already the latest", () => {
+    expect(withLatestVehicle({ vehicle_key: other }, v8).vehicle_key).toBe(other);
+    expect(withLatestVehicle({ vehicle_key: v8 }, plain).vehicle_key).toBe(v8);
+    expect(withLatestVehicle({ vehicle_key: plain }, null).vehicle_key).toBe(plain);
   });
 });
