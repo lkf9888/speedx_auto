@@ -67,6 +67,17 @@ const nullableEnum = (values: readonly string[], description: string) => ({
 /** Queries that belong to get_flat_price, not the labor guide. */
 const FLAT_QUERY = /\b(oil (and filter )?change|change (the )?oil|engine oil (and filter )?(change|service)|tires? (change|swap|mount|install)|(change|swap|mount|install) (the )?tires?|winter tires?|snow tires?|refrigerant|a\/?c (re)?charge|a\/?c gas|freon)\b/i;
 
+/**
+ * Work the shop doesn't do (Kevin, 2026-11-12): wheel alignments, and exhaust
+ * and muffler repair. Engine-side parts named "exhaust" (manifold gasket, EGR,
+ * oxygen sensors), headlamp alignment and the intake resonator are still done. Transmissions and auto glass are covered by
+ * the prompt, since the shop does service transmission fluid and window regulators.
+ */
+export const NOT_OFFERED = /(?<!head(?:lamp|light)s?\s)\balignment\b|\bmufflers?\b|(?<!intake\s)\bresonators?\b|\bcatalytic\s+converters?\b|\btail\s?pipes?\b|\bflex\s+pipes?\b|\bexhaust\s+(?:pipes?|system|tips?|hangers?|clamps?|repair|leak)\b/i;
+
+const NOT_OFFERED_NOTE =
+  "The shop doesn't do wheel alignments or exhaust and muffler repair. Say so plainly, give no price and don't suggest booking it; suggest an alignment shop or an exhaust and muffler shop. For a car that pulls or wears its tires unevenly, the shop can check the tires, brakes, steering and suspension, and will say if an alignment is needed (done elsewhere).";
+
 const VIN_NOTE =
   "vin_specs is what the maker filed for this VIN (NHTSA). Use it to answer engine, drive, trim or transmission questions yourself with set_vehicle_details (pick the matching option) instead of asking the customer. It can be incomplete for Canada-only models.";
 
@@ -602,7 +613,9 @@ export async function runTool(
           note: "Oil changes, mounting the customer's own tires and A/C refrigerant recharges have shop flat prices: use get_flat_price. For buying new tires use find_tires.",
         });
       }
-      const services = await findServices(api, vehicle, query);
+      if (NOT_OFFERED.test(query)) return ok({ services: [], status: "not_offered", note: NOT_OFFERED_NOTE });
+      // Jobs the shop doesn't do never reach the list, so they can't be quoted by accident.
+      const services = (await findServices(api, vehicle, query)).filter((s) => !NOT_OFFERED.test(s.name));
       return ok({
         services: services.map((s) => ({ service_id: s.serviceId, name: s.name, system: s.system })),
       });
@@ -613,6 +626,8 @@ export async function runTool(
       const serviceId = Number(input.service_id);
       if (!Number.isInteger(serviceId) || serviceId <= 0) return fail("Invalid service_id.");
       const position = typeof input.position === "string" && input.position.trim() ? input.position : null;
+      const service = await serviceById(api, vehicle, serviceId).catch(() => undefined);
+      if (service && NOT_OFFERED.test(service.name)) return ok({ status: "not_offered", note: NOT_OFFERED_NOTE });
       const quote = await laborQuote(api, vehicle, serviceId, position, input);
       if (quote.status === "need_details") {
         const variants = await estimateEachVariant(api, vehicle, serviceId, position, quote.questions, input, newEstimateId);
