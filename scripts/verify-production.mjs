@@ -11,6 +11,7 @@ const localeCatalog = [
 const routeSuffixes = [
   "",
   "/hosting",
+  "/rent",
   "/auto-repair",
   "/auto-repair/maintenance",
   "/auto-repair/brakes",

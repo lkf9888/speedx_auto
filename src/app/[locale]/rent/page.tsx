@@ -3,8 +3,10 @@ import type { Metadata } from "next";
 import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
 import { RentalSiteFrame } from "@/components/RentalSiteFrame";
+import { StructuredData } from "@/components/StructuredData";
 import { rentalSiteHref } from "@/lib/rental-site";
 import { buildPageMetadata } from "@/lib/seo";
+import { absoluteRouteUrl } from "@/lib/site-routes";
 
 export async function generateMetadata({
   params,
@@ -38,6 +40,16 @@ export default async function RentPage({
 
   return (
     <>
+      <StructuredData
+        locale={locale as Locale}
+        route="rent"
+        pageName={dict.rent.metaTitle}
+        pageDescription={dict.rent.metaDescription}
+        breadcrumbs={[
+          { name: dict.nav.home, url: absoluteRouteUrl(locale as Locale, "home") },
+          { name: dict.nav.rent, url: absoluteRouteUrl(locale as Locale, "rent") },
+        ]}
+      />
       <h1 className="sr-only">{dict.rent.metaTitle}</h1>
       <RentalSiteFrame locale={locale as Locale} title={dict.rent.frameTitle} />
       <noscript>
