@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Dictionary } from "@/i18n/dictionaries";
+import { emitHostingLead } from "@/lib/analytics";
 import { company, telLink, whatsappLink } from "@/lib/company";
 import type { IncomeCard } from "@/lib/hosting-estimate/estimate";
 import type { Locale } from "@/lib/site-routes";
@@ -156,6 +157,8 @@ export function HostingEstimateChat({ locale, dict, pagePath }: { locale: Locale
   const [awaitingLead, setAwaitingLead] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  /** The lead conversion goes out once per visit: not again on a second form, a re-asked question or "start over". */
+  const leadReported = useRef(false);
 
   useEffect(() => {
     // Scroll the chat box, not the page, to the newest message.
@@ -179,6 +182,10 @@ export function HostingEstimateChat({ locale, dict, pagePath }: { locale: Locale
       held = ((await response.json()) as { pending: { text: string; cards: IncomeCard[] } | null }).pending;
     } catch {
       return false;
+    }
+    if (!leadReported.current) {
+      leadReported.current = true;
+      emitHostingLead(locale);
     }
     setLead(next);
     setAwaitingLead(false);

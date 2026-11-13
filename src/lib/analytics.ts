@@ -18,6 +18,14 @@ const repairLeadConversionDestinations = {
 
 export type RepairLeadKind = keyof typeof repairLeadConversionDestinations;
 
+/**
+ * "Hosting – estimate lead" in Google Ads (marketing task SX-03). Not created
+ * yet: until its label goes here, a hosting lead is still recorded as
+ * generate_lead and a Meta Lead, but no Google Ads conversion is sent.
+ * Do not reuse a repair label: that would count owners as repair customers.
+ */
+export const HOSTING_LEAD_CONVERSION_DESTINATION: string | null = null;
+
 export type ContactMethod = "whatsapp" | "phone" | "wechat" | "email";
 export type ContactIntent = "hosting" | "auto_repair" | "general";
 export type ContactPlacement = "hero" | "middle" | "footer" | "sticky_mobile" | "chat";
@@ -68,6 +76,35 @@ export function emitContactClick(event: ContactClickEvent): void {
     currency: "CAD",
     transport_type: "beacon",
   };
+  if (window.gtag) {
+    window.gtag("event", "conversion", conversion);
+  } else {
+    queueGoogleCommand("event", "conversion", conversion);
+  }
+}
+
+/**
+ * A confirmed hosting lead: the hosting page's income estimate accepted the
+ * owner's name and phone. Call it once per visit, after the server answered
+ * OK. Like a repair lead, the analytics event goes out regardless of consent;
+ * Meta and Google Ads only after the visitor grants it. No name, phone or chat
+ * text is ever passed on.
+ */
+export function emitHostingLead(locale: Locale, destination: string | null = HOSTING_LEAD_CONVERSION_DESTINATION): void {
+  if (typeof window === "undefined") return;
+
+  const parameters = { lead_type: "hosting_estimate", intent: "hosting", locale };
+  if (window.gtag) {
+    window.gtag("event", "generate_lead", parameters);
+  } else {
+    window.dataLayer ??= [];
+    window.dataLayer.push({ event: "generate_lead", ...parameters });
+  }
+
+  if (readConsent() !== "granted") return;
+  trackMetaEvent("Lead", { content_category: "hosting" });
+  if (!destination) return;
+  const conversion = { send_to: destination, currency: "CAD", transport_type: "beacon" };
   if (window.gtag) {
     window.gtag("event", "conversion", conversion);
   } else {

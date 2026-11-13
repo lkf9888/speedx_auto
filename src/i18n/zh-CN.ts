@@ -87,7 +87,7 @@ export const zhCN: Dictionary = {
       },
       {
         title: "Meta（Facebook 和 Instagram）数据衡量",
-        body: "如果您选择接受，网站会加载 Meta Pixel，让 SPEEDX AUTO 衡量来自 Facebook 和 Instagram 广告的访问。它会记录页面浏览和联系按钮点击（只包括联系方式和页面类型），不会把您的姓名、电话或聊天内容发送给 Meta。如果您选择拒绝，Meta Pixel 不会加载。",
+        body: "如果您选择接受，网站会加载 Meta Pixel，让 SPEEDX AUTO 衡量来自 Facebook 和 Instagram 广告的访问。它会记录页面浏览、联系按钮点击（只包括联系方式和页面类型），以及有人提交了估价或预约（只记录发生了这件事和页面类型），不会把您的姓名、电话或聊天内容发送给 Meta。如果您选择拒绝，Meta Pixel 不会加载。",
       },
       {
         title: "联系按钮点击事件",
@@ -96,6 +96,10 @@ export const zhCN: Dictionary = {
       {
         title: "已保存的偏好",
         body: "浏览器只会在 speedx-consent-v1 中保存您选择的接受或拒绝状态。SPEEDX AUTO 不会在该偏好中存放付款、身份或车辆资料。",
+      },
+      {
+        title: "托管收益估算",
+        body: "在托管页面查看收益估算时，您需要提供姓名和电话；SPEEDX AUTO 会通过电子邮件收到这些信息，以及车辆、所显示的估算和对话内容，以便团队跟进。您的姓名和电话不会发送给人工智能服务。对话内容会发送到 Anthropic 的 Claude 人工智能服务以生成回复。您提交姓名和电话时，网站会记录发生了一次托管咨询（只包括页面类型和语言）；如果您接受了衡量，还会告诉 Google Ads 和 Meta 有一次咨询，不包含您的姓名、电话或聊天内容。网站只在内存中保留对话几个小时用于显示估算，之后不再保留，您的浏览器也不会保存。",
       },
       {
         title: "维修估价助手",

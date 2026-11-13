@@ -86,7 +86,7 @@ export const en = {
       },
       {
         title: "Meta (Facebook and Instagram) measurement",
-        body: "If you accept, the site loads the Meta Pixel so SPEEDX AUTO can measure visits from its Facebook and Instagram ads. It records page views and contact-button clicks (the method and page type only). It does not send your name, phone number, or chat messages to Meta. If you decline, the Meta Pixel does not load.",
+        body: "If you accept, the site loads the Meta Pixel so SPEEDX AUTO can measure visits from its Facebook and Instagram ads. It records page views, contact-button clicks (the method and page type only), and that an estimate request or booking was submitted (only that it happened and the page type). It does not send your name, phone number, or chat messages to Meta. If you decline, the Meta Pixel does not load.",
       },
       {
         title: "Contact-click events",
@@ -95,6 +95,10 @@ export const en = {
       {
         title: "Stored preference",
         body: "The browser stores only your granted or denied preference under speedx-consent-v1. SPEEDX AUTO does not place payment, identity, or vehicle information in that preference.",
+      },
+      {
+        title: "Hosting income estimate",
+        body: "To see the income estimate on the hosting page, you provide your name and phone number; SPEEDX AUTO receives them by email, together with the vehicle, the estimate shown and the conversation, so the team can follow up. Your name and phone are not sent to the AI service. Your chat messages are sent to Anthropic's Claude AI service to generate replies. When you submit your name and phone, the site records that a hosting lead happened (the page type and language only); if you accepted measurement, it also tells Google Ads and Meta that a lead occurred, without your name, phone or chat messages. The website keeps the conversation in memory for a few hours to show your estimate and does not keep it after that; your browser does not store it.",
       },
       {
         title: "Repair estimate assistant",
