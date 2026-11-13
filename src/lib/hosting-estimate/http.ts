@@ -46,7 +46,14 @@ export class HostingSessions {
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
+  /** Forget conversations idle longer than the TTL (the privacy page promises a few hours at most). */
+  sweep(): void {
+    const now = this.now();
+    for (const [id, s] of this.sessions) if (now - s.lastAt > SESSION_TTL_MS) this.sessions.delete(id);
+  }
+
   get(id: string | null): HostingSession | null {
+    this.sweep();
     if (!id) return null;
     const session = this.sessions.get(id);
     if (!session || this.now() - session.lastAt > SESSION_TTL_MS) return null;
@@ -55,9 +62,7 @@ export class HostingSessions {
   }
 
   create(locale: string): HostingSession {
-    if (this.sessions.size > 2000) {
-      for (const [id, s] of this.sessions) if (this.now() - s.lastAt > SESSION_TTL_MS) this.sessions.delete(id);
-    }
+    this.sweep();
     const session: HostingSession = { id: randomBytes(16).toString("hex"), locale, lead: null, transcript: [], cards: [], held: null, lastAt: this.now() };
     this.sessions.set(session.id, session);
     return session;
@@ -78,7 +83,12 @@ export interface HostingDeps {
 const SHARED = Symbol.for("speedx.hostingEstimate.shared");
 function shared(): { sessions: HostingSessions; mailer: Mailer } {
   const holder = globalThis as { [SHARED]?: { sessions: HostingSessions; mailer: Mailer } };
-  holder[SHARED] ??= { sessions: new HostingSessions(), mailer: createMailer() };
+  if (!holder[SHARED]) {
+    const sessions = new HostingSessions();
+    // Without visitors nothing would call sweep(), so expired conversations are also cleared on a timer.
+    setInterval(() => sessions.sweep(), 10 * 60 * 1000).unref?.();
+    holder[SHARED] = { sessions, mailer: createMailer() };
+  }
   return holder[SHARED];
 }
 

@@ -129,6 +129,18 @@ describe("hosting estimate chat reports the lead once", () => {
     expect(emit).toHaveBeenCalledTimes(1);
   });
 
+  it("does not report when the server answers OK but the reply can't be read", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => (url === "/api/hosting-estimate/chat" ? chatHeld() : new Response("<html>gateway error</html>", { status: 200 }))),
+    );
+    render(<HostingEstimateChat locale="zh-CN" dict={zhCN} pagePath="/zh-CN/hosting" />);
+    await userEvent.click(screen.getByRole("button", { name: zhCN.hostingEstimate.starters[0] }));
+    await fillGate();
+    expect(await screen.findByRole("alert")).toHaveTextContent(zhCN.hostingEstimate.gate.failed);
+    expect(emit).not.toHaveBeenCalled();
+  });
+
   it("reports only once in a visit, even when the contact form is submitted a second time", async () => {
     let leadCalls = 0;
     vi.stubGlobal(

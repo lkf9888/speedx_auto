@@ -81,6 +81,19 @@ const post = (url: string, body: unknown) =>
   new Request(`https://speedxrental.com${url}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const lines = async (response: Response) => (await response.text()).trim().split("\n").map((l) => JSON.parse(l) as { type: string; [k: string]: unknown });
 
+describe("hosting estimate sessions", () => {
+  it("forgets a conversation a few hours after its last use", () => {
+    let now = 0;
+    const sessions = new HostingSessions(() => now);
+    const s = sessions.create("en");
+    now = 2 * 60 * 60 * 1000;
+    expect(sessions.get(s.id)).not.toBeNull();
+    now += 3 * 60 * 60 * 1000 + 1;
+    sessions.sweep();
+    expect(sessions.get(s.id)).toBeNull();
+  });
+});
+
 describe("hosting estimate endpoints", () => {
   it("holds the report until name and phone are given, then tells the shop", async () => {
     const seen: unknown[] = [];
