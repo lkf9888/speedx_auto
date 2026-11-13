@@ -1,6 +1,6 @@
 /**
  * repair.speedxrental.com — forwards the staff repair workbench to the main
- * site's Render service (Render's plan allows no more custom domains).
+ * site's Railway service (moved from Render on 2026-11-12).
  *
  * Cloudflare Access protects this hostname; the Access token travels on in
  * the Cf-Access-Jwt-Assertion header and the CF_Authorization cookie, and the
@@ -9,7 +9,7 @@
  * Deployed by hand in the Cloudflare dashboard (Workers & Pages →
  * speedx-repair-workbench), with repair.speedxrental.com as its custom domain.
  */
-const ORIGIN = "https://speedx-rental.onrender.com";
+const ORIGIN = "https://speedxauto-production.up.railway.app";
 
 function allowed(path) {
   return (
