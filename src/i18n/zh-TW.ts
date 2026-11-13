@@ -43,6 +43,7 @@ export const zhTW: Dictionary = {
       "直接在 SPEEDX AUTO 官網訂車：選日期、看全部費用、線上付款、線上簽租車合約。取車地點在列治文 2980 Number 3 Rd，靠近溫哥華機場。",
     frameTitle: "SPEEDX AUTO 租車預訂",
     openFull: "在新視窗開啟租車頁面",
+    loading: "正在載入可租車輛…",
   },
   cta: {
     contactWeChat: "加微信",

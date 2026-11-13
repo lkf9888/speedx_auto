@@ -51,8 +51,14 @@ export default async function RentPage({
         ]}
       />
       <h1 className="sr-only">{dict.rent.metaTitle}</h1>
-      <RentalSiteFrame locale={locale as Locale} title={dict.rent.frameTitle} />
+      <RentalSiteFrame
+        locale={locale as Locale}
+        title={dict.rent.frameTitle}
+        loadingLabel={dict.rent.loading}
+      />
       <noscript>
+        {/* Without scripts the frame never gets an address: hide its empty box. */}
+        <style>{"[data-rent-frame]{display:none}"}</style>
         <p className="px-4 py-6 text-center text-sm">
           <a href={rentalSiteHref(locale as Locale)} className="font-semibold underline">
             {dict.rent.openFull}

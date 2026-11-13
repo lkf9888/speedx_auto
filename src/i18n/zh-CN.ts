@@ -43,6 +43,7 @@ export const zhCN: Dictionary = {
       "直接在 SPEEDX AUTO 官网订车：选日期、看全部费用、在线付款、在线签租车合同。取车地点在列治文 2980 Number 3 Rd，靠近温哥华机场。",
     frameTitle: "SPEEDX AUTO 租车预订",
     openFull: "在新窗口打开租车页面",
+    loading: "正在加载可租车辆…",
   },
   cta: {
     contactWeChat: "加微信",

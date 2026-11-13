@@ -42,6 +42,7 @@ export const en = {
       "Book a SPEEDX AUTO car directly: pick dates, see the full price, pay online and sign the rental agreement. Pickup at 2980 Number 3 Rd, Richmond, near YVR.",
     frameTitle: "SPEEDX AUTO car rental booking",
     openFull: "Open the booking site in a full window",
+    loading: "Loading available cars…",
   },
   cta: {
     contactWeChat: "Add WeChat",
