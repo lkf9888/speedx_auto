@@ -19,12 +19,12 @@ const repairLeadConversionDestinations = {
 export type RepairLeadKind = keyof typeof repairLeadConversionDestinations;
 
 /**
- * "Hosting – estimate lead" in Google Ads (marketing task SX-03). Not created
- * yet: until its label goes here, a hosting lead is still recorded as
- * generate_lead and a Meta Lead, but no Google Ads conversion is sent.
- * Do not reuse a repair label: that would count owners as repair customers.
+ * "Hosting – estimate lead" in Google Ads (marketing task SX-03, secondary,
+ * counted once). Set to null to stop sending it: the lead is then still
+ * recorded as generate_lead and a Meta Lead. Do not reuse a repair label:
+ * that would count owners as repair customers.
  */
-export const HOSTING_LEAD_CONVERSION_DESTINATION: string | null = null;
+export const HOSTING_LEAD_CONVERSION_DESTINATION: string | null = "AW-625073096/Emp3CLW_-rcdEMi3h6oC";
 
 export type ContactMethod = "whatsapp" | "phone" | "wechat" | "email";
 export type ContactIntent = "hosting" | "auto_repair" | "general";

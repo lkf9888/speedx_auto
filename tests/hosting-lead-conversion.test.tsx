@@ -8,7 +8,7 @@ import { saveConsent } from "@/lib/consent";
 import { estimateIncome } from "@/lib/hosting-estimate/estimate";
 import { loadMetaPixel, resetMetaPixelForTests } from "@/lib/meta-pixel";
 
-const HOSTING_LABEL = "AW-625073096/hostingTestLabel";
+const HOSTING_LABEL = "AW-625073096/Emp3CLW_-rcdEMi3h6oC";
 const REPAIR_LABEL = "AW-625073096/--kTCJeh_aQdEMi3h6oC";
 
 function resetTracking() {
@@ -46,7 +46,16 @@ describe("emitHostingLead", () => {
     expect(window.fbq).toBeUndefined();
   });
 
-  it("sends no Ads conversion until the hosting label exists, and never the repair label", () => {
+  it("uses the hosting label by default", () => {
+    expect(analytics.HOSTING_LEAD_CONVERSION_DESTINATION).toBe(HOSTING_LABEL);
+    saveConsent("granted");
+    const gtag = vi.fn();
+    window.gtag = gtag;
+    analytics.emitHostingLead("en");
+    expect(gtag.mock.calls[1]).toEqual(["event", "conversion", { send_to: HOSTING_LABEL, currency: "CAD", transport_type: "beacon" }]);
+  });
+
+  it("sends no Ads conversion when the label is switched off, and never the repair label", () => {
     expect(analytics.HOSTING_LEAD_CONVERSION_DESTINATION).not.toBe(REPAIR_LABEL);
     saveConsent("granted");
     loadMetaPixel();
