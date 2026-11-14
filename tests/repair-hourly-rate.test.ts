@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { handleChat, type RouteDeps } from "@/lib/repair-chat/http";
 import { hideHourlyRate, hourlyRateAnswer, statesHourlyRate } from "@/lib/repair-chat/hourly-rate";
 import { SYSTEM_PROMPT } from "@/lib/repair-chat/prompt";
-import { buildEstimate, summarizeEstimateForModel, WALK_IN_LABOR_RATE } from "@/lib/repair-chat/pricing";
+import { buildEstimate, forCustomer, minimumLaborNote, summarizeEstimateForModel, WALK_IN_LABOR_RATE } from "@/lib/repair-chat/pricing";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 import { SessionStore } from "@/lib/repair-chat/session";
 
@@ -18,6 +18,27 @@ describe("the public assistant is never given the hourly rate", () => {
     expect(SYSTEM_PROMPT).not.toContain(`$${WALK_IN_LABOR_RATE * 0.5}`);
     expect(SYSTEM_PROMPT).not.toMatch(/per hour|\/h\b|\d h = \$/i);
     expect(SYSTEM_PROMPT).toMatch(/does not tell customers an hourly labor rate/);
+    // The minimum's length plus its amount would give the rate away too.
+    expect(SYSTEM_PROMPT).not.toMatch(/0\.5 h|half an hour/);
+  });
+
+  it("tells the model the minimum labor amount, never how many hours it is", () => {
+    const note = minimumLaborNote([0.2]);
+    expect(note).toContain("adds $36");
+    expect(note).not.toMatch(/\d h\b|hour/);
+  });
+});
+
+describe("the visitor's browser gets the card without hours or the rate", () => {
+  it("strips hours, rate, referral figures and the labor note", () => {
+    const card = buildEstimate(
+      "2019 Toyota Camry",
+      { status: "ok", serviceName: "Brake Pads R&R", position: "Front", laborHours: 1.1, laborNote: "Takes 1.1 h", primaryPartName: "", partOptions: [], otherPartNames: [], partsNote: "" },
+      "E-1",
+    );
+    const shown = forCustomer(card);
+    expect(shown).toMatchObject({ laborHours: 0, laborRate: 0, laborReferral: 0, referralTotalLow: 0, referralTotalHigh: 0, laborNote: "", laborWalkIn: 132, totalLow: 132 });
+    expect(JSON.stringify(shown)).not.toMatch(/120|1\.1/);
   });
 });
 
@@ -51,6 +72,12 @@ describe("statesHourlyRate", () => {
     "每小时 120 元",
     "工时费率 $120/小时",
     "我們的時薪是 120 元",
+    "That's 120 bucks an hour.",
+    "We bill $120 for each hour",
+    "It's 120 an hr",
+    "$120 p/h",
+    "一个小时120块",
+    "每個鐘 120 蚊",
   ])("catches case %#", (sentence) => {
     expect(statesHourlyRate(sentence)).toBe(true);
   });
@@ -63,6 +90,9 @@ describe("statesHourlyRate", () => {
     "Vehicles that sold new above $120,000 are quoted by the team.",
     "高级机油 0W-30 换机油 $120，含机油和机滤。",
     "大约需要 45 分钟到一小时。",
+    "It takes 45 minutes to an hour.",
+    "要做大约 10 個鐘",
+    "一个小时内做完",
   ])("leaves case %# alone", (sentence) => {
     expect(statesHourlyRate(sentence)).toBe(false);
   });
@@ -81,6 +111,13 @@ describe("hideHourlyRate", () => {
     expect(reply).not.toContain(RATE);
     expect(reply).toContain("不单独报每小时的价钱");
     expect(reply).toContain("需要帮您报个价吗？");
+  });
+
+  it("drops only the Chinese clause with the rate, not the whole paragraph", () => {
+    const reply = hideHourlyRate("前刹车片大约 $262–$350，工时每小时 $120，需要预约吗？", "Simplified Chinese");
+    expect(reply).not.toContain(RATE);
+    expect(reply).toContain("前刹车片大约 $262–$350，");
+    expect(reply).toContain("需要预约吗？");
   });
 
   it("returns a reply with no rate in it unchanged", () => {

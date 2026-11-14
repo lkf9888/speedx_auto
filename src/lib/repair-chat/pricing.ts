@@ -93,7 +93,7 @@ export function minimumLaborNote(jobHours: number[], forStaff = false): string {
   if (!hours) return "";
   const dollars = laborCost(hours);
   if (!forStaff) {
-    return `Shop rule: the labor-guide jobs priced in this reply are under the shop's minimum of ${MIN_LABOR_HOURS} h of labor per order, so unless you price more labor jobs, a "minimum labor charge" card adds $${dollars} (before the 10% allowance) after your reply. Include it in the total you give and say briefly why.`;
+    return `Shop rule: the labor-guide jobs priced in this reply are under the shop's minimum labor charge per order, so unless you price more labor jobs, a "minimum labor charge" card adds $${dollars} (before the 10% allowance) after your reply. Include it in the total you give and say briefly why.`;
   }
   const total = Math.round(jobHours.reduce((sum, h) => sum + (h > 0 ? h : 0), 0) * 100) / 100;
   return `Shop rule: the labor-guide jobs priced in this reply add up to ${total} h. The shop charges at least ${MIN_LABOR_HOURS} h of labor per order, so unless you price more labor jobs, a "minimum labor charge" card adds ${hours} h ($${dollars}) after your reply. Include it in the total you give and say briefly why.`;
@@ -303,11 +303,21 @@ export function buildTeamQuoteCard(
  * amount they would give away the hourly rate, which customers aren't told.
  */
 export function withoutHours(note: string): string {
+  const figure = String.raw`(?:\d+(?:\.\d+)?|\.\d+)`;
   return note
-    .replace(/\s*\(\s*\d+(?:\.\d+)?\s*h\s*→\s*\d+(?:\.\d+)?\s*h\s*\)/g, "")
-    .replace(/\b\d+(?:\.\d+)?\s*h(?:ours?|rs?)?\b/gi, "a set time")
+    .replace(new RegExp(String.raw`\s*\(\s*${figure}\s*h\s*→\s*${figure}\s*h\s*\)`, "g"), "")
+    .replace(new RegExp(String.raw`(?<![\w.])${figure}\s*(?:h|hrs?|hours?|min|minutes?)\b`, "g"), "a set time")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+/**
+ * The card as the visitor's browser receives it: what the quote sheet shows,
+ * without the hours, the hourly rate, referral figures or the labor note
+ * (which can carry hours). The shop's copies (emails, workbench) keep them.
+ */
+export function forCustomer(card: EstimateCard): EstimateCard {
+  return { ...card, laborHours: 0, laborRate: 0, laborReferral: 0, referralTotalLow: 0, referralTotalHigh: 0, laborNote: "" };
 }
 
 export function summarizeEstimateForModel(card: EstimateCard): string {

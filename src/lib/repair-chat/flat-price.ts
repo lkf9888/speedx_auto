@@ -220,7 +220,7 @@ const WORDS: Record<Locale, Record<string, string>> = {
     tire_in_stock: "in stock",
     tire_ships_soon: "about 1–3 days to arrive",
     tire_studded: "studded",
-    min_labor: "Minimum labor charge (order under 0.5 h)",
+    min_labor: "Minimum labor charge",
   },
   "zh-CN": {
     oil_change: "换机油",
@@ -248,7 +248,7 @@ const WORDS: Record<Locale, Record<string, string>> = {
     tire_in_stock: "现货",
     tire_ships_soon: "需调货，约 1–3 天",
     tire_studded: "带钉",
-    min_labor: "最低工时补足（整单不足 0.5 小时）",
+    min_labor: "最低工时补足",
   },
   "zh-TW": {
     oil_change: "換機油",
@@ -276,7 +276,7 @@ const WORDS: Record<Locale, Record<string, string>> = {
     tire_in_stock: "現貨",
     tire_ships_soon: "需調貨，約 1–3 天",
     tire_studded: "帶釘",
-    min_labor: "最低工時補足（整單不足 0.5 小時）",
+    min_labor: "最低工時補足",
   },
 };
 

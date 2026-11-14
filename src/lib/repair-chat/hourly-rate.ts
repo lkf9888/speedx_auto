@@ -2,17 +2,22 @@
  * The shop doesn't tell customers its hourly labor rate (Kevin, 2026-11-14):
  * labor is quoted as part of each job's total. The public assistant is never
  * given the rate, and the prompt says not to give one; this is the last check
- * in code. Any sentence in a public reply that states an hourly figure is
- * dropped and the shop's explanation goes in front instead.
+ * in code. Any sentence (or Chinese clause) in a public reply that states an
+ * hourly figure is dropped and the shop's explanation goes in front instead.
  */
 
-/** A dollar figure followed by "per hour" in some form: "$120/h", "$120 an hour", "120 元每小时". */
-const AMOUNT_PER_HOUR =
-  /\$?\s?\d{2,3}(?:\.\d{1,2})?\s*(?:dollars?|CAD|加元|加币|加幣|元|块|塊)?\s*(?:\/\s*(?:hours?|hrs?|h)\b|\/\s*(?:小时|小時)|per\s+(?:labou?r\s+)?hour|an\s+hour|hourly|每小时|每小時|每个小时|每個小時|一小时|一小時)/i;
+const CURRENCY = String.raw`(?:dollars?|bucks|CAD|加元|加币|加幣|元|块|塊|蚊)?`;
+const PER_HOUR = String.raw`(?:\/\s*(?:hours?|hrs?|h)\b|\/\s*(?:小时|小時)|p\s*\/\s*h\b|per\s+(?:labou?r\s+)?(?:hour|hr)\b|(?:an?|each|every|for\s+each|for\s+every)\s+(?:hour|hr)\b|hourly|每小时|每小時|每个小时|每個小時|一小时|一小時|一个小时|一個小時|每个钟|每個鐘|一个钟|一個鐘)`;
+const HOUR_WORD = String.raw`(?:每小时|每小時|每个小时|每個小時|一小时|一小時|一个小时|一個小時|每个钟|每個鐘|一个钟|一個鐘)`;
 
-/** A rate word followed closely by a figure: "hourly rate is $120", "时薪 120 元", "每小时 $120". */
-const RATE_THEN_AMOUNT =
-  /(?:hourly\s+(?:labou?r\s+)?rate|labou?r\s+rate|shop\s+rate|rate\s+per\s+hour|per[-\s]hour\s+rate|时薪|時薪|每小时|每小時|小时费|小時費|工时单价|工時單價|工时费率|工時費率)[^.!?。！？\n\d$]{0,12}\$?\s?\d{2,3}/i;
+/** A dollar figure followed by "per hour" in some form: "$120/h", "120 bucks an hour", "120 元每小时". */
+const AMOUNT_PER_HOUR = new RegExp(String.raw`\$?\s?\d{2,3}(?:\.\d{1,2})?\s*${CURRENCY}\s*${PER_HOUR}`, "i");
+
+/** A rate word followed closely by a figure: "hourly rate is $120", "时薪 120 元", "一个小时 120 块". */
+const RATE_THEN_AMOUNT = new RegExp(
+  String.raw`(?:hourly\s+(?:labou?r\s+)?rate|labou?r\s+rate|shop\s+rate|rate\s+per\s+hour|per[-\s]hour\s+rate|时薪|時薪|小时费|小時費|工时单价|工時單價|工时费率|工時費率|${HOUR_WORD})[^.!?。！？\n\d$]{0,12}\$?\s?\d{2,3}`,
+  "i",
+);
 
 export function statesHourlyRate(sentence: string): boolean {
   return AMOUNT_PER_HOUR.test(sentence) || RATE_THEN_AMOUNT.test(sentence);
@@ -25,8 +30,8 @@ export function hourlyRateAnswer(language: string): string {
     : "Labor is charged by the standard labor-guide time for your vehicle and the job, and it's already included in each estimate, so we don't quote a separate hourly rate. Tell me your vehicle and what it needs and I'll give you the total; the team confirms the exact hours at the shop.";
 }
 
-/** Sentence ends: after . ! ? followed by space, after 。！？, or at a line break. Kept as separators. */
-const SENTENCE_BREAK = /((?<=[.!?])\s+|(?<=[。！？])|\n+)/;
+/** Break points: after . ! ? followed by space, after Chinese 。！？，；, or at a line break. Kept as separators. */
+const SENTENCE_BREAK = /(\n+|(?<=[.!?])\s+|(?<=[。！？，；]))/;
 
 /** The reply with any hourly-rate sentence removed and the shop's explanation in front; unchanged when there is none. */
 export function hideHourlyRate(text: string, language: string): string {
@@ -43,6 +48,6 @@ export function hideHourlyRate(text: string, language: string): string {
     kept += sentence + separator;
   }
   if (!removed) return text;
-  const rest = kept.trim();
+  const rest = kept.replace(/^[，；\s]+/, "").trim();
   return rest ? `${hourlyRateAnswer(language)}\n\n${rest}` : hourlyRateAnswer(language);
 }

@@ -24,7 +24,7 @@ import {
   isAllowlisted,
   parseAllowlist,
 } from "@/lib/repair-chat/visitor";
-import type { EstimateCard } from "@/lib/repair-chat/pricing";
+import { forCustomer, type EstimateCard } from "@/lib/repair-chat/pricing";
 import type { ChatEvent } from "@/lib/repair-chat/tools";
 import type { CatalogApi } from "@/lib/worldpac/catalog";
 import { getWorldpacClient } from "@/lib/worldpac/client";
@@ -275,7 +275,8 @@ export async function handleLead(
     deps.sessions.recordBooking(session.id, session.booking);
     await sendBooking(deps, lead, locale, session.booking, session, "chat");
   }
-  const pending = deps.sessions.takeReply(session.id) ?? null;
+  const held = deps.sessions.takeReply(session.id);
+  const pending = held ? { ...held, estimates: held.estimates.map(forCustomer) } : null;
   return Response.json({ ok: true, sessionId: session.id, pending });
 }
 
@@ -414,6 +415,8 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
             return;
           }
           pendingNotices.push(notify(estimateLeadEvent(session.lead, request_.locale, event.estimate)));
+          controller.enqueue(encoder.encode(`${JSON.stringify({ ...event, estimate: forCustomer(event.estimate) })}\n`));
+          return;
         }
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       };

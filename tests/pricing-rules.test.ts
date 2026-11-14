@@ -40,7 +40,7 @@ describe("labor minimum per order", () => {
     const engine = buildEstimate("2022 Mitsubishi Outlander", job(0.3), "E-1");
     const cabin = buildEstimate("2022 Mitsubishi Outlander", job(0.15, "Cabin Air Filter R&R"), "E-2");
     const extra = minimumLaborCard([engine, cabin], "zh-CN", "E-3")!;
-    expect([extra.service, extra.laborHours, extra.laborWalkIn, extra.vehicle]).toEqual(["最低工时补足（整单不足 0.5 小时）", 0.05, 6, "2022 Mitsubishi Outlander"]);
+    expect([extra.service, extra.laborHours, extra.laborWalkIn, extra.vehicle]).toEqual(["最低工时补足", 0.05, 6, "2022 Mitsubishi Outlander"]);
     expect(extra.laborNote).toContain("add up to 0.45 h");
     expect(minimumLaborCard([buildEstimate("car", job(0.8), "E-4")], "en", "E-5")).toBeNull();
   });
