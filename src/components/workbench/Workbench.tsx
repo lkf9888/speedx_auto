@@ -17,7 +17,7 @@ import {
 } from "@/lib/workbench/conversation-types";
 import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
-import { ConnectionButton, ConnectionStatus } from "./ConnectionStatus";
+import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
 import { StaffQuoteCard } from "./StaffQuoteCard";
@@ -144,6 +144,7 @@ export function Workbench({ email }: { email: string }) {
   const [showDocuments, setShowDocuments] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
+  const connection = useConnectionSummary();
   /** Right-click (or ⋯) menu on a conversation, and whether the list shows the archived ones. */
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -665,13 +666,13 @@ export function Workbench({ email }: { email: string }) {
           }}
           className={`${showList ? "hidden" : "flex"} relative min-w-0 flex-1 flex-col md:flex`}
         >
-          <header className="flex items-center gap-2 bg-[color:var(--wb-header)] px-3 py-2.5">
+          <header className="flex items-center gap-1.5 bg-[color:var(--wb-header)] px-2 py-2.5 sm:gap-2 sm:px-3">
             <button type="button" aria-label="返回会话列表" onClick={() => setShowList(true)} className="rounded-full p-2 text-[color:var(--wb-icon)] hover:bg-[color:var(--wb-hover)] md:hidden">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M15 5l-7 7 7 7" />
               </svg>
             </button>
-            <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:var(--wb-avatar)] font-semibold text-[color:var(--wb-icon)]">
+            <span aria-hidden className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:var(--wb-avatar)] font-semibold text-[color:var(--wb-icon)] sm:flex">
               {active.website ? "🌐" : (active.title || "新").slice(0, 1).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1 leading-tight">
@@ -700,13 +701,13 @@ export function Workbench({ email }: { email: string }) {
               )}
               <p className="truncate text-xs text-[color:var(--wb-muted)]">{active.vehicle ? `当前车辆：${active.vehicle.label}` : "输入车型、VIN 或轮胎尺寸，也可以发照片"}</p>
             </div>
-            <ConnectionButton open={showStatus} onToggle={() => setShowStatus((v) => !v)} />
+            <ConnectionButton open={showStatus} onToggle={() => setShowStatus((v) => !v)} down={connection.down} />
             <button
               type="button"
               onClick={() => setShowMemory((v) => !v)}
               aria-expanded={showMemory}
               aria-label="工作台记忆"
-              className="shrink-0 rounded-full border border-[color:var(--wb-line)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--wb-icon)] hover:bg-[color:var(--wb-hover)]"
+              className="shrink-0 rounded-full border border-[color:var(--wb-line)] bg-white px-2 py-1.5 text-xs font-semibold text-[color:var(--wb-icon)] hover:bg-[color:var(--wb-hover)] sm:px-3"
             >
               记忆
             </button>
@@ -715,7 +716,7 @@ export function Workbench({ email }: { email: string }) {
               onClick={() => setShowDocuments((v) => !v)}
               aria-expanded={showDocuments}
               aria-label="ALLDATA 单据"
-              className="shrink-0 rounded-full border border-[color:var(--wb-line)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--wb-icon)] hover:bg-[color:var(--wb-hover)]"
+              className="shrink-0 rounded-full border border-[color:var(--wb-line)] bg-white px-2 py-1.5 text-xs font-semibold text-[color:var(--wb-icon)] hover:bg-[color:var(--wb-hover)] sm:px-3"
             >
               ALLDATA<span className="hidden sm:inline"> 单据</span>
             </button>
@@ -811,7 +812,7 @@ export function Workbench({ email }: { email: string }) {
                 <div key={turn.id ?? index} className="space-y-2" data-side="right">
                   {turn.text && (
                     <div className="wa-bubble wa-bubble-out wa-bubble-ai ml-auto max-w-[92%] sm:max-w-[75%]" data-testid="ai-message">
-                      <p className="text-xs font-semibold text-[#027eb5]">🤖 {turn.source === "website" ? "网站 AI 客服" : "AI 助手"}</p>
+                      <p className="text-xs font-semibold text-[color:var(--wa-ai-name,#027eb5)]">🤖 {turn.source === "website" ? "网站 AI 客服" : "AI 助手"}</p>
                       {turn.held && (
                         <p data-testid="held-notice" className="-mx-1 mb-1 rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
                           ⚠ 客人没看到这条回复和报价：要先留姓名电话才能看，客人还没留
@@ -822,7 +823,7 @@ export function Workbench({ email }: { email: string }) {
                     </div>
                   )}
                   {turn.estimates?.map((card) => (
-                    <div key={card.id} className="flex justify-end">
+                    <div key={card.id} className="ml-auto w-full max-w-xl">
                       <WebsiteEstimateCard card={card} />
                     </div>
                   ))}
@@ -833,7 +834,7 @@ export function Workbench({ email }: { email: string }) {
                     <AlldataDraftCard key={draft.id} draft={draft} onCreated={(created) => markCreated(active.id, draft.id, created)} />
                   ))}
                   {turn.memories?.map((proposal) => (
-                    <div key={proposal.id} className="flex justify-end">
+                    <div key={proposal.id} className="ml-auto w-full max-w-xl">
                       <MemoryProposalCard proposal={proposal} saved={Boolean(proposal.saved)} onSaved={() => markMemorySaved(active.id, proposal.id)} />
                     </div>
                   ))}
@@ -953,7 +954,7 @@ export function Workbench({ email }: { email: string }) {
       )}
       {showStatus && (
         <Modal label="连接状态" onClose={() => setShowStatus(false)}>
-          <ConnectionStatus onClose={() => setShowStatus(false)} />
+          <ConnectionStatus onClose={() => setShowStatus(false)} onChange={connection.update} />
         </Modal>
       )}
       {showDocuments && (
