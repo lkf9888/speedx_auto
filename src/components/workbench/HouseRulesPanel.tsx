@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { HouseRule, HouseRuleChange } from "@/lib/repair-chat/house-rules";
+import { EVERYONE, type HouseRule, type HouseRuleChange } from "@/lib/repair-chat/house-rules";
 import type { RulesProposal } from "@/lib/workbench/house-rules-agent";
 
 interface RulesState {
@@ -73,11 +73,16 @@ function ChangeLine({ change, rules, today }: { change: HouseRuleChange; rules: 
     );
   }
   const rule = change.rule ?? {};
+  // Who it's for after the change: an update with no phone keeps the old customer; "everyone" opens it to all.
+  const typed = (rule.customerPhone ?? "").trim();
+  const toEveryone = typed.toLowerCase() === EVERYONE;
+  const phone = toEveryone ? "" : typed.replace(/\D/g, "") || (change.action === "update" ? (old?.customerPhone ?? "") : "");
   return (
     <li>
       <span className="font-semibold text-[#027eb5]">{change.action === "add" ? "新增" : "修改"}</span>{" "}
       <span className="font-semibold">{rule.title}</span>
-      <span className="text-[color:var(--wb-muted)]">（{rule.kind === "discount" ? "折扣" : "叮嘱"} · {when(rule, today)}{rule.customerPhone ? ` · ${tail(rule.customerPhone.replace(/\D/g, ""))}` : ""}）</span>
+      <span className="text-[color:var(--wb-muted)]">（{rule.kind === "discount" ? "折扣" : "叮嘱"} · {when(rule, today)}{phone ? ` · ${tail(phone)}` : ""}）</span>
+      {toEveryone && old?.customerPhone && <span className="ml-1 rounded bg-red-100 px-1 text-xs font-semibold text-red-800">范围从指定客人改成所有客人</span>}
       <br />
       <span className="whitespace-pre-wrap">{describe(rule)}</span>
     </li>
@@ -95,6 +100,8 @@ export function HouseRulesPanel({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const end = useRef<HTMLDivElement>(null);
+  /** Set while a confirm or dismiss is being handled, so a double click can't apply a card twice. */
+  const settling = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -134,7 +141,8 @@ export function HouseRulesPanel({ onClose }: { onClose: () => void }) {
 
   async function settle(index: number, apply: boolean) {
     const proposal = turns[index]?.proposal;
-    if (!proposal) return;
+    if (!proposal || turns[index]?.outcome || settling.current) return;
+    settling.current = true;
     setError("");
     if (apply) {
       setBusy(true);
@@ -143,11 +151,13 @@ export function HouseRulesPanel({ onClose }: { onClose: () => void }) {
       } catch (e) {
         setError((e as Error).message);
         setBusy(false);
+        settling.current = false;
         return;
       }
       setBusy(false);
     }
     setTurns((list) => list.map((t, i) => (i === index ? { ...t, outcome: apply ? "applied" : "dismissed" } : t)));
+    settling.current = false;
   }
 
   async function remove(rule: HouseRule) {

@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { decodeVehicleKey, describeVehicle, type CatalogApi } from "@/lib/worldpac/catalog";
 import { minimumLaborCard, minimumLaborNote, type EstimateCard } from "./pricing";
 import { shopNow } from "./booking";
-import { applyDiscounts, discountLabel, houseNotesPrompt, rulesFor, type HouseRule } from "./house-rules";
+import { applyDiscounts, discountLabel, houseNotesPrompt, rulesFor, withoutDiscount, type HouseRule } from "./house-rules";
 import { WorldpacError } from "@/lib/worldpac/client";
 import { detectCustomerLanguage, safetyWarning, SYSTEM_PROMPT, turnContext } from "./prompt";
 import { hideHourlyRate } from "./hourly-rate";
@@ -110,6 +110,28 @@ async function publicTool(
 }
 
 const SCRIPT_FOR_LOCALE: Record<string, string> = { en: "English", "zh-CN": "Simplified Chinese", "zh-TW": "Traditional Chinese" };
+
+/**
+ * Estimates held until the visitor gave their phone, priced again with the
+ * discounts that apply now that the phone is known (a customer's own
+ * discount). `changed` says whether any card's discount is different.
+ */
+export function rediscountHeld(
+  cards: EstimateCard[],
+  house: { rules: readonly HouseRule[]; customerPhone: string | null; now?: Date },
+): { cards: EstimateCard[]; changed: boolean } {
+  const running = rulesFor(house.rules, shopNow(house.now ?? new Date()).date, house.customerPhone);
+  let changed = false;
+  const next = cards.map((card) => {
+    const locale = card.lang ?? "en";
+    const priced = applyDiscounts(withoutDiscount(card), running, (rule) =>
+      matchScript(discountLabel(rule, locale), SCRIPT_FOR_LOCALE[locale] ?? "English"),
+    );
+    if (JSON.stringify(priced.discount ?? null) !== JSON.stringify(card.discount ?? null)) changed = true;
+    return priced;
+  });
+  return { cards: next, changed };
+}
 
 /**
  * The public assistant with the shop owner's rules that apply today (and to

@@ -12,7 +12,7 @@ import {
   rulesFor,
   type HouseRule,
 } from "@/lib/repair-chat/house-rules";
-import { handleChat, type RouteDeps } from "@/lib/repair-chat/http";
+import { handleChat, handleLead, type RouteDeps } from "@/lib/repair-chat/http";
 import { buildEstimate, buildFlatEstimate, buildTireEstimate, buildTeamQuoteCard, summarizeEstimateForModel, type EstimateCard } from "@/lib/repair-chat/pricing";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 import { SessionStore } from "@/lib/repair-chat/session";
@@ -228,7 +228,100 @@ describe("the website assistant with the owner's rules", () => {
   });
 });
 
+describe("review fixes", () => {
+  const label = (r: HouseRule) => discountLabel(r, "en");
+
+  it("takes a labor discount only off labor-guide jobs, never off tires or flat prices", () => {
+    const rules = [rule({ percent: 10, appliesTo: "all", on: "labor" })];
+    expect(applyDiscounts(tireCard(), rules, label).discount).toBeUndefined();
+    expect(applyDiscounts(oilCard(), rules, label).discount).toBeUndefined();
+    expect(applyDiscounts(laborCard(1), rules, label).discount).toMatchObject({ low: 12 });
+  });
+
+  it("keeps a customer's rule for that customer when an update leaves the phone empty; everyone opens it up", () => {
+    const base = rule({ amount: 10, customerPhone: "604-555-0182" });
+    expect(cleanRule({ amount: 15, customerPhone: "" }, who, base)).toMatchObject({ amount: 15, customerPhone: "6045550182" });
+    expect(cleanRule({ customerPhone: "everyone" }, who, base).customerPhone).toBe("");
+    expect(cleanRule({ customerPhone: "778-555-0100" }, who, base).customerPhone).toBe("7785550100");
+  });
+
+  it("re-prices estimates held for a phone number with that customer's discount", async () => {
+    const rules = [rule({ id: "R-1", percent: 10, labelEn: "Returning customer", labelZh: "老客人优惠", customerPhone: "604-555-0182" })];
+    const key = Buffer.from(JSON.stringify({ b: 1, l: "2019 Toyota Camry", a: [] })).toString("base64url");
+    const replies = [
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t", name: "get_estimate", input: { vehicle_key: key, service_id: 5, position: null, done_with_service_id: 0, done_with_position: "", both_sides: false } }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "About $108–$132." }] },
+    ];
+    const sessions = new SessionStore(async () => {});
+    const deps: RouteDeps = {
+      configured: () => true,
+      limiter: new RateLimiter(),
+      notify: async () => {},
+      sessions,
+      catalog: () => ({
+        get: async () => ({}) as never,
+        post: async (path: string) =>
+          ({
+            "labor-ops-list": { laborOperations: [{ applicationID: 1, assetName: "a", positionID: -1 }] },
+            "labor-ops-details": { laborOperation: { estimateTimeHour: 1, laborCategoryName: "Brake Pads R&R", applications: [] } },
+          })[path] as never,
+      }),
+      client: () => ({ beta: { messages: { create: async () => replies.shift() as never } } }),
+      houseRules: async () => rules,
+    };
+    const post = (path: string, body: unknown) =>
+      new Request(`https://speedxrental.com${path}`, { method: "POST", headers: { "Content-Type": "application/json", origin: "https://speedxrental.com" }, body: JSON.stringify(body) });
+    const chat = await (await handleChat(post("/api/repair-chat", { locale: "en", history: [], message: "front brakes", vehicleKey: null, lead: null, sessionId: null }), deps)).text();
+    const sessionId = JSON.parse(chat.trim().split("\n")[0]).id as string;
+    const released = (await (await handleLead(post("/api/repair-lead", { locale: "en", lead: { name: "Test", phone: "(604) 555-0182" }, sessionId }), { ...deps, limiter: new RateLimiter() })).json()) as {
+      pending: { text: string; estimates: EstimateCard[] };
+    };
+    expect(released.pending.estimates[0].discount).toMatchObject({ label: "Returning customer", low: 12 });
+    expect(released.pending.estimates[0].totalLow).toBe(108);
+    expect(released.pending.text).toContain("now includes your discount");
+  });
+
+  it("doesn't keep the website chat waiting when the rules are slow", async () => {
+    const started = Date.now();
+    const deps: RouteDeps = {
+      configured: () => true,
+      limiter: new RateLimiter(),
+      notify: async () => {},
+      sessions: new SessionStore(async () => {}),
+      catalog: () => ({ get: async () => ({}) as never, post: async () => ({}) as never }),
+      client: () => ({ beta: { messages: { create: async () => ({ stop_reason: "end_turn", content: [{ type: "text", text: "Hi" }] }) as never } } }),
+      houseRules: () => new Promise(() => {}),
+    };
+    const text = await (
+      await handleChat(
+        new Request("https://speedxrental.com/api/repair-chat", { method: "POST", headers: { "Content-Type": "application/json", origin: "https://speedxrental.com" }, body: JSON.stringify({ locale: "en", history: [], message: "hi", vehicleKey: null, lead: null, sessionId: null }) }),
+        deps,
+      )
+    ).text();
+    expect(text).toContain('"text":"Hi"');
+    expect(Date.now() - started).toBeLessThan(4_000);
+  });
+});
+
 describe("HouseRulesStore", () => {
+  it("keeps the last rules for the website when KV fails, and reads once at a time", async () => {
+    let now = 0;
+    const kv = memoryKv({ [HOUSE_RULES_KEY]: JSON.stringify({ rules: [rule({ id: "R-1", amount: 5 })] }) });
+    const store = new HouseRulesStore(kv, () => now);
+    expect(await store.list()).toHaveLength(1);
+    now = 61_000;
+    const get = vi.spyOn(kv, "get").mockRejectedValue(new Error("KV down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const [a, b] = await Promise.all([store.list(), store.list()]);
+    expect(a).toHaveLength(1);
+    expect(b).toBe(a);
+    expect(get).toHaveBeenCalledTimes(1);
+    // The failure is remembered for a minute, so the next chats don't wait on KV.
+    await store.list();
+    expect(get).toHaveBeenCalledTimes(1);
+    await expect(store.list(true)).rejects.toThrow(/KV down/);
+  });
+
   it("adds, updates and deletes all at once, and checks without saving", async () => {
     const kv = memoryKv();
     const store = new HouseRulesStore(kv);

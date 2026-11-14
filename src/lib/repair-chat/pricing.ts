@@ -395,6 +395,9 @@ function discountLines(card: EstimateCard): string[] {
   const d = card.discount;
   if (!d) return [];
   const whole = (low: number, high: number) => (Math.round(low) === Math.round(high) ? `$${Math.round(low)}` : `$${Math.round(low)}–$${Math.round(high)}`);
-  const after = card.kind === "tires" ? ` Total after the discount: ${whole(card.totalLow, card.totalHigh)}.` : "";
+  const after =
+    card.kind === "tires" || card.kind === "flat"
+      ? ` The prices listed above are before it; the total after the discount is ${whole(card.totalLow, card.totalHigh)}: give that total.`
+      : "";
   return [`Discount shown on the card: "${d.label}", ${whole(d.low, d.high)} off, already taken off the total above.${after} Mention it briefly; never add or change a discount yourself.`];
 }

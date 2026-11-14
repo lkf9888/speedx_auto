@@ -63,6 +63,8 @@ export class HouseRuleError extends Error {
 }
 
 export const MAX_HOUSE_RULES = 50;
+/** In an update's customer field: the rule now applies to every customer. */
+export const EVERYONE = "everyone";
 const MAX_TEXT = 500;
 const MAX_TITLE = 60;
 const MAX_LABEL = 40;
@@ -96,6 +98,10 @@ export function cleanRule(
   base?: HouseRule,
 ): HouseRule {
   const merged = { ...base, ...input } as Partial<HouseRule>;
+  // An update that leaves the phone empty keeps the customer it was for: a
+  // customer's discount must never quietly become everyone's. EVERYONE clears it.
+  const phoneInput = text(input.customerPhone, 30);
+  const phoneRaw = phoneInput.toLowerCase() === EVERYONE ? "" : phoneInput || (base?.customerPhone ?? "");
   const kind: HouseRuleKind = merged.kind === "discount" ? "discount" : merged.kind === "note" ? "note" : (() => {
     throw new HouseRuleError("规则类型只能是叮嘱（note）或折扣（discount）", "invalid");
   })();
@@ -113,14 +119,14 @@ export function cleanRule(
     labelZh: text(merged.labelZh, MAX_LABEL),
     startDate: text(merged.startDate, 10),
     endDate: text(merged.endDate, 10),
-    customerPhone: phoneKey(text(merged.customerPhone, 30)),
+    customerPhone: phoneKey(phoneRaw),
     createdBy: base?.createdBy ?? who.email,
     createdAt: base?.createdAt ?? who.at,
     updatedBy: who.email,
     updatedAt: who.at,
   };
   if (!rule.title) throw new HouseRuleError("每条规则都要有一个简短的名字", "invalid");
-  if (text(merged.customerPhone, 30) && !rule.customerPhone) throw new HouseRuleError("客人电话号码不完整", "invalid");
+  if (phoneRaw && !rule.customerPhone) throw new HouseRuleError("客人电话号码不完整", "invalid");
   for (const [field, value] of [["名字", rule.title], ["内容", rule.text], ["英文标签", rule.labelEn], ["中文标签", rule.labelZh]] as const) {
     if (PHONE_IN_TEXT.test(value)) throw new HouseRuleError(`${field}里不要写电话号码，指定客人请用"客人电话"一栏（它不会发给 AI）`, "invalid");
   }
@@ -159,6 +165,8 @@ function matches(rule: HouseRule, card: EstimateCard): boolean {
   const kind = card.kind ?? "labor";
   if (kind === "team_quote") return false;
   if (rule.serviceKeyword && !card.service.toLowerCase().includes(rule.serviceKeyword.toLowerCase())) return false;
+  // Off the labor: only cards priced by labor-guide time have a labor part.
+  if (rule.on === "labor" && kind !== "labor") return false;
   switch (rule.appliesTo) {
     case "all":
       return true;
@@ -174,15 +182,22 @@ function matches(rule: HouseRule, card: EstimateCard): boolean {
 const cents = (value: number) => Math.round(value * 100) / 100;
 
 function discountOn(rule: HouseRule, card: EstimateCard): { low: number; high: number } {
-  const laborOnly = rule.on === "labor" && (card.kind ?? "labor") === "labor";
-  const base = laborOnly ? { low: card.laborWalkIn, high: card.laborWalkIn } : { low: card.totalLow, high: card.totalHigh };
+  const base = rule.on === "labor" ? { low: card.laborWalkIn, high: card.laborWalkIn } : { low: card.totalLow, high: card.totalHigh };
   if (rule.percent > 0) return { low: cents((base.low * rule.percent) / 100), high: cents((base.high * rule.percent) / 100) };
   return { low: cents(Math.min(rule.amount, base.low)), high: cents(Math.min(rule.amount, base.high)) };
 }
 
+/** The card as priced before any owner's discount. */
+export function withoutDiscount(card: EstimateCard): EstimateCard {
+  if (!card.discount) return card;
+  const { discount, ...rest } = card;
+  return { ...rest, totalLow: cents(card.totalLow + discount.low), totalHigh: cents(card.totalHigh + discount.high) };
+}
+
 /**
  * The card with the best matching discount taken off its totals (discounts
- * don't stack). `label` turns the rule into the card's wording.
+ * don't stack; a fixed amount comes off each card). `label` turns the rule
+ * into the card's wording.
  */
 export function applyDiscounts(
   card: EstimateCard,

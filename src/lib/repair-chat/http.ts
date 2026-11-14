@@ -5,7 +5,7 @@ import type { BlockList } from "node:net";
 import { locales, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
 import { company } from "@/lib/company";
-import { publicProfile, runChat, type ChatTurn, type MessagesClient } from "@/lib/repair-chat/agent";
+import { publicProfile, rediscountHeld, runChat, type ChatTurn, type MessagesClient } from "@/lib/repair-chat/agent";
 import type { HouseRule } from "@/lib/repair-chat/house-rules";
 import { getHouseRulesStore } from "@/lib/workbench/house-rules-store";
 import {
@@ -202,14 +202,32 @@ const defaultDeps: RouteDeps = {
   houseRules: async () => (await getHouseRulesStore()?.list()) ?? [],
 };
 
-/** The owner's rules, or none when they can't be read: the chat never waits on or fails over them. */
-async function readHouseRules(deps: RouteDeps): Promise<readonly HouseRule[]> {
+/** Added to a held reply when the customer's own discount changed the cards it talks about. */
+const DISCOUNT_UPDATED: Record<string, string> = {
+  en: "Your estimate card now includes your discount, so its total is lower than the figure above.",
+  "zh-CN": "您的估价卡已经套用了您的专属优惠，总价比上面说的低。",
+  "zh-TW": "您的估價卡已經套用了您的專屬優惠，總價比上面說的低。",
+};
+
+/** How long a chat waits for the owner's rules before going on without them. */
+const HOUSE_RULES_WAIT_MS = 2_000;
+
+/** The owner's rules, or none when they can't be read in time: the chat never fails over them. */
+async function readHouseRules(deps: Pick<RouteDeps, "houseRules">): Promise<readonly HouseRule[]> {
   if (!deps.houseRules) return [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await deps.houseRules();
+    return await Promise.race([
+      deps.houseRules(),
+      new Promise<readonly HouseRule[]>((resolve) => {
+        timer = setTimeout(() => resolve([]), HOUSE_RULES_WAIT_MS);
+      }),
+    ]);
   } catch (error) {
     console.error("repair-chat house rules unavailable", error instanceof Error ? error.message.slice(0, 200) : "unknown");
     return [];
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -242,7 +260,7 @@ function foreignOrigin(request: Request): boolean {
  */
 export async function handleLead(
   request: Request,
-  deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "opens" | "allowlist" | "mailer" | "inbox"> & { limiter: RateLimiter },
+  deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "opens" | "allowlist" | "mailer" | "inbox" | "houseRules"> & { limiter: RateLimiter },
 ): Promise<Response> {
   if (foreignOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
   if (!deps.configured()) return Response.json({ error: "unavailable" }, { status: 503 });
@@ -292,7 +310,15 @@ export async function handleLead(
     await sendBooking(deps, lead, locale, session.booking, session, "chat");
   }
   const held = deps.sessions.takeReply(session.id);
-  const pending = held ? { ...held, estimates: held.estimates.map(forCustomer) } : null;
+  let pending: { text: string; estimates: EstimateCard[] } | null = null;
+  if (held) {
+    // Now that the phone is known, a customer's own discount can apply to the held estimates.
+    const priced = held.estimates.length
+      ? rediscountHeld(held.estimates, { rules: await readHouseRules(deps), customerPhone: lead.phone })
+      : { cards: held.estimates, changed: false };
+    const note = priced.changed ? `\n\n${DISCOUNT_UPDATED[priced.cards[0]?.lang ?? locale] ?? DISCOUNT_UPDATED.en}` : "";
+    pending = { text: `${held.text}${note}`, estimates: priced.cards.map(forCustomer) };
+  }
   return Response.json({ ok: true, sessionId: session.id, pending });
 }
 
@@ -337,6 +363,7 @@ export function handleDefaultLead(request: Request): Promise<Response> {
     allowlist: defaultDeps.allowlist,
     mailer: defaultDeps.mailer,
     inbox: defaultDeps.inbox,
+    houseRules: defaultDeps.houseRules,
     limiter: leadLimiter,
   });
 }

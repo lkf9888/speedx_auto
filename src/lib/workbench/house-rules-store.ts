@@ -35,12 +35,36 @@ export class HouseRulesStore {
     }
   }
 
-  /** Every rule, running or not; read from KV at most once a minute unless `fresh`. */
+  private reading: Promise<HouseRule[]> | null = null;
+
+  /**
+   * Every rule, running or not. `fresh` (the workbench) always reads KV and
+   * reports a failure. Otherwise (the website) KV is read at most once a
+   * minute, one read at a time, and a failed read keeps the last rules that
+   * were read (none if there were never any) for another minute.
+   */
   async list(fresh = false): Promise<HouseRule[]> {
-    if (!fresh && this.cache && this.now() - this.cache.at < CACHE_MS) return this.cache.rules;
-    const rules = await this.read();
-    this.cache = { rules, at: this.now() };
-    return rules;
+    if (fresh) {
+      const rules = await this.read();
+      this.cache = { rules, at: this.now() };
+      return rules;
+    }
+    if (this.cache && this.now() - this.cache.at < CACHE_MS) return this.cache.rules;
+    this.reading ??= this.read()
+      .then((rules) => {
+        this.cache = { rules, at: this.now() };
+        return rules;
+      })
+      .catch((error: unknown) => {
+        console.error("website rules unavailable", error instanceof Error ? error.message.slice(0, 200) : "unknown");
+        const kept = this.cache?.rules ?? [];
+        this.cache = { rules: kept, at: this.now() };
+        return kept;
+      })
+      .finally(() => {
+        this.reading = null;
+      });
+    return this.reading;
   }
 
   /** Applies every change or none (each one checked first); returns the new list. */
