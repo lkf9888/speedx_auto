@@ -657,5 +657,5 @@ export const WORKBENCH_PROFILE: ChatProfile<WorkbenchEvent> = {
   },
   orderNote: (events) =>
     // Staff cards show exact amounts, not the public 10% ranges.
-    minimumLaborNote(events.flatMap((e) => (e.type === "quote" && e.quote.kind === "labor" && e.quote.labor ? [e.quote.labor.hours] : [])), false),
+    minimumLaborNote(events.flatMap((e) => (e.type === "quote" && e.quote.kind === "labor" && e.quote.labor ? [e.quote.labor.hours] : [])), true),
 };

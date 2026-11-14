@@ -83,13 +83,20 @@ export function estimateRanges(card: EstimateCard): EstimateRanges {
   };
 }
 
-/** For the model, after a pricing tool: what the order minimum will add if no more labor jobs are priced. */
-export function minimumLaborNote(jobHours: number[], ranges = true): string {
+/**
+ * For the model, after a pricing tool: what the order minimum will add if no more labor jobs are priced.
+ * The public assistant gets the amount without the hours, so it can't work out the hourly rate
+ * (Kevin, 2026-11-14: customers aren't told the rate); the workbench gets both.
+ */
+export function minimumLaborNote(jobHours: number[], forStaff = false): string {
   const hours = laborShortfall(jobHours);
   if (!hours) return "";
-  const total = Math.round(jobHours.reduce((sum, h) => sum + (h > 0 ? h : 0), 0) * 100) / 100;
   const dollars = laborCost(hours);
-  return `Shop rule: the labor-guide jobs priced in this reply add up to ${total} h. The shop charges at least ${MIN_LABOR_HOURS} h of labor per order, so unless you price more labor jobs, a "minimum labor charge" card adds ${hours} h ($${dollars}${ranges ? ", before the 10% allowance" : ""}) after your reply. Include it in the total you give and say briefly why.`;
+  if (!forStaff) {
+    return `Shop rule: the labor-guide jobs priced in this reply are under the shop's minimum of ${MIN_LABOR_HOURS} h of labor per order, so unless you price more labor jobs, a "minimum labor charge" card adds $${dollars} (before the 10% allowance) after your reply. Include it in the total you give and say briefly why.`;
+  }
+  const total = Math.round(jobHours.reduce((sum, h) => sum + (h > 0 ? h : 0), 0) * 100) / 100;
+  return `Shop rule: the labor-guide jobs priced in this reply add up to ${total} h. The shop charges at least ${MIN_LABOR_HOURS} h of labor per order, so unless you price more labor jobs, a "minimum labor charge" card adds ${hours} h ($${dollars}) after your reply. Include it in the total you give and say briefly why.`;
 }
 
 /** The order's minimum-labor line as a card, or null when the jobs already reach it. */
@@ -291,6 +298,18 @@ export function buildTeamQuoteCard(
  * Every total the customer might ask about is computed here, so the model
  * only ever repeats numbers and never adds them up itself.
  */
+/**
+ * A labor note for the public assistant, without hour figures: next to the labor
+ * amount they would give away the hourly rate, which customers aren't told.
+ */
+export function withoutHours(note: string): string {
+  return note
+    .replace(/\s*\(\s*\d+(?:\.\d+)?\s*h\s*→\s*\d+(?:\.\d+)?\s*h\s*\)/g, "")
+    .replace(/\b\d+(?:\.\d+)?\s*h(?:ours?|rs?)?\b/gi, "a set time")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 export function summarizeEstimateForModel(card: EstimateCard): string {
   if (card.kind === "team_quote") {
     return [
@@ -338,7 +357,7 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
       : card.partsNote || "No list-priced part found; the estimate covers labor only.",
     `Estimated total on the card (before tax, with a 10% allowance either way): $${shown.totalLow}–$${shown.totalHigh}. Quote only this range, never a single exact figure.`,
   ];
-  if (card.laborNote) lines.push(`Labor guide note: ${card.laborNote}`);
+  if (card.laborNote) lines.push(`Labor guide note: ${withoutHours(card.laborNote)}`);
   if (card.otherPartNames.length) {
     lines.push(`Other parts sometimes needed (not priced): ${card.otherPartNames.join(", ")}.`);
   }

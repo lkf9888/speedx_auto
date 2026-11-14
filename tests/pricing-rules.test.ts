@@ -256,15 +256,20 @@ describe("the assistant's reply when an order is under the minimum labor", () =>
     // One model call to price, one to reply: no second rewrite.
     expect(client.beta.messages.create).toHaveBeenCalledTimes(2);
     const toolResult = JSON.stringify(requests[1].messages.at(-1));
-    expect(toolResult).toContain("add up to 0.2 h");
-    expect(toolResult).toContain("adds 0.3 h ($36");
+    expect(toolResult).toContain("adds $36 (before the 10% allowance)");
+    // The amount without the hours, so the assistant can't work out the hourly rate.
+    expect(toolResult).not.toMatch(/0\.[23] h/);
     expect(seen.filter((e) => e.type === "estimate").map((e) => (e as { estimate: EstimateCard }).estimate.id)).toEqual(["E-1", "E-2"]);
   });
 
-  it("says nothing when the order reaches the minimum, and no allowance for staff", () => {
+  it("says nothing when the order reaches the minimum; hours and no allowance only for staff", () => {
     expect(minimumLaborNote([0.6])).toBe("");
-    expect(minimumLaborNote([0.3, 0.15])).toContain("adds 0.05 h");
-    expect(minimumLaborNote([0.2], false)).not.toContain("allowance");
+    expect(minimumLaborNote([0.6], true)).toBe("");
+    expect(minimumLaborNote([0.3, 0.15], true)).toContain("adds 0.05 h ($6)");
+    expect(minimumLaborNote([0.2], true)).not.toContain("allowance");
+    const forCustomer = minimumLaborNote([0.3, 0.15]);
+    expect(forCustomer).toContain("adds $6 (before the 10% allowance)");
+    expect(forCustomer).not.toMatch(/0\.05 h|0\.45 h|\$120|per hour|\/h\b/);
   });
 
   it("isn't added after a tool that priced nothing", async () => {

@@ -121,7 +121,7 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "quote_extra_part",
     description:
-      "Price brake rotors or a brake caliper when the labor guide has no job for them on this vehicle (find_services lists Brake Pads R&R but no rotor or caliper R&R). Uses the shop's own time: 0.5 h per axle for rotors, 0.5 h per caliper, with the parts found by name. Shows a card. If the guide does have the job, it tells you which service_id to use with get_estimate instead.",
+      "Price brake rotors or a brake caliper when the labor guide has no job for them on this vehicle (find_services lists Brake Pads R&R but no rotor or caliper R&R). Uses the shop's own set labor time per axle for rotors and per caliper, with the parts found by name. Shows a card. If the guide does have the job, it tells you which service_id to use with get_estimate instead.",
     strict: true,
     input_schema: {
       type: "object",

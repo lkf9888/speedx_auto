@@ -3,6 +3,7 @@ import { decodeVehicleKey, describeVehicle, type CatalogApi } from "@/lib/worldp
 import { minimumLaborCard, minimumLaborNote } from "./pricing";
 import { WorldpacError } from "@/lib/worldpac/client";
 import { detectCustomerLanguage, safetyWarning, SYSTEM_PROMPT, turnContext } from "./prompt";
+import { hideHourlyRate } from "./hourly-rate";
 import { matchScript } from "./script";
 import { runTool, statusForTool, TOOLS, type ChatEvent, type ToolOutcome } from "./tools";
 
@@ -78,6 +79,8 @@ export interface ChatProfile<E extends { type: string }> {
   statusEvent(toolName: string): E;
   /** Fixed text shown above the reply (public: safety warning). */
   preface?(message: string, language: string): string | null;
+  /** Last check on the reply text before it is shown (public: no hourly labor rate). */
+  checkReply?(text: string, language: string): string;
   /** What the model is told when a lookup fails. */
   toolFailure(catalogDown: boolean): string;
   /** Cards added once the reply's tools have run (the order's minimum labor). */
@@ -103,6 +106,7 @@ export const PUBLIC_PROFILE: ChatProfile<ChatEvent> = {
   },
   statusEvent: (name) => ({ type: "status", status: statusForTool(name) }),
   preface: (message, language) => safetyWarning(message, language),
+  checkReply: (text, language) => hideHourlyRate(text, language),
   toolFailure: (catalogDown) =>
     catalogDown
       ? "The parts catalog is temporarily unavailable. Offer to have the team confirm the price by WhatsApp or phone."
@@ -194,15 +198,13 @@ export async function runChat<E extends { type: string } = ChatEvent>(
       // their amount from orderNote on the pricing tools' results.
       profile.finishTurn?.([...events], newEstimateId, cardLocale).forEach(emit);
       const warning = profile.preface?.(request.message, language) ?? null;
-      const answer = matchScript(
-        toPlainText(
-          response.content
-            .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
-            .map((block) => block.text)
-            .join("\n"),
-        ),
-        language,
+      const plain = toPlainText(
+        response.content
+          .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
+          .map((block) => block.text)
+          .join("\n"),
       );
+      const answer = matchScript(profile.checkReply ? profile.checkReply(plain, language) : plain, language);
       const text = warning ? `${warning}\n\n${answer}` : answer;
       return { text, events };
     }
