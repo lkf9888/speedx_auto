@@ -165,6 +165,8 @@ describe("shared workbench conversations", () => {
     render(<Workbench email="amy@speedx.ca" />);
     const fromKevin = await screen.findByTestId("colleague-message");
     expect(fromKevin).toHaveTextContent("kevin");
+    // A colleague is staff too: on the right, with their name.
+    expect(fromKevin.closest("[data-side]")!.getAttribute("data-side")).toBe("right");
     expect(fromKevin).toHaveTextContent("2019 Camry 前刹车片");
     expect(within(screen.getAllByTestId("conversation")[0]).getByText(/答复：2019 Camry/)).toBeInTheDocument();
 
@@ -186,14 +188,22 @@ describe("shared workbench conversations", () => {
     const listed = await screen.findByText("网站 · Amy");
     await userEvent.click(listed.closest("button")!);
     expect(await screen.findByTestId("website-visitor")).toHaveTextContent("Amy");
-    expect(chat().getByTestId("colleague-message")).toHaveTextContent("🌐 Amy");
-    expect(chat().getByText("网站 AI 客服")).toBeInTheDocument();
+    expect(chat().getByTestId("customer-message")).toHaveTextContent("🌐 Amy");
+    expect(chat().getByText("🤖 网站 AI 客服")).toBeInTheDocument();
     expect(chat().getByTestId("website-estimate")).toHaveTextContent("$1120");
     // She left her contact details, so the reply is no longer marked unseen.
     expect(chat().queryByText(/客人还没看到/)).not.toBeInTheDocument();
 
     await ask("这个客人的进价是多少");
     await chat().findByText(/答复：这个客人的进价是多少/);
+    // Kevin, 2026-11-14: the customer on the left, the AI and staff on the right.
+    const side = (el: HTMLElement) => el.closest("[data-side]")!.getAttribute("data-side");
+    expect(side(chat().getByTestId("customer-message"))).toBe("left");
+    expect(side(chat().getByTestId("own-message"))).toBe("right");
+    const replies = chat().getAllByTestId("ai-message");
+    expect(replies).toHaveLength(2);
+    expect(replies.map(side)).toEqual(["right", "right"]);
+    expect(side(chat().getByTestId("website-estimate"))).toBe("right");
     const history = server.chats.at(-1)!.history.map((t) => t.text).join("\n");
     expect(history).toContain("[网站客人在公开估价页上问]");
     expect(history).not.toMatch(/Amy|604-555/);

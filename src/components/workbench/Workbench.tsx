@@ -17,6 +17,7 @@ import {
 } from "@/lib/workbench/conversation-types";
 import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
+import { ConnectionButton, ConnectionStatus } from "./ConnectionStatus";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
 import { StaffQuoteCard } from "./StaffQuoteCard";
@@ -142,6 +143,7 @@ export function Workbench({ email }: { email: string }) {
   const [input, setInput] = useState("");
   const [showDocuments, setShowDocuments] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
+  const [showStatus, setShowStatus] = useState(false);
   /** Right-click (or ⋯) menu on a conversation, and whether the list shows the archived ones. */
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -698,6 +700,7 @@ export function Workbench({ email }: { email: string }) {
               )}
               <p className="truncate text-xs text-[color:var(--wb-muted)]">{active.vehicle ? `当前车辆：${active.vehicle.label}` : "输入车型、VIN 或轮胎尺寸，也可以发照片"}</p>
             </div>
+            <ConnectionButton open={showStatus} onToggle={() => setShowStatus((v) => !v)} />
             <button
               type="button"
               onClick={() => setShowMemory((v) => !v)}
@@ -774,20 +777,30 @@ export function Workbench({ email }: { email: string }) {
               </section>
             )}
 
+            {/* Kevin, 2026-11-14: the customer on the left; the AI and every staff member on the right. */}
             {active.turns.map((turn, index) =>
-              turn.role === "user" && turn.author === email ? (
-                <div key={turn.id ?? index} className="flex justify-end">
-                  <div className="wa-bubble wa-bubble-out max-w-[85%] sm:max-w-[70%]">
+              turn.role === "user" && turn.author === WEBSITE_CUSTOMER ? (
+                <div key={turn.id ?? index} className="flex justify-start" data-side="left">
+                  <div className="wa-bubble wa-bubble-in max-w-[85%] sm:max-w-[70%]" data-testid="customer-message">
+                    <p className="text-xs font-semibold text-[#c2410c]">🌐 {active.website?.name || "网站客人"}</p>
+                    {turn.attachments?.length ? <SentFiles files={turn.attachments} /> : null}
+                    {turn.text && <p className="whitespace-pre-wrap">{turn.text}</p>}
+                    <Meta at={turn.at} />
+                  </div>
+                </div>
+              ) : turn.role === "user" && turn.author === email ? (
+                <div key={turn.id ?? index} className="flex justify-end" data-side="right">
+                  <div className="wa-bubble wa-bubble-out max-w-[85%] sm:max-w-[70%]" data-testid="own-message">
                     {turn.attachments?.length ? <SentFiles files={turn.attachments} /> : null}
                     {turn.text && <p className="whitespace-pre-wrap">{turn.text}</p>}
                     <Meta at={turn.at} sent />
                   </div>
                 </div>
               ) : turn.role === "user" ? (
-                <div key={turn.id ?? index} className="flex justify-start">
-                  <div className="wa-bubble wa-bubble-in max-w-[85%] sm:max-w-[70%]" data-testid="colleague-message">
+                <div key={turn.id ?? index} className="flex justify-end" data-side="right">
+                  <div className="wa-bubble wa-bubble-out max-w-[85%] sm:max-w-[70%]" data-testid="colleague-message">
                     <p className="text-xs font-semibold" style={{ color: nameColour(turn.author) }}>
-                      {turn.author === WEBSITE_CUSTOMER ? `🌐 ${active.website?.name || "网站客人"}` : staffName(turn.author)}
+                      {staffName(turn.author)}
                     </p>
                     {turn.attachments?.length ? <SentFiles files={turn.attachments} /> : null}
                     {turn.text && <p className="whitespace-pre-wrap">{turn.text}</p>}
@@ -795,10 +808,10 @@ export function Workbench({ email }: { email: string }) {
                   </div>
                 </div>
               ) : (
-                <div key={turn.id ?? index} className="space-y-2">
+                <div key={turn.id ?? index} className="space-y-2" data-side="right">
                   {turn.text && (
-                    <div className="wa-bubble wa-bubble-in max-w-[92%] sm:max-w-[75%]">
-                      <p className="text-xs font-semibold text-[#00a884]">{turn.source === "website" ? "网站 AI 客服" : "AI 助手"}</p>
+                    <div className="wa-bubble wa-bubble-out wa-bubble-ai ml-auto max-w-[92%] sm:max-w-[75%]" data-testid="ai-message">
+                      <p className="text-xs font-semibold text-[#027eb5]">🤖 {turn.source === "website" ? "网站 AI 客服" : "AI 助手"}</p>
                       {turn.held && (
                         <p data-testid="held-notice" className="-mx-1 mb-1 rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
                           ⚠ 客人没看到这条回复和报价：要先留姓名电话才能看，客人还没留
@@ -809,7 +822,9 @@ export function Workbench({ email }: { email: string }) {
                     </div>
                   )}
                   {turn.estimates?.map((card) => (
-                    <WebsiteEstimateCard key={card.id} card={card} />
+                    <div key={card.id} className="flex justify-end">
+                      <WebsiteEstimateCard card={card} />
+                    </div>
                   ))}
                   {turn.quotes.map((quote) => (
                     <StaffQuoteCard key={quote.id} quote={quote} onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined} />
@@ -818,19 +833,16 @@ export function Workbench({ email }: { email: string }) {
                     <AlldataDraftCard key={draft.id} draft={draft} onCreated={(created) => markCreated(active.id, draft.id, created)} />
                   ))}
                   {turn.memories?.map((proposal) => (
-                    <MemoryProposalCard
-                      key={proposal.id}
-                      proposal={proposal}
-                      saved={Boolean(proposal.saved)}
-                      onSaved={() => markMemorySaved(active.id, proposal.id)}
-                    />
+                    <div key={proposal.id} className="flex justify-end">
+                      <MemoryProposalCard proposal={proposal} saved={Boolean(proposal.saved)} onSaved={() => markMemorySaved(active.id, proposal.id)} />
+                    </div>
                   ))}
                 </div>
               ),
             )}
 
             {activePending && (
-              <div role="status" className="wa-bubble wa-bubble-in flex w-fit items-center gap-2 text-[color:var(--wb-muted)]">
+              <div role="status" className="wa-bubble wa-bubble-out wa-bubble-ai ml-auto flex w-fit items-center gap-2 text-[color:var(--wb-muted)]">
                 <span aria-hidden className="wa-typing">
                   <i />
                   <i />
@@ -937,6 +949,11 @@ export function Workbench({ email }: { email: string }) {
       {showMemory && (
         <Modal label="工作台记忆" onClose={() => setShowMemory(false)}>
           <MemoryPanel onClose={() => setShowMemory(false)} />
+        </Modal>
+      )}
+      {showStatus && (
+        <Modal label="连接状态" onClose={() => setShowStatus(false)}>
+          <ConnectionStatus onClose={() => setShowStatus(false)} />
         </Modal>
       )}
       {showDocuments && (

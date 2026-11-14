@@ -85,6 +85,11 @@ export class TatoClient {
     return (await response.json()) as T;
   }
 
+  /** One small read, to see that the token still works (the workbench's connection panel). */
+  async ping(): Promise<void> {
+    await this.get<unknown>("/api/agent/vehicles", { q: "A", limit: "1" });
+  }
+
   /** Cars whose plate, nickname, brand, model, VIN or listing name contains the text. */
   async findCars(query: string): Promise<FleetCar[]> {
     const text = query.trim().slice(0, 40);

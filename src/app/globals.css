@@ -277,6 +277,11 @@
   clip-path: polygon(0 0, 100% 0, 0 100%);
 }
 
+.wa-bubble-out.wa-bubble-ai,
+.wa-bubble-out.wa-bubble-ai::before {
+  background: var(--wa-ai, #e1f0ff);
+}
+
 .wa-meta {
   float: right;
   display: inline-flex;
@@ -364,6 +369,7 @@
   --wa-dot2: rgba(255, 255, 255, 0.03);
   --wa-in: #202c33;
   --wa-out: #005c4b;
+  --wa-ai: #1d3a52;
   --wa-text: #e9edef;
   --wa-meta: #8696a0;
 
