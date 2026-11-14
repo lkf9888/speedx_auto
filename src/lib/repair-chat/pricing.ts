@@ -1,5 +1,5 @@
 import type { PartOption, ServiceQuote } from "@/lib/worldpac/catalog";
-import { flatWord, flatWordEn, type FlatQuote } from "./flat-price";
+import { flatWord, flatWordEn, type FlatQuote, type FlatService } from "./flat-price";
 import type { TireOption } from "./tires";
 import { laborShortfall, MIN_LABOR_HOURS } from "./labor-minimum";
 
@@ -53,6 +53,18 @@ export interface EstimateCard {
   createdAt: string;
   /** Language the card's labels are shown in: the customer's, not the page's. */
   lang?: "en" | "zh-CN" | "zh-TW";
+  /** Which flat-price service a "flat" card is. */
+  flatService?: FlatService;
+  /** A discount the shop owner set in the workbench, already taken off totalLow/totalHigh. */
+  discount?: CardDiscount;
+}
+
+export interface CardDiscount {
+  /** Shown on the card, in the card's language. */
+  label: string;
+  /** Dollars off the low and the high total. */
+  low: number;
+  high: number;
 }
 
 const money = (value: number) => Math.round(value * 100) / 100;
@@ -207,6 +219,7 @@ export function buildFlatEstimate(
   return {
     id,
     kind: "flat",
+    flatService: quote.service,
     vehicle,
     service: flatWord(locale, quote.service),
     position: quote.size ? flatWord(locale, quote.size) : "",
@@ -338,6 +351,7 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
           .join("; ") +
         ".",
       "Quote only these per-tire and total figures and say the price includes installation; do not split it into parts or mention any other charges. These are good-value brands. Stock and delivery time are confirmed by the shop.",
+      ...discountLines(card),
     ].join("\n");
   }
   if (card.kind === "flat") {
@@ -355,6 +369,7 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
       `Total before tax: ${card.totalLow === card.totalHigh ? `$${card.totalLow}` : `$${card.totalLow}–$${card.totalHigh} depending on the option`}.`,
     ];
     if (card.partsNote) lines.push(`Note shown on the card: ${card.partsNote}`);
+    lines.push(...discountLines(card));
     return lines.join("\n");
   }
   const shown = estimateRanges(card);
@@ -371,5 +386,15 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
   if (card.otherPartNames.length) {
     lines.push(`Other parts sometimes needed (not priced): ${card.otherPartNames.join(", ")}.`);
   }
+  lines.push(...discountLines(card));
   return lines.join("\n");
+}
+
+/** The owner's discount on a card, for the model: already in the totals above, so it only mentions it. */
+function discountLines(card: EstimateCard): string[] {
+  const d = card.discount;
+  if (!d) return [];
+  const whole = (low: number, high: number) => (Math.round(low) === Math.round(high) ? `$${Math.round(low)}` : `$${Math.round(low)}–$${Math.round(high)}`);
+  const after = card.kind === "tires" ? ` Total after the discount: ${whole(card.totalLow, card.totalHigh)}.` : "";
+  return [`Discount shown on the card: "${d.label}", ${whole(d.low, d.high)} off, already taken off the total above.${after} Mention it briefly; never add or change a discount yourself.`];
 }

@@ -18,6 +18,7 @@ import {
 import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
+import { HouseRulesPanel } from "./HouseRulesPanel";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
 import { StaffQuoteCard } from "./StaffQuoteCard";
@@ -144,6 +145,7 @@ export function Workbench({ email }: { email: string }) {
   const [showDocuments, setShowDocuments] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const connection = useConnectionSummary();
   /** Right-click (or ⋯) menu on a conversation, and whether the list shows the archived ones. */
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -713,6 +715,17 @@ export function Workbench({ email }: { email: string }) {
             </button>
             <button
               type="button"
+              onClick={() => setShowRules((v) => !v)}
+              aria-expanded={showRules}
+              aria-label="调教对外助手"
+              title="网站维修页 AI 的叮嘱和折扣"
+              className="shrink-0 rounded-full border border-[color:var(--wb-line)] bg-white px-2 py-1.5 text-xs font-semibold text-[color:var(--wb-icon)] hover:bg-[color:var(--wb-hover)] sm:px-3"
+            >
+              <span className="sm:hidden">调教</span>
+              <span className="hidden sm:inline">调教对外助手</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setShowDocuments((v) => !v)}
               aria-expanded={showDocuments}
               aria-label="ALLDATA 单据"
@@ -950,6 +963,11 @@ export function Workbench({ email }: { email: string }) {
       {showMemory && (
         <Modal label="工作台记忆" onClose={() => setShowMemory(false)}>
           <MemoryPanel onClose={() => setShowMemory(false)} />
+        </Modal>
+      )}
+      {showRules && (
+        <Modal label="调教对外助手" onClose={() => setShowRules(false)}>
+          <HouseRulesPanel onClose={() => setShowRules(false)} />
         </Modal>
       )}
       {showStatus && (

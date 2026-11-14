@@ -5,7 +5,9 @@ import type { BlockList } from "node:net";
 import { locales, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
 import { company } from "@/lib/company";
-import { runChat, type ChatTurn, type MessagesClient } from "@/lib/repair-chat/agent";
+import { publicProfile, runChat, type ChatTurn, type MessagesClient } from "@/lib/repair-chat/agent";
+import type { HouseRule } from "@/lib/repair-chat/house-rules";
+import { getHouseRulesStore } from "@/lib/workbench/house-rules-store";
 import {
   createLeadNotifier,
   estimateLeadEvent,
@@ -156,6 +158,8 @@ export interface RouteDeps {
   mailer?: Mailer;
   /** Copies each visit into the workbench's shared conversations, for staff to follow up. */
   inbox?: () => WebsiteInbox | null;
+  /** The owner's notes and discounts for the assistant (set in the workbench). */
+  houseRules?: () => Promise<readonly HouseRule[]>;
 }
 
 /**
@@ -195,7 +199,19 @@ const defaultDeps: RouteDeps = {
   allowlist: parseAllowlist(process.env.REPAIR_CHAT_IP_ALLOWLIST),
   mailer: shared().mailer,
   inbox: () => getWebsiteInbox(),
+  houseRules: async () => (await getHouseRulesStore()?.list()) ?? [],
 };
+
+/** The owner's rules, or none when they can't be read: the chat never waits on or fails over them. */
+async function readHouseRules(deps: RouteDeps): Promise<readonly HouseRule[]> {
+  if (!deps.houseRules) return [];
+  try {
+    return await deps.houseRules();
+  } catch (error) {
+    console.error("repair-chat house rules unavailable", error instanceof Error ? error.message.slice(0, 200) : "unknown");
+    return [];
+  }
+}
 
 const bookingLimiter = new RateLimiter({
   perIpWindowMs: 10 * 60 * 1000,
@@ -436,7 +452,8 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
           },
           send,
           () => `E-${randomBytes(4).toString("hex").toUpperCase()}`,
-          undefined,
+          // Test runs see the assistant as built, without the owner's current notes and discounts.
+          evaluation ? undefined : publicProfile({ rules: await readHouseRules(deps), customerPhone: session.lead?.phone ?? null }),
           evaluation && request.headers.get("x-repair-eval-trace") === "1"
             ? (tool, input, output) => send({ type: "trace", tool, input, output: output.slice(0, 4000) })
             : undefined,

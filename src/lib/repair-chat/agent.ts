@@ -1,11 +1,13 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { decodeVehicleKey, describeVehicle, type CatalogApi } from "@/lib/worldpac/catalog";
-import { minimumLaborCard, minimumLaborNote } from "./pricing";
+import { minimumLaborCard, minimumLaborNote, type EstimateCard } from "./pricing";
+import { shopNow } from "./booking";
+import { applyDiscounts, discountLabel, houseNotesPrompt, rulesFor, type HouseRule } from "./house-rules";
 import { WorldpacError } from "@/lib/worldpac/client";
 import { detectCustomerLanguage, safetyWarning, SYSTEM_PROMPT, turnContext } from "./prompt";
 import { hideHourlyRate } from "./hourly-rate";
 import { matchScript } from "./script";
-import { runTool, statusForTool, TOOLS, type ChatEvent, type ToolOutcome } from "./tools";
+import { runTool, statusForTool, TOOLS, type AdjustCard, type ChatEvent, type ToolOutcome } from "./tools";
 
 /**
  * Model for the chat and the follow-up summary. Override with
@@ -89,21 +91,55 @@ export interface ChatProfile<E extends { type: string }> {
   orderNote?(events: E[]): string;
 }
 
+async function publicTool(
+  api: CatalogApi,
+  name: string,
+  input: Record<string, unknown>,
+  newEstimateId: () => string,
+  cardLocale: "en" | "zh-CN" | "zh-TW",
+  knownVehicleKey: string | null,
+  adjustCard?: AdjustCard,
+): Promise<ToolOutcome> {
+  const outcome = await runTool(api, name, input, newEstimateId, cardLocale, knownVehicleKey, undefined, undefined, adjustCard);
+  return {
+    ...outcome,
+    events: outcome.events.map((event) =>
+      event.type === "estimate" ? { ...event, estimate: { ...event.estimate, lang: cardLocale } } : event,
+    ),
+  };
+}
+
+const SCRIPT_FOR_LOCALE: Record<string, string> = { en: "English", "zh-CN": "Simplified Chinese", "zh-TW": "Traditional Chinese" };
+
+/**
+ * The public assistant with the shop owner's rules that apply today (and to
+ * this customer, once their phone is known): notes go into the per-turn
+ * instructions and discounts onto the cards before the model sees them.
+ */
+export function publicProfile(
+  house: { rules: readonly HouseRule[]; customerPhone: string | null; now?: Date } | null,
+): ChatProfile<ChatEvent> {
+  if (!house) return PUBLIC_PROFILE;
+  const running = rulesFor(house.rules, shopNow(house.now ?? new Date()).date, house.customerPhone);
+  if (running.length === 0) return PUBLIC_PROFILE;
+  const notes = houseNotesPrompt(running);
+  return {
+    ...PUBLIC_PROFILE,
+    turnContext: (request, earlier, vehicle) => `${PUBLIC_PROFILE.turnContext(request, earlier, vehicle)}\n${notes}`,
+    runTool: (api, name, input, newEstimateId, cardLocale, knownVehicleKey) =>
+      publicTool(api, name, input, newEstimateId, cardLocale, knownVehicleKey, (card: EstimateCard) =>
+        applyDiscounts(card, running, (rule) => matchScript(discountLabel(rule, cardLocale), SCRIPT_FOR_LOCALE[cardLocale] ?? "English")),
+      ),
+  };
+}
+
 export const PUBLIC_PROFILE: ChatProfile<ChatEvent> = {
   model: MODEL,
   effort: "low",
   system: SYSTEM_PROMPT,
   tools: TOOLS,
   turnContext: (request, earlier, vehicle) => turnContext(request.locale, vehicle, request.message, earlier),
-  runTool: async (api, name, input, newEstimateId, cardLocale, knownVehicleKey): Promise<ToolOutcome> => {
-    const outcome = await runTool(api, name, input, newEstimateId, cardLocale, knownVehicleKey);
-    return {
-      ...outcome,
-      events: outcome.events.map((event) =>
-        event.type === "estimate" ? { ...event, estimate: { ...event.estimate, lang: cardLocale } } : event,
-      ),
-    };
-  },
+  runTool: (api, name, input, newEstimateId, cardLocale, knownVehicleKey) => publicTool(api, name, input, newEstimateId, cardLocale, knownVehicleKey),
   statusEvent: (name) => ({ type: "status", status: statusForTool(name) }),
   preface: (message, language) => safetyWarning(message, language),
   checkReply: (text, language) => hideHourlyRate(text, language),

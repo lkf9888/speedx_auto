@@ -61,6 +61,11 @@ export function WebsiteEstimateCard({ card }: { card: EstimateCard }) {
       <p className="mt-1 font-medium text-[color:var(--wb-text)]">{[card.service, card.position].filter(Boolean).join(" · ")}</p>
       {card.vehicle && card.vehicle !== "—" && <p className="text-xs text-[color:var(--wb-muted)]">{card.vehicle}</p>}
       <p className="mt-1 text-base font-semibold text-[#008069]">{range(totalLow, totalHigh)}</p>
+      {card.discount && (
+        <p data-testid="website-estimate-discount" className="text-xs font-semibold text-amber-800">
+          已减“{card.discount.label}” −{range(Math.round(card.discount.low), Math.round(card.discount.high))}（调教对外助手里设的折扣）
+        </p>
+      )}
       {labor && card.laborHours > 0 && (
         <p className="text-xs text-[color:var(--wb-icon)]">
           工时 {card.laborHours} h × ${card.laborRate} = ${Math.round(card.laborWalkIn)}

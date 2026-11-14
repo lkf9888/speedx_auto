@@ -338,6 +338,10 @@ export interface ToolOutcome {
   events: ChatEvent[];
 }
 
+/** Changes a priced card before the model sees it; the public site uses it for the owner's discounts. */
+export type AdjustCard = (card: EstimateCard) => EstimateCard;
+const keepCard: AdjustCard = (card) => card;
+
 function vehiclePayload(lookup: VehicleLookup) {
   switch (lookup.status) {
     case "ok":
@@ -465,6 +469,7 @@ async function estimateEachVariant(
   questions: Array<{ attribute: string; label: string; options: string[] }>,
   input: Record<string, unknown>,
   newEstimateId: () => string,
+  adjustCard: AdjustCard = keepCard,
 ): Promise<ToolOutcome | null> {
   if (questions.length !== 1) return null;
   const [question] = questions;
@@ -477,7 +482,7 @@ async function estimateEachVariant(
     if (quote.status !== "ok") continue;
     const label = describeVehicle(applied.vehicle);
     // The label usually names the option already ("… 2.4 L4"); add it when it doesn't.
-    cards.push({ option, card: buildEstimate(label.includes(option) ? label : `${label} (${question.label}: ${option})`, quote, newEstimateId()) });
+    cards.push({ option, card: adjustCard(buildEstimate(label.includes(option) ? label : `${label} (${question.label}: ${option})`, quote, newEstimateId())) });
   }
   // Every option priced, or none: cards for only some engines mislead a customer whose engine is the missing one.
   if (cards.length < question.options.length) return null;
@@ -529,6 +534,8 @@ export async function runTool(
   dt: () => DtTireClient | null = () => (dtTireConfigured() ? getDtTireClient() : null),
   /** Wheel Mart Canada (value brands, live stock); null when it isn't set up. */
   wheelmart: () => WheelmartClient | null = getWheelmartClient,
+  /** Applied to every priced card before the model sees it (the owner's discounts on the website). */
+  adjustCard: AdjustCard = keepCard,
 ): Promise<ToolOutcome> {
   const input = withLatestVehicle(rawInput, knownVehicleKey);
   switch (name) {
@@ -586,7 +593,7 @@ export async function runTool(
       if (found.status === "no_parts") {
         return teamQuote(describeVehicle(vehicle), part === "brake_rotor" ? `${position} brake rotors` : `${position} brake caliper`, "No priced part found by name.", newEstimateId);
       }
-      const card = buildEstimate(describeVehicle(vehicle), found.job, newEstimateId());
+      const card = adjustCard(buildEstimate(describeVehicle(vehicle), found.job, newEstimateId()));
       return ok({ status: "ok", summary: summarizeEstimateForModel(card), note: "Shop time on top of the pad job; the half-time rule for jobs done together doesn't apply to it." }, [{ type: "estimate", estimate: card }]);
     }
     case "set_vehicle_details": {
@@ -630,7 +637,7 @@ export async function runTool(
       if (service && NOT_OFFERED.test(service.name)) return ok({ status: "not_offered", note: NOT_OFFERED_NOTE });
       const quote = await laborQuote(api, vehicle, serviceId, position, input);
       if (quote.status === "need_details") {
-        const variants = await estimateEachVariant(api, vehicle, serviceId, position, quote.questions, input, newEstimateId);
+        const variants = await estimateEachVariant(api, vehicle, serviceId, position, quote.questions, input, newEstimateId, adjustCard);
         if (variants) return variants;
       }
       if (quote.status === "unavailable") {
@@ -638,7 +645,7 @@ export async function runTool(
         return teamQuote(describeVehicle(vehicle), service, quote.reason, newEstimateId);
       }
       if (quote.status !== "ok") return ok(quote);
-      const card = buildEstimate(describeVehicle(vehicle), quote, newEstimateId());
+      const card = adjustCard(buildEstimate(describeVehicle(vehicle), quote, newEstimateId()));
       return ok(
         { status: "ok", summary: summarizeEstimateForModel(card) },
         [{ type: "estimate", estimate: card }],
@@ -679,7 +686,7 @@ export async function runTool(
             : "Vehicle sold new above CAD $120,000: no flat price, the team quotes it.";
         return teamQuote(facts.description, flatWord(locale, service), reason, newEstimateId);
       }
-      const card = buildFlatEstimate(facts.description, quote, locale, newEstimateId());
+      const card = adjustCard(buildFlatEstimate(facts.description, quote, locale, newEstimateId()));
       return ok(
         { status: "ok", summary: summarizeEstimateForModel(card) },
         [{ type: "estimate", estimate: card }],
@@ -733,7 +740,7 @@ export async function runTool(
         }
         return teamQuote(vehicle, serviceName, "Size not on the tire price list.", newEstimateId);
       }
-      const card = buildTireEstimate(vehicle, serviceName, options, flatWord(locale, "tires_note"), newEstimateId());
+      const card = adjustCard(buildTireEstimate(vehicle, serviceName, options, flatWord(locale, "tires_note"), newEstimateId()));
       return ok({ status: "ok", summary: summarizeEstimateForModel(card) }, [{ type: "estimate", estimate: card }]);
     }
     case "find_brand_tires": {
@@ -776,7 +783,7 @@ export async function runTool(
           total: perTire * countRaw,
         };
       });
-      const card = buildTireEstimate(vehicle, serviceName, options, flatWord(locale, "tires_note"), newEstimateId());
+      const card = adjustCard(buildTireEstimate(vehicle, serviceName, options, flatWord(locale, "tires_note"), newEstimateId()));
       return ok(
         { status: "ok", summary: `${summarizeEstimateForModel(card)}\nNever say where the shop buys these tires. "${flatWord(locale, "tire_in_stock")}" means in stock now; the others take about 1–3 days.` },
         [{ type: "estimate", estimate: card }],

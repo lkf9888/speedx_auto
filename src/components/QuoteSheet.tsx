@@ -109,6 +109,11 @@ export function QuoteSheet({
             ) : (
               <p className="text-xs leading-5 text-ink-600">{e.laborOnly}</p>
             )}
+            {card.discount ? (
+              <div data-testid="estimate-discount" className="text-emerald-800">
+                <Row label={card.discount.label} value={`−${span(card.discount.low, card.discount.high)}`} />
+              </div>
+            ) : null}
             <div className="border-t-2 border-double border-ink-400 pt-3 text-[0.9375rem]">
               <Row
                 strong
