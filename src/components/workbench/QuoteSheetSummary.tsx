@@ -48,7 +48,8 @@ function jobsOf(quotes: StaffQuote[], tier: PriceTier, custom: CustomPricing | n
   return [...groups.entries()].map(([key, group]) => ({
     key,
     name: jobName(group[0]),
-    options: group.flatMap((q) => inStock(q, tier, custom, group.length > 1 && q.kind !== "tires")),
+    // A used-part search card that has no price yet is only links; its labor-only line must not stand in for the new-part price.
+    options: group.flatMap((q) => (group.length > 1 && q.used && !q.options.some((o) => o.source === "used") ? [] : inStock(q, tier, custom, group.length > 1 && q.kind !== "tires"))),
   }));
 }
 

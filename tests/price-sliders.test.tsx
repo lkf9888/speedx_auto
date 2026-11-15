@@ -10,7 +10,7 @@ import { handleConversation } from "@/lib/workbench/conversations-http";
 import type { Turn } from "@/lib/workbench/conversation-types";
 import { memoryKv } from "@/lib/workbench/kv";
 import { atTier, customTotal, snapPricing, tierLabor, tierMarkup } from "@/lib/workbench/price-tier";
-import { buildLaborQuote } from "@/lib/workbench/quote";
+import { buildLaborQuote, buildPartsQuote } from "@/lib/workbench/quote";
 import type { StaffPartOption } from "@/lib/worldpac/catalog";
 
 // Kevin, 2026-11-15: two sliders under the price choice. Parts: 0% = cost,
@@ -72,8 +72,14 @@ describe("slider prices", () => {
     expect(customTotal(q, q.options[0], { partsPct: 0, laborRate: 120 })).toBe((80 + 30) * 4);
   });
 
+  it("a parts-only quote (no labor) still follows the parts slider", () => {
+    const q = buildPartsQuote("2019 Toyota Camry", "Brake Disc", "Front", [part(4000, 2500)], "P-1", env);
+    expect(atTier(q, "custom", { partsPct: 0, laborRate: 90 }).options[0].customerTotal).toBe(2500);
+    expect(atTier(q, "custom", { partsPct: 100, laborRate: 90 }).options[0].customerTotal).toBe(4000);
+  });
+
   it("snaps values onto the 5% and $5 grids and refuses nonsense", () => {
-    expect(snapPricing({ partsPct: 47, laborRate: 96 })).toEqual({ partsPct: 45, laborRate: 95 });
+    expect(snapPricing({ partsPct: 47, laborRate: 96 })).toEqual({ partsPct: 45, laborRate: 96 });
     expect(snapPricing({ partsPct: 400, laborRate: 10 })).toEqual({ partsPct: 100, laborRate: 60 });
     expect(snapPricing({ partsPct: "50", laborRate: 90 })).toBeNull();
     expect(snapPricing(null)).toBeNull();
@@ -135,7 +141,7 @@ describe("saving the sliders", () => {
     const store = new ConversationStore(memoryKv());
     await store.append("cabc1234", "kevin@x", [turn("user", "q"), turn("assistant", "按哪个价报？")], undefined, "x");
     expect((await patch(store, { priceTier: "custom", pricing: { partsPct: 47, laborRate: 96 } })).status).toBe(200);
-    expect(await store.get("cabc1234")).toMatchObject({ priceTier: "custom", pricing: { partsPct: 45, laborRate: 95 } });
+    expect(await store.get("cabc1234")).toMatchObject({ priceTier: "custom", pricing: { partsPct: 45, laborRate: 96 } });
     expect((await patch(store, { priceTier: "friend" })).status).toBe(200);
     expect((await store.get("cabc1234"))?.pricing).toBeUndefined();
   });

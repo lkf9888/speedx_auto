@@ -90,6 +90,13 @@ describe("used part on the card and the quote sheet", () => {
     render(<QuoteSheetSummary quotes={[used]} tier="retail" />);
     expect(screen.getByTestId("quote-sheet-total")).toHaveTextContent("2,600");
   });
+
+  it("a search card with no price yet never replaces the new-part price on the sheet", () => {
+    const part: StaffPartOption = { description: "Engine assembly", series: "", listPrice: 4000, quantity: 1, inStockLocally: true, note: "", prices: { unitPrice: 2500 }, partNumber: "E-1", brand: "ACME", availability: "", qtyAvailable: 1, fields: {} };
+    const fresh = buildLaborQuote("2019 Toyota Camry", { serviceName: "Engine R&R", position: "", laborHours: 8, laborNote: "", primaryPartName: "Engine", otherPartNames: [], partsNote: "", partOptions: [part] }, "N-2", env);
+    render(<QuoteSheetSummary quotes={[fresh, buildUsedQuote(input, "U-11", env)!]} tier="retail" />);
+    expect(screen.getByTestId("quote-sheet-total")).toHaveTextContent("4,960");
+  });
 });
 
 describe("used part tool", () => {

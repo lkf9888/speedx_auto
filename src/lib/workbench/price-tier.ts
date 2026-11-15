@@ -44,7 +44,8 @@ export function snapPricing(raw: unknown): CustomPricing | null {
   const { partsPct, laborRate } = raw as Record<string, unknown>;
   if (typeof partsPct !== "number" || typeof laborRate !== "number" || !Number.isFinite(partsPct) || !Number.isFinite(laborRate)) return null;
   const parts = Math.min(100, Math.max(0, Math.round(partsPct / PARTS_STEP) * PARTS_STEP));
-  const labor = Math.min(LABOR_MAX, Math.max(LABOR_MIN, Math.round(laborRate / LABOR_STEP) * LABOR_STEP));
+  // Whole dollars, not the slider grid: the friend and referral buttons stand for $96, which sits between two steps.
+  const labor = Math.min(LABOR_MAX, Math.max(LABOR_MIN, Math.round(laborRate)));
   return { partsPct: parts, laborRate: labor };
 }
 
@@ -77,11 +78,11 @@ export function customTotal(quote: Pick<StaffQuote, "kind" | "labor">, option: S
     const retail = Math.max(option.unitPrice - eco - mounting, option.unitCost);
     return money((option.unitCost + (retail - option.unitCost) * share + eco + mounting) * option.quantity);
   }
-  if (!quote.labor) return option.customerTotal;
+  const hours = quote.labor?.hours ?? 0;
   const list = option.unitPrice * option.quantity;
   const low = option.costTotal === null ? list : Math.min(option.costTotal, list);
   const high = option.costTotal === null ? list : Math.max(option.costTotal, list);
-  return money(low + (high - low) * share + quote.labor.hours * pricing.laborRate);
+  return money(low + (high - low) * share + hours * pricing.laborRate);
 }
 
 /** Whether the friend price had to fall back to the referral price for this option. */
