@@ -198,7 +198,7 @@ export function HouseRulesPanel({ onClose }: { onClose: () => void }) {
         <div>
           <h2 className="text-base font-semibold text-[color:var(--wb-text)]">调教对外助手</h2>
           <p className="text-xs text-[color:var(--wb-muted)]">
-            网站维修页上给客人报价的 AI 会遵守这里的规则：叮嘱它怎么说、怎么处理特殊情况，给某段时间、某位客人打折，直接改一口价，或者设休息日。用中文直接说，AI 起草后你点“确认生效”才会改，一分钟内网站就会照做。进价、时薪、客人联系方式这些红线这里改不了。
+            网站维修页上给客人报价的 AI 会遵守这里的规则：叮嘱它怎么说、怎么处理特殊情况，给某段时间、某位客人打折，直接改一口价，或者设休息日。用中文直接说，AI 起草后你点“确认生效”才会改，一分钟内网站就会照做。进价、时薪、客人联系方式这些红线这里改不了。注意：改一口价只改聊天里的报价，维修页上的价目表和搜索结果还是原价，适合临时促销；长期改价还要改页面。
           </p>
         </div>
         <button type="button" onClick={onClose} aria-label="关闭调教对外助手" className="rounded px-2 text-lg text-[color:var(--wb-muted)] hover:text-[color:var(--wb-text)]">

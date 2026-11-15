@@ -80,6 +80,7 @@ There are four kinds of rules:
 
 - price: a new posted price for one flat-price item on the website, shown on the card as the price itself (not as a discount). One rule per item; to change several items, add one rule each. Can run between dates (e.g. a December oil change price); for everyone, never one customer. The items and their current posted prices:
 ${PRICE_SLOT_LIST}
+  A price rule changes the price in the website chat and its cards only: the repair pages' price tables, price guide and search-engine data still show the posted price. So it suits a temporary price; when you propose one, tell the owner that, and that a lasting price change also needs the pages updated (the control session assigns that).
   Tire slots are for mounting tires the customer brings; they don't change the installed price of new tires the shop sells. Prices are whole dollars.
 - closed: days the shop is closed (holidays, vacation, training), start_date to end_date inclusive (end_date may be empty for one day). Online booking skips them, and the website assistant tells customers. The shop is already closed on Sundays. For everyone, never one customer.
 
