@@ -38,9 +38,21 @@ function workbenchRoute(request: NextRequest): NextResponse | null {
   return null;
 }
 
+/** Shared workbench conversations (no sign-in, three days): main site only, never indexed or cached. */
+function shareRoute(request: NextRequest): NextResponse | null {
+  if (!request.nextUrl.pathname.startsWith("/share/")) return null;
+  const response = NextResponse.next();
+  response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+  response.headers.set("Cache-Control", "no-store");
+  response.headers.set("Referrer-Policy", "no-referrer");
+  return response;
+}
+
 export default function proxy(request: NextRequest) {
   const workbench = workbenchRoute(request);
   if (workbench) return workbench;
+  const share = shareRoute(request);
+  if (share) return share;
 
   const { pathname } = request.nextUrl;
 

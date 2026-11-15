@@ -6,7 +6,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { cloudflareKv, type KvClient } from "./kv";
-import type { Conversation, ConversationSummary, PendingQuery, Turn, Vehicle } from "./conversation-types";
+import type { Conversation, ConversationSummary, PendingQuery, ShareLink, Turn, Vehicle } from "./conversation-types";
 import type { PriceTier } from "./price-tier";
 import { finalCustomerText, readFinalTotals } from "./final-price";
 
@@ -160,6 +160,15 @@ export class ConversationStore {
     return this.change(id, by, (c) => {
       const clean = title.replace(/\s+/g, " ").trim().slice(0, TITLE_LENGTH);
       c.title = clean || c.turns.find((t) => t.role === "user")?.text.slice(0, 30) || "";
+    });
+  }
+
+  /** Record or forget a share link (the snapshot itself lives under its own key). */
+  async setShares(id: string, by: string, edit: (shares: ShareLink[]) => ShareLink[]): Promise<Conversation> {
+    return this.change(id, by, (c) => {
+      const next = edit(c.shares ?? []);
+      if (next.length) c.shares = next;
+      else delete c.shares;
     });
   }
 

@@ -56,6 +56,16 @@ export interface Conversation {
   website?: WebsiteVisitor;
   /** Which price this conversation quotes; unset until staff choose. */
   priceTier?: PriceTier;
+  /** Read-only links to this conversation that work without signing in. */
+  shares?: ShareLink[];
+}
+
+/** A no-login link to a snapshot of a conversation; it stops working at expiresAt. */
+export interface ShareLink {
+  token: string;
+  createdBy: string;
+  createdAt: number;
+  expiresAt: number;
 }
 
 /** Who the website customer is. Name and phone are for staff only; never sent to the AI. */

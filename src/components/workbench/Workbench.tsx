@@ -20,6 +20,7 @@ import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
 import { HouseRulesPanel } from "./HouseRulesPanel";
+import { SharePanel } from "./SharePanel";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
 import { distinctJobs, PriceChoiceCard, QuoteSheetSummary } from "./QuoteSheetSummary";
@@ -148,6 +149,7 @@ export function Workbench({ email }: { email: string }) {
   const [showMemory, setShowMemory] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const connection = useConnectionSummary();
   /** Right-click (or ⋯) menu on a conversation, and whether the list shows the archived ones. */
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -759,6 +761,21 @@ export function Workbench({ email }: { email: string }) {
               <>
                 <button
                   type="button"
+                  aria-label={`分享会话 ${active.title}`}
+                  title="分享（不用登录，3 天有效）"
+                  onClick={() => setShowShare(true)}
+                  className="relative rounded-full p-2 text-[color:var(--wb-icon)] hover:bg-[color:var(--wb-hover)]"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5" />
+                    <path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5" />
+                  </svg>
+                  {active.shares?.some((link) => link.expiresAt > Date.now()) && (
+                    <span aria-hidden data-testid="shared-dot" className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#00a884]" />
+                  )}
+                </button>
+                <button
+                  type="button"
                   aria-label={`重命名会话 ${active.title}`}
                   title="重命名"
                   onClick={() => setRenaming({ id: active.id, title: active.title })}
@@ -994,6 +1011,15 @@ export function Workbench({ email }: { email: string }) {
       {showMemory && (
         <Modal label="工作台记忆" onClose={() => setShowMemory(false)}>
           <MemoryPanel onClose={() => setShowMemory(false)} />
+        </Modal>
+      )}
+      {showShare && currentId && (
+        <Modal label="分享对话" onClose={() => setShowShare(false)}>
+          <SharePanel
+            conversation={active}
+            onClose={() => setShowShare(false)}
+            onChanged={(saved) => patchLocal(saved.id, (c) => ({ ...c, shares: saved.shares, updatedAt: saved.updatedAt }))}
+          />
         </Modal>
       )}
       {showRules && (

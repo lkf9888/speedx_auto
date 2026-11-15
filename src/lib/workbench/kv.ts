@@ -13,7 +13,8 @@ export class KvError extends Error {
 
 export interface KvClient {
   get(key: string): Promise<string | null>;
-  put(key: string, value: string): Promise<void>;
+  /** `ttlSeconds` (60 or more) makes Cloudflare delete the value by itself after that long. */
+  put(key: string, value: string, options?: { ttlSeconds?: number }): Promise<void>;
   delete(key: string): Promise<void>;
   /** Every key with the prefix (all pages). */
   list(prefix: string): Promise<string[]>;
@@ -51,8 +52,9 @@ export function cloudflareKv(env: NodeJS.ProcessEnv = process.env, fetchImpl: ty
       if (!response.ok) throw new KvError(`Cloudflare KV read failed with ${response.status}`);
       return response.text();
     },
-    async put(key, value) {
-      const response = await call(valuePath(key), { method: "PUT", body: value, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    async put(key, value, options) {
+      const ttl = options?.ttlSeconds ? `?expiration_ttl=${Math.max(60, Math.round(options.ttlSeconds))}` : "";
+      const response = await call(`${valuePath(key)}${ttl}`, { method: "PUT", body: value, headers: { "Content-Type": "text/plain; charset=utf-8" } });
       if (!response.ok) throw new KvError(`Cloudflare KV write failed with ${response.status}`);
     },
     async delete(key) {
@@ -85,7 +87,8 @@ export function memoryKv(initial: Record<string, string> = {}): KvClient & { dat
     async get(key: string) {
       return data.get(key) ?? null;
     },
-    async put(key: string, value: string) {
+    async put(key: string, value: string, _options?: { ttlSeconds?: number }) {
+      void _options;
       kv.writes += 1;
       data.set(key, value);
     },
