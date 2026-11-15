@@ -158,14 +158,15 @@ export function cleanRule(
   if (kind === "price") {
     const slot = FLAT_PRICE_SLOTS[rule.priceSlot as FlatPriceSlot];
     if (!slot) throw new HouseRuleError("要说明改哪一项一口价（如普通机油轿车、18 寸以下换胎）", "invalid");
-    const price = rule.price ?? 0;
+    // Whole dollars, like the posted prices, so the card and the reply never differ by cents.
+    const price = Math.round(rule.price ?? 0);
     if (!(price > 0) || price > 2000) throw new HouseRuleError("新价格要在 $0–$2000 之间", "invalid");
-    return { ...rule, ...plain, priceSlot: rule.priceSlot, price: rule.price };
+    return { ...rule, ...plain, priceSlot: rule.priceSlot, price };
   }
   if (kind === "closed") {
     if (!rule.startDate) throw new HouseRuleError("休息日要写明从哪天开始", "invalid");
     const endDate = rule.endDate || rule.startDate;
-    if (daysBetween(rule.startDate, endDate) > MAX_CLOSED_DAYS) throw new HouseRuleError(`一条休息日最多 ${MAX_CLOSED_DAYS} 天`, "invalid");
+    if (daysBetween(rule.startDate, endDate) >= MAX_CLOSED_DAYS) throw new HouseRuleError(`一条休息日最多 ${MAX_CLOSED_DAYS} 天`, "invalid");
     return { ...rule, ...plain, endDate };
   }
   const hasPercent = rule.percent > 0;
@@ -196,7 +197,7 @@ export function closedDays(rules: readonly HouseRule[], today: string): Set<stri
   for (const rule of rules) {
     if (rule.kind !== "closed" || !rule.startDate) continue;
     const end = rule.endDate || rule.startDate;
-    for (let i = 0, day = rule.startDate; day <= end && i <= MAX_CLOSED_DAYS; i += 1, day = addDay(rule.startDate, i)) {
+    for (let i = 0, day = rule.startDate; day <= end && i < MAX_CLOSED_DAYS; i += 1, day = addDay(rule.startDate, i)) {
       if (day >= today) days.add(day);
     }
   }

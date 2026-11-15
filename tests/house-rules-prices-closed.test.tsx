@@ -28,6 +28,7 @@ describe("price rules", () => {
     expect(price("oil_standard_regular", 89)).toMatchObject({ kind: "price", priceSlot: "oil_standard_regular", price: 89, percent: 0, labelZh: "" });
     expect(() => price("oil_gold", 89)).toThrow(/哪一项/);
     expect(() => price("oil_standard_regular", 0)).toThrow(/新价格/);
+    expect(price("tire_up_to_18", 24.99).price).toBe(25);
     expect(() => price("oil_standard_regular", 89, { customerPhone: "604-555-0182" })).toThrow(/所有客人/);
   });
 
@@ -60,6 +61,8 @@ describe("closed days", () => {
     expect(() => cleanRule({ kind: "closed", title: "x" }, who)).toThrow(/哪天/);
     expect(() => cleanRule({ kind: "closed", title: "x", startDate: "2026-12-24", customerPhone: "6045550182" }, who)).toThrow(/不能指定客人/);
     expect(() => closed("2026-01-01", "2026-06-01")).toThrow(/最多 60 天/);
+    expect(closed("2026-12-01", "2026-01-29".replace("2026-01", "2027-01"))).toBeTruthy();
+    expect(() => closed("2026-12-01", "2027-01-30")).toThrow(/最多 60 天/);
   });
 
   it("lists each closed day from today on", () => {
