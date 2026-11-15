@@ -50,6 +50,18 @@ const NO_STORE = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofoll
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: NO_STORE });
 const fail = (message: string, status = 400, error = "invalid") => json({ error, message }, status);
 
+/** CASL: an inquiry gives implied consent for six months. */
+const CONSENT_MS = 182 * 24 * 60 * 60 * 1000;
+/** A second email to the same customer within this long is refused (a double click, a retry after an error). */
+const RESEND_MS = 10 * 60 * 1000;
+/** One plain address, as the website form should have taken it. */
+const SINGLE_EMAIL = /^[^\s@,;<>()"]+@[^\s@,;<>()"]+\.[A-Za-z]{2,}$/;
+
+/** When the customer last asked something on the website. */
+function lastInquiry(c: Conversation): number {
+  return c.turns.filter((t) => t.role === "user").reduce((latest, t) => Math.max(latest, t.at ?? 0), c.createdAt);
+}
+
 const locale = (c: Conversation): FollowUpLocale => (c.website?.locale === "zh-CN" || c.website?.locale === "zh-TW" ? c.website.locale : "en");
 const toTraditional = (text: string) => matchScript(text, "Traditional Chinese");
 
@@ -72,7 +84,7 @@ export function readOffer(raw: unknown, c: Conversation, today: string): FollowU
   const expiresOn = typeof o.expiresOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.expiresOn) ? o.expiresOn : "";
   if (!expiresOn || expiresOn < today) return "有效期要是今天或以后的日期";
   const text = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u0008\u000b-\u001f]/g, "").trim().slice(0, max) : "");
-  const subject = text(o.subject, 140);
+  const subject = text(o.subject, 140).replace(/[\r\n]+/g, " ");
   const message = text(o.message, 1200);
   const sms = text(o.sms, 480);
   if (!subject || !message) return "邮件主题和内容不能为空";
@@ -162,7 +174,7 @@ function discountRule(c: Conversation, card: EstimateCard, offer: FollowUpOffer)
       ? { appliesTo: card.flatService, serviceKeyword: "" }
       : card.kind === "tires"
         ? { appliesTo: "new_tires" as const, serviceKeyword: "" }
-        : { appliesTo: "labor_jobs" as const, serviceKeyword: card.service.slice(0, 40) };
+        : { appliesTo: "labor_jobs" as const, serviceKeyword: card.service.replace(/\s*\b(R&R|Replace|Replacement)\b.*$/i, "").trim().slice(0, 40) || card.service.slice(0, 40) };
   return {
     action: "add",
     rule: {
@@ -187,7 +199,7 @@ async function registerDiscount(deps: FollowUpDeps, c: Conversation, card: Estim
   const rules = deps.rules();
   if (!change || !rules) return undefined;
   // Same offer already registered from an earlier email or text: don't add it twice.
-  const already = (c.followUps ?? []).find((f) => f.ruleId && f.offer === offerSummary(offer));
+  const already = (c.followUps ?? []).find((f) => f.ruleId && f.offer === offerSummary(offer) && f.estimateId === card.id);
   if (already) return already.ruleId;
   try {
     const before = new Set((await rules.list(true)).map((r) => r.id));
@@ -197,6 +209,16 @@ async function registerDiscount(deps: FollowUpDeps, c: Conversation, card: Estim
     deps.log({ action: "discount_failed", message: error instanceof Error ? error.message.slice(0, 200) : "unknown" });
     return undefined;
   }
+}
+
+/** What went wrong sending, in words staff can act on. */
+function mailError(error: unknown): string {
+  const e = error as { code?: string; responseCode?: number; message?: string };
+  console.error("followup email failed", e?.code ?? "", e?.responseCode ?? "", (e?.message ?? "").slice(0, 200));
+  if (e?.code === "EAUTH" || e?.responseCode === 535) return "回访邮箱登录失败：Railway 里的应用专用密码不对或已失效";
+  if (e?.responseCode === 550 && /5\.4\.5|limit/i.test(e?.message ?? "")) return "Gmail 今天发信已到上限，明天再发";
+  if (e?.responseCode && e.responseCode >= 500) return "对方邮箱拒收了这封邮件（地址可能不存在）";
+  return "邮件没发出去（连不上 Gmail），请稍后再试";
 }
 
 export async function handleFollowUp(request: Request, id: string, deps: FollowUpDeps = defaultDeps): Promise<Response> {
@@ -213,9 +235,12 @@ export async function handleFollowUp(request: Request, id: string, deps: FollowU
     if (offerableEstimates(c).length === 0) return fail("这位客人没有拿到过有价格的报价，没法做优惠");
     const action = body.action;
 
+    const nowMs = (deps.now ?? (() => new Date()))().getTime();
+    const consentEnded = nowMs - lastInquiry(c) > CONSENT_MS;
+
     if (action === "draft") {
       const offer = await draft(c, deps.client(), today).catch(() => defaultOffer(offerableEstimates(c)[0], locale(c), c.website?.name ?? "", today));
-      return json({ offer, estimates: offerableEstimates(c), canEmail: Boolean(c.website.email && deps.mailer()), mailerReady: Boolean(deps.mailer()) });
+      return json({ offer, estimates: offerableEstimates(c), canEmail: Boolean(c.website.email && deps.mailer()), mailerReady: Boolean(deps.mailer()), consentEnded });
     }
 
     const offer = readOffer(body.offer, c, today);
@@ -230,6 +255,10 @@ export async function handleFollowUp(request: Request, id: string, deps: FollowU
     if (action === "send") {
       const to = c.website.email?.trim();
       if (!to) return fail("这位客人没有留邮箱");
+      if (!SINGLE_EMAIL.test(to)) return fail("客人留的邮箱格式不对，没法发");
+      if (consentEnded) return fail("客人咨询已经超过 6 个月，按加拿大反垃圾邮件法不能再发推广邮件", 409, "consent_ended");
+      const recent = (c.followUps ?? []).find((f) => f.channel === "email" && nowMs - f.at < RESEND_MS);
+      if (recent) return fail("10 分钟内刚给这位客人发过邮件，先别重复发", 409, "recent");
       const mailer = deps.mailer();
       if (!mailer) return fail("回访邮箱还没设置好：请在 Railway 填 FOLLOWUP_SMTP_USER 和 FOLLOWUP_SMTP_PASS", 503, "not_configured");
       const store = deps.store();
@@ -238,18 +267,26 @@ export async function handleFollowUp(request: Request, id: string, deps: FollowU
       const token = await store.unsubscribeToken(to);
       const unsubscribeUrl = `${BASE_URL}/unsubscribe/${token}`;
       const mail = renderFollowUpEmail({ locale: locale(c), customerName: c.website.name, card, offer, unsubscribeUrl, toTraditional });
-      await mailer({ to, subject: mail.subject, html: mail.html, text: mail.text, unsubscribeUrl });
+      try {
+        await mailer({ to, subject: mail.subject, html: mail.html, text: mail.text, oneClickUrl: `${BASE_URL}/api/followup/unsubscribe?token=${token}` });
+      } catch (error) {
+        return fail(mailError(error), 502, "send_failed");
+      }
+      // The email is out: nothing below may report "failed" and tempt staff to send it again.
       const ruleId = await registerDiscount(deps, c, card, offer, user.email);
-      const record: FollowUpRecord = { at: Date.now(), by: user.email, channel: "email", offer: offerSummary(offer), subject: mail.subject, ...(ruleId ? { ruleId } : {}) };
-      const saved = await conversations.addFollowUp(id, user.email, record);
+      const record: FollowUpRecord = { at: Date.now(), by: user.email, channel: "email", offer: offerSummary(offer), subject: mail.subject, estimateId: card.id, ...(ruleId ? { ruleId } : {}) };
+      const saved = await conversations.addFollowUp(id, user.email, record).catch((error: unknown) => {
+        deps.log({ action: "record_failed", id, message: error instanceof Error ? error.message.slice(0, 200) : "unknown" });
+        return null;
+      });
       deps.log({ action: "email", email: user.email, id, offer: record.offer, discount: Boolean(ruleId) });
-      return json({ conversation: saved, record });
+      return json({ conversation: saved ?? c, record, ...(saved ? {} : { warning: "邮件已发出，但回访记录没存上" }) });
     }
 
     if (action === "log") {
       const channel = body.channel === "call" ? "call" : "sms";
       const ruleId = await registerDiscount(deps, c, card, offer, user.email);
-      const record: FollowUpRecord = { at: Date.now(), by: user.email, channel, offer: offerSummary(offer), ...(ruleId ? { ruleId } : {}) };
+      const record: FollowUpRecord = { at: Date.now(), by: user.email, channel, offer: offerSummary(offer), estimateId: card.id, ...(ruleId ? { ruleId } : {}) };
       const saved = await conversations.addFollowUp(id, user.email, record);
       deps.log({ action: channel, email: user.email, id, offer: record.offer, discount: Boolean(ruleId) });
       return json({ conversation: saved, record });
@@ -258,6 +295,6 @@ export async function handleFollowUp(request: Request, id: string, deps: FollowU
   } catch (error) {
     if (error instanceof ConversationError) return json({ error: error.kind }, error.kind === "not_found" ? 404 : 400);
     console.error("workbench followup failed", error instanceof Error ? error.message.slice(0, 200) : "unknown");
-    return fail("发送失败，请稍后再试（邮箱密码对吗？）", 502, "upstream");
+    return fail("暂时用不了（云端存储连不上），请稍后再试", 502, "upstream");
   }
 }

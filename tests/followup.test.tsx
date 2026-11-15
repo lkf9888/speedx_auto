@@ -68,7 +68,8 @@ const req = (body: unknown) => new Request("https://repair.speedxrental.com/api/
 
 describe("the offer and the email", () => {
   it("takes the offer off the range the customer saw", () => {
-    expect(offerPrices(card(), { kind: "amount", value: 30 })).toMatchObject({ before: { low: 262, high: 350 }, after: { low: 232, high: 320 } });
+    // Off the card's totals ($291.05–$317.84), then the ±10% allowance, as the website will show it.
+    expect(offerPrices(card(), { kind: "amount", value: 30 })).toMatchObject({ before: { low: 262, high: 350 }, after: { low: 235, high: 317 } });
     expect(offerPrices(card(), { kind: "percent", value: 10 }).after).toEqual({ low: 236, high: 315 });
   });
 
@@ -76,12 +77,12 @@ describe("the offer and the email", () => {
     const zh = renderFollowUpEmail({ locale: "zh-CN", customerName: "Lin Wei", card: card(), offer: offer(), unsubscribeUrl: "https://speedxrental.com/unsubscribe/tok" });
     expect(zh.html).toContain("$262 – $350");
     expect(zh.html).toContain("− $30");
-    expect(zh.html).toContain("$232 – $320");
+    expect(zh.html).toContain("$235 – $317");
     expect(zh.html).toContain("Lin专属优惠");
     expect(zh.html).toContain("2026-11-30 前有效");
     expect(zh.html).toContain("https://speedxrental.com/unsubscribe/tok");
     expect(zh.html).toContain("2980 Number 3 Rd");
-    expect(zh.text).toContain("$232 – $320");
+    expect(zh.text).toContain("$235 – $317");
     const tw = renderFollowUpEmail({ locale: "zh-TW", customerName: "Lin", card: card(), offer: offer(), unsubscribeUrl: "u", toTraditional: (t) => t.replace("优惠", "優惠") });
     expect(tw.html).toContain("優惠");
     const en = renderFollowUpEmail({ locale: "en", customerName: "Lin", card: card(), offer: offer({ subject: "Your quote" }), unsubscribeUrl: "u" });
@@ -141,13 +142,15 @@ describe("/api/workbench/conversations/[id]/followup", () => {
     const d = deps(kv, conversations);
     const res = await handleFollowUp(req({ action: "send", offer: offer() }), "w-thread1", d);
     expect(res.status).toBe(200);
-    const mail = d.sent[0] as { to: string; subject: string; unsubscribeUrl: string; html: string };
+    const mail = d.sent[0] as { to: string; subject: string; oneClickUrl: string; html: string };
     expect(mail.to).toBe("lin@example.com");
-    expect(mail.unsubscribeUrl).toMatch(/^https:\/\/speedxrental\.com\/unsubscribe\/[A-Za-z0-9_-]{22}$/);
-    expect(mail.unsubscribeUrl).not.toContain("lin");
+    // Mail apps' one-click unsubscribe POSTs to the API; the footer links to the page.
+    expect(mail.oneClickUrl).toMatch(/^https:\/\/speedxrental\.com\/api\/followup\/unsubscribe\?token=[A-Za-z0-9_-]{22}$/);
+    expect(mail.html).toMatch(/https:\/\/speedxrental\.com\/unsubscribe\/[A-Za-z0-9_-]{22}/);
+    expect(mail.oneClickUrl).not.toContain("lin");
     const rules = await d.rules()!.list(true);
     expect(rules).toHaveLength(1);
-    expect(rules[0]).toMatchObject({ kind: "discount", amount: 30, customerPhone: "6045550182", endDate: "2026-11-30", appliesTo: "labor_jobs", serviceKeyword: "Brake Pads R&R" });
+    expect(rules[0]).toMatchObject({ kind: "discount", amount: 30, customerPhone: "6045550182", endDate: "2026-11-30", appliesTo: "labor_jobs", serviceKeyword: "Brake Pads" });
     await handleFollowUp(req({ action: "log", channel: "sms", offer: offer() }), "w-thread1", d);
     expect(await d.rules()!.list(true)).toHaveLength(1);
     const saved = (await conversations.get("w-thread1"))!;
@@ -159,10 +162,11 @@ describe("/api/workbench/conversations/[id]/followup", () => {
     expect((await handleFollowUp(req({ action: "send", offer: offer() }), "w-thread1", deps(kv, conversations, { mailer: () => null }))).status).toBe(503);
     const d = deps(kv, conversations);
     await handleFollowUp(req({ action: "send", offer: offer() }), "w-thread1", d);
-    const token = (d.sent[0] as { unsubscribeUrl: string }).unsubscribeUrl.split("/").pop()!;
-    const unsub = await handleUnsubscribe(new Request(`https://speedxrental.com/api/followup/unsubscribe?token=${token}`, { method: "POST" }), () => new FollowUpStore(kv));
+    const oneClick = (d.sent[0] as { oneClickUrl: string }).oneClickUrl;
+    const unsub = await handleUnsubscribe(new Request(oneClick, { method: "POST" }), () => new FollowUpStore(kv));
     expect(unsub.status).toBe(200);
-    const again = await handleFollowUp(req({ action: "send", offer: offer() }), "w-thread1", d);
+    const later = deps(kv, conversations, { now: () => new Date("2026-11-14T21:00:00Z") });
+    const again = await handleFollowUp(req({ action: "send", offer: offer() }), "w-thread1", later);
     expect(again.status).toBe(409);
     expect((await handleUnsubscribe(new Request("https://speedxrental.com/api/followup/unsubscribe?token=bad", { method: "POST" }), () => new FollowUpStore(kv))).status).toBe(400);
   });
@@ -172,6 +176,40 @@ describe("/api/workbench/conversations/[id]/followup", () => {
     expect((await handleFollowUp(req({ action: "draft" }), "w-thread1", deps(kv, conversations, { user: async () => null }))).status).toBe(401);
     await conversations.append("cplain01", "kevin@x.com", [{ id: newTurnId(), role: "user", text: "hi", author: "kevin@x.com", at: 1, quotes: [] }]);
     expect((await handleFollowUp(req({ action: "draft" }), "cplain01", deps(kv, conversations))).status).toBe(404);
+  });
+});
+
+describe("follow-up review fixes", () => {
+  it("won't email twice within ten minutes, after six months, or to a list of addresses", async () => {
+    const { kv, conversations } = await seeded();
+    const d = deps(kv, conversations);
+    await handleFollowUp(req({ action: "send", offer: offer() }), "w-thread1", d);
+    expect((await handleFollowUp(req({ action: "send", offer: offer() }), "w-thread1", d)).status).toBe(409);
+    expect(d.sent).toHaveLength(1);
+    const old = deps(kv, conversations, { now: () => new Date("2027-08-01T20:00:00Z") });
+    const stale = (await (await handleFollowUp(req({ action: "send", offer: offer({ expiresOn: "2027-08-30" }) }), "w-thread1", old)).json()) as { message: string };
+    expect(stale.message).toMatch(/6 个月/);
+    const two = await seeded({ email: "a@x.com,victim@y.com" });
+    expect((await handleFollowUp(req({ action: "send", offer: offer() }), "w-thread1", deps(two.kv, two.conversations))).status).toBe(400);
+  });
+
+  it("explains a Gmail sign-in failure, and doesn't report failure once the email is out", async () => {
+    const { kv, conversations } = await seeded();
+    const authFail = deps(kv, conversations, { mailer: () => async () => Promise.reject(Object.assign(new Error("Invalid login"), { code: "EAUTH", responseCode: 535 })) });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = (await (await handleFollowUp(req({ action: "send", offer: offer() }), "w-thread1", authFail)).json()) as { message: string };
+    expect(res.message).toMatch(/应用专用密码/);
+    const flaky = deps(kv, conversations);
+    vi.spyOn(conversations, "addFollowUp").mockRejectedValueOnce(new Error("KV down"));
+    const sent = await handleFollowUp(req({ action: "send", offer: offer() }), "w-thread1", flaky);
+    expect(sent.status).toBe(200);
+    expect(((await sent.json()) as { warning?: string }).warning).toMatch(/已发出/);
+  });
+
+  it("strips line breaks from the subject", async () => {
+    const { conversations } = await seeded();
+    const c = (await conversations.get("w-thread1"))!;
+    expect((readOffer(offer({ subject: "a\nBcc: x@y.com" }), c, "2026-11-14") as FollowUpOffer).subject).toBe("a Bcc: x@y.com");
   });
 });
 

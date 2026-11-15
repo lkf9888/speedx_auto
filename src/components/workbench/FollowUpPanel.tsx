@@ -30,6 +30,7 @@ export function FollowUpPanel({ conversation, onClose, onChanged }: { conversati
   const [offer, setOffer] = useState<FollowUpOffer | null>(null);
   const [estimates, setEstimates] = useState<EstimateCard[]>([]);
   const [mailerReady, setMailerReady] = useState(false);
+  const [consentEnded, setConsentEnded] = useState(false);
   const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null);
   const [busy, setBusy] = useState<"" | "draft" | "send" | "log">("draft");
   const [notice, setNotice] = useState("");
@@ -44,6 +45,7 @@ export function FollowUpPanel({ conversation, onClose, onChanged }: { conversati
         setOffer(data.offer as FollowUpOffer);
         setEstimates(data.estimates as EstimateCard[]);
         setMailerReady(Boolean(data.mailerReady));
+        setConsentEnded(Boolean(data.consentEnded));
       })
       .catch((e: Error) => live && setError(e.message))
       .finally(() => live && setBusy(""));
@@ -82,7 +84,9 @@ export function FollowUpPanel({ conversation, onClose, onChanged }: { conversati
     try {
       const data = await post(conversation.id, { action: "send", offer });
       onChanged(data.conversation as Conversation);
-      setNotice(`已发给 ${visitor.email}${(data.record as { ruleId?: string }).ruleId ? "，网站上也已按这位客人的电话登记了优惠" : ""}`);
+      setNotice(
+        `已发给 ${visitor.email}${(data.record as { ruleId?: string }).ruleId ? "，网站上也已按这位客人的电话登记了优惠" : ""}${data.warning ? `（${String(data.warning)}）` : ""}`,
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -189,7 +193,7 @@ export function FollowUpPanel({ conversation, onClose, onChanged }: { conversati
               {visitor.email ? (
                 <button
                   type="button"
-                  disabled={Boolean(busy) || !mailerReady}
+                  disabled={Boolean(busy) || !mailerReady || consentEnded}
                   onClick={() => void sendEmail()}
                   className="rounded-full bg-[#00a884] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
@@ -197,6 +201,9 @@ export function FollowUpPanel({ conversation, onClose, onChanged }: { conversati
                 </button>
               ) : (
                 <p className="text-xs text-[color:var(--wb-muted)]">客人没有留邮箱，只能发短信或打电话。</p>
+              )}
+              {consentEnded && (
+                <p className="text-xs font-semibold text-red-700">客人咨询已经超过 6 个月，按加拿大反垃圾邮件法不能再发推广邮件或短信；打电话前也先确认客人愿意。</p>
               )}
               {visitor.email && !mailerReady && <p className="text-xs text-amber-800">回访邮箱还没设置好（Railway 里要填 FOLLOWUP_SMTP_USER 和 FOLLOWUP_SMTP_PASS），现在只能预览。</p>}
               {visitor.phone && (

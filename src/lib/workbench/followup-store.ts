@@ -57,7 +57,8 @@ export interface FollowUpMail {
   subject: string;
   html: string;
   text: string;
-  unsubscribeUrl: string;
+  /** Where mail apps send the one-click unsubscribe POST (RFC 8058): the API, not the page. */
+  oneClickUrl: string;
 }
 
 export type FollowUpMailer = (mail: FollowUpMail) => Promise<void>;
@@ -86,7 +87,7 @@ export function followUpMailer(env: NodeJS.ProcessEnv = process.env): FollowUpMa
       html: mail.html,
       text: mail.text,
       headers: {
-        "List-Unsubscribe": `<${mail.unsubscribeUrl}>`,
+        "List-Unsubscribe": `<${mail.oneClickUrl}>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
     });

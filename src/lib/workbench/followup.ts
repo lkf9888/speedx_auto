@@ -5,6 +5,7 @@
  * mailbox, or a text message they send themselves from Google Messages.
  * Types and pure rendering only, safe for the browser preview.
  */
+import { withoutDiscount } from "@/lib/repair-chat/house-rules";
 import { estimateRanges, type EstimateCard } from "@/lib/repair-chat/pricing";
 
 export type OfferKind = "amount" | "percent";
@@ -35,6 +36,8 @@ export interface FollowUpRecord {
   subject?: string;
   /** The customer-only discount registered for the website assistant, if any. */
   ruleId?: string;
+  /** Which estimate the offer was for. */
+  estimateId?: string;
 }
 
 export type FollowUpLocale = "en" | "zh-CN" | "zh-TW";
@@ -53,13 +56,19 @@ export const SHOP = {
 const cents = (value: number) => Math.round(value * 100) / 100;
 const whole = (value: number) => Math.round(value);
 
-/** The card's customer range before and after the offer, in whole dollars as the card shows it. */
+/**
+ * The range the customer saw, and the range after the offer worked out the way
+ * the website assistant will when they come back: off the card's own totals
+ * (not stacked on an earlier discount), then the usual allowance.
+ */
 export function offerPrices(card: EstimateCard, offer: Pick<FollowUpOffer, "kind" | "value">) {
-  const { totalLow, totalHigh } = estimateRanges(card);
+  const seen = estimateRanges(card);
+  const base = withoutDiscount(card);
   const off = (total: number) => (offer.kind === "percent" ? cents((total * offer.value) / 100) : Math.min(offer.value, total));
+  const after = estimateRanges({ ...base, totalLow: cents(base.totalLow - off(base.totalLow)), totalHigh: cents(base.totalHigh - off(base.totalHigh)) });
   return {
-    before: { low: totalLow, high: totalHigh },
-    after: { low: whole(totalLow - off(totalLow)), high: whole(totalHigh - off(totalHigh)) },
+    before: { low: seen.totalLow, high: seen.totalHigh },
+    after: { low: after.totalLow, high: after.totalHigh },
     offLabel: offer.kind === "percent" ? `${offer.value}%` : `$${whole(offer.value)}`,
   };
 }
