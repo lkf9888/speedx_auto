@@ -484,7 +484,7 @@ async function quoteEachVariant(
   for (const option of question.options) {
     const applied = await applyVehicleDetails(api, vehicle, [{ attribute: question.attribute, option }]);
     if (applied.status !== "ok" && applied.status !== "needs_details") continue;
-    const quoted = await quoteServiceForStaff(api, applied.vehicle, serviceId, position);
+    const quoted = await quoteServiceForStaff(api, applied.vehicle, serviceId, position, bothSides);
     if (quoted.status !== "ok") continue;
     const job = bothSides ? forBothSides(quoted) : quoted;
     const label = describeVehicle(applied.vehicle);
@@ -599,7 +599,7 @@ export async function runWorkbenchTool(
     if (!Number.isInteger(serviceId) || serviceId <= 0) return { content: JSON.stringify({ error: "Invalid service_id." }), isError: true, events: [] };
     const position = typeof input.position === "string" && input.position.trim() ? input.position : null;
     const bothSides = input.both_sides === true;
-    const quoted = await quoteServiceForStaff(api, vehicle, serviceId, position);
+    const quoted = await quoteServiceForStaff(api, vehicle, serviceId, position, bothSides);
     if (quoted.status === "need_details") {
       const variants = await quoteEachVariant(api, vehicle, serviceId, position, quoted.questions, newEstimateId, bothSides);
       if (variants) return variants;

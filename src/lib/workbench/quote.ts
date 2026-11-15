@@ -104,7 +104,8 @@ export function etaLabel(availability: string): string | null {
   if (range) return `约 ${range[1]}–${range[2]} 天到`;
   const days = a.match(/(\d+)\s*-?\s*(?:business\s*)?days?/);
   if (days) return `约 ${days[1]} 天到`;
-  return `要调货（${availability.slice(0, 30)}）`;
+  // WorldPac codes such as "DC" or "multipleDays" don't say when: no code goes to the customer.
+  return "到货时间待确认";
 }
 
 /**

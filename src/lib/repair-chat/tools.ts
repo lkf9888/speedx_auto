@@ -439,7 +439,7 @@ async function withKnownCylinders(
 
 /** One labor job on one car, with both sides and done-together labor applied. */
 async function laborQuote(api: CatalogApi, vehicle: VehicleRef, serviceId: number, position: string | null, input: Record<string, unknown>) {
-  const raw = await quoteService(api, vehicle, serviceId, position);
+  const raw = await quoteService(api, vehicle, serviceId, position, input.both_sides === true);
   const quoted = raw.status === "ok" && input.both_sides === true ? forBothSides(raw) : raw;
   if (quoted.status !== "ok") return quoted;
   const shared = await sharedLabor(api, vehicle, serviceId, quoted.laborHours, readDoneWith(input));

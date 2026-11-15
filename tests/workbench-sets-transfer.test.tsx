@@ -120,3 +120,31 @@ describe("the workbench AI", () => {
     expect(WORKBENCH_PROMPT).toMatch(/Don't mention cost, profit, margin, markup, stock counts or part numbers unless staff ask/);
   });
 });
+
+describe("pairing review fixes", () => {
+  const sided = (description: string, side: "L" | "R", listPrice = 300, brand = "A") => ({ description, series: "", listPrice, quantity: 1, inStockLocally: true, note: "", side, brand });
+
+  it("doesn't offer a lone side next to real sets, and counts it twice when there are none", () => {
+    const withSet = pairSides([sided("Rotor Left", "L", 300), sided("Rotor Right", "R", 300), sided("Cheap Rotor Left", "L", 100, "B")]);
+    expect(withSet.map((o) => [o.description, o.quantity])).toEqual([["Rotor (left + right set)", 1]]);
+    const lonely = pairSides([sided("Cheap Rotor Left", "L", 100, "B")]);
+    expect(lonely.map((o) => [o.description, o.quantity])).toEqual([["Cheap Rotor Left", 2]]);
+  });
+
+  it("knows which jobs are a whole axle", async () => {
+    const { isAxleSetJob } = await import("@/lib/worldpac/catalog");
+    expect(["Brake Rotor R&R", "Brake Rotors", "Disc Brake Rotor R&R", "Brake Pads R&R", "Brake Shoes R&R"].every(isAxleSetJob)).toBe(true);
+    expect(["Disc Brake Caliper R&R", "Disc Brake Pad Wear Sensor", "Strut Assembly R&R"].some(isAxleSetJob)).toBe(false);
+  });
+
+  it("can't promise a set when one side can't be had", () => {
+    const [set] = pairSides(staffPartQuotes(pna([rotorQuote("L1", "Front Left", "Wednesday", 0), rotorQuote("R1", "Front Right", "notAvailable", 0)]), 30, "Front"));
+    const quote = buildLaborQuote("Car", job([set]), "W-9", env);
+    expect(quote.options[0].outOfStock).toBe(true);
+  });
+
+  it("never shows WorldPac codes to the customer", () => {
+    expect(etaLabel("DC")).toBe("到货时间待确认");
+    expect(etaLabel("multipleDays")).toBe("到货时间待确认");
+  });
+});

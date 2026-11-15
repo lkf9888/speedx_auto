@@ -634,8 +634,13 @@ export function sanitizePartQuotes(
   return dedupe(options, (o) => `${o.series}|${o.description}|${o.listPrice}|${o.quantity}|${o.side ?? ""}`, (a, b) => Number(b.inStockLocally) - Number(a.inStockLocally));
 }
 
-/** Jobs done on a whole axle, where a left and a right part are both needed (brake rotors, pads, shoes). */
-export const AXLE_SET_JOB = /\b(brake\s+)?(rotor|disc|pads?|shoes?)\b/i;
+/**
+ * Jobs done on a whole axle, where a left and a right part are both needed:
+ * brake rotors / discs, pads and shoes, but not calipers, wear sensors or hardware.
+ */
+export function isAxleSetJob(serviceName: string): boolean {
+  return /\b(rotors?|discs?|brake\s+pads?|pads?|brake\s+shoes?|shoes?)\b/i.test(serviceName) && !/caliper|sensor|hardware|wear|bracket|hose|line/i.test(serviceName);
+}
 
 const SIDE_WORDS = /\s*[,(-]?\s*\b(left|right|LH|RH|driver|passenger)\b( side)?\)?/gi;
 
@@ -645,6 +650,18 @@ const SIDE_WORDS = /\s*[,(-]?\s*\b(left|right|LH|RH|driver|passenger)\b( side)?\
  * as a set, or without a side, are left as they are.
  */
 export function pairSides<T extends PartOption>(options: T[]): T[] {
+  const result = pairMatching(options);
+  const sets = result.filter((o) => (o.partCount ?? 1) >= 2 && !o.side);
+  const lone = result.filter((o) => o.side);
+  const rest = result.filter((o) => !o.side);
+  // A left part with no matching right (or the reverse) can't do the axle on its
+  // own: when real sets exist it isn't offered; when none do, it's counted twice.
+  if (lone.length === 0) return rest;
+  if (sets.length > 0) return rest;
+  return [...rest, ...lone.map((o) => ({ ...o, quantity: o.quantity * 2 }))].sort((a, b) => a.listPrice * a.quantity - b.listPrice * b.quantity);
+}
+
+function pairMatching<T extends PartOption>(options: T[]): T[] {
   const key = (o: T) => {
     const extra = o as unknown as { brand?: string };
     return `${extra.brand ?? ""}|${o.series}|${o.description.replace(SIDE_WORDS, "").trim().toLowerCase()}`;
@@ -684,11 +701,14 @@ function combineSides<T extends PartOption>(l: T, r: T): T {
     partCount: (l.partCount ?? 1) + (r.partCount ?? 1),
   };
   if (!ls.prices || !rs.prices) return base as T;
+  // Only prices both sides have: a missing side would understate the set's cost.
   const prices: Record<string, number> = {};
-  for (const k of new Set([...Object.keys(ls.prices), ...Object.keys(rs.prices)])) {
-    prices[k] = money((ls.prices[k] ?? 0) * l.quantity + (rs.prices[k] ?? 0) * r.quantity);
+  for (const k of Object.keys(ls.prices)) {
+    if (k in rs.prices) prices[k] = money(ls.prices[k] * l.quantity + rs.prices[k] * r.quantity);
   }
-  const notLocal = !l.inStockLocally ? ls : !r.inStockLocally ? rs : ls;
+  // The set arrives when its later side does; if either side can't be had, the set can't.
+  const cannot = (a?: string) => !a || /not\s*avail|unavail|none|discontinued|no stock/i.test(a);
+  const notLocal: Partial<StaffPartOption> = cannot(ls.availability) ? ls : cannot(rs.availability) ? rs : !r.inStockLocally ? rs : ls;
   const staff: StaffPartOption = {
     ...base,
     prices,
@@ -996,15 +1016,17 @@ export async function quoteService(
   vehicle: VehicleRef,
   serviceId: number,
   position: string | null,
+  /** Both sides of a per-side job: left and right parts are paired before the options are cut to a few. */
+  bothSides = false,
 ): Promise<ServiceQuote> {
-  const cacheKey = `${vehicleCacheKey(vehicle)}|${serviceId}|${position ?? ""}`;
+  const cacheKey = `${vehicleCacheKey(vehicle)}|${serviceId}|${position ?? ""}|${bothSides ? "both" : ""}`;
   const cached = quoteCache.get(cacheKey);
   if (cached) return cached;
 
   const data = await loadServiceData(api, vehicle, serviceId, position);
   if (data.status !== "ok") return data;
-  // A whole-axle job needs the left and the right part: they count as one set.
-  const sets = (options: PartOption[]) => (AXLE_SET_JOB.test(data.serviceName) ? pairSides(options) : options);
+  // A whole-axle job (or both sides of a per-side job) needs the left and the right part: one set.
+  const sets = (options: PartOption[]) => (bothSides || isAxleSetJob(data.serviceName) ? pairSides(options) : options);
   let partOptions = data.pna
     ? representativeOptions(filterRealisticOptions(sets(sanitizePartQuotes(data.pna, data.positionId, data.position))))
     : [];
@@ -1121,7 +1143,8 @@ export function staffPartQuotes(response: PnaResponse, positionId: number | null
   return unique
     .filter((o) => !BULK_PACKAGING.test(o.description))
     .sort((a, b) => a.listPrice * a.quantity - b.listPrice * b.quantity)
-    .slice(0, 15);
+    // Room for both sides before pairing; callers keep the first 15.
+    .slice(0, 30);
 }
 
 export type StaffServiceQuote =
@@ -1133,10 +1156,11 @@ export async function quoteServiceForStaff(
   vehicle: VehicleRef,
   serviceId: number,
   position: string | null,
+  bothSides = false,
 ): Promise<StaffServiceQuote> {
   const data = await loadServiceData(api, vehicle, serviceId, position);
   if (data.status !== "ok") return data;
-  const sets = (options: StaffPartOption[]) => (AXLE_SET_JOB.test(data.serviceName) ? pairSides(options) : options);
+  const sets = (options: StaffPartOption[]) => (bothSides || isAxleSetJob(data.serviceName) ? pairSides(options).slice(0, 15) : options.slice(0, 15));
   let partOptions = data.pna ? sets(staffPartQuotes(data.pna, data.positionId, data.position)) : [];
   if (partOptions.length === 0 && !data.partsNote && data.hasPartCategory) {
     const ask = await detailsNeededForParts(api, vehicle);
@@ -1299,6 +1323,6 @@ export function forBothSides<T extends { laborHours: number; laborNote: string; 
     laborHours: Math.round(quote.laborHours * 2 * 100) / 100,
     position: quote.position ? `${quote.position}, both sides` : "Both sides",
     laborNote: `Both sides: labor ${quote.laborHours} h per side × 2. Left and right part numbers are quoted as one set; a part without a side is doubled. ${quote.laborNote}`.trim(),
-    partOptions: paired.map((p) => (p.side || (p.partCount ?? 1) >= 2 || p.quantity >= 2 ? p : { ...p, quantity: p.quantity * 2 })),
+    partOptions: paired.map((p) => ((p.partCount ?? 1) >= 2 || p.quantity >= 2 ? p : { ...p, quantity: p.quantity * 2 })),
   };
 }
