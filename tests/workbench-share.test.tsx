@@ -111,7 +111,7 @@ describe("the share page route", () => {
     expect(response.headers.get("location")).toBeNull();
     expect(response.headers.get("x-robots-tag")).toContain("noindex");
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(robots().rules).toEqual([expect.objectContaining({ disallow: ["/share/"] })]);
+    expect(robots().rules).toEqual([expect.objectContaining({ disallow: ["/share/", "/unsubscribe/"] })]);
   });
 
   it("isn't served on the workbench subdomain", () => {

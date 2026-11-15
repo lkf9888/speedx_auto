@@ -20,6 +20,7 @@ import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
 import { HouseRulesPanel } from "./HouseRulesPanel";
+import { FollowUpPanel } from "./FollowUpPanel";
 import { SharePanel } from "./SharePanel";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
@@ -150,6 +151,7 @@ export function Workbench({ email }: { email: string }) {
   const [showStatus, setShowStatus] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showFollowUp, setShowFollowUp] = useState(false);
   const connection = useConnectionSummary();
   /** Right-click (or ⋯) menu on a conversation, and whether the list shows the archived ones. */
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -795,7 +797,7 @@ export function Workbench({ email }: { email: string }) {
               </>
             )}
           </header>
-          {active.website && <WebsiteVisitorBar visitor={active.website} />}
+          {active.website && <WebsiteVisitorBar visitor={active.website} onFollowUp={currentId ? () => setShowFollowUp(true) : undefined} />}
 
           <main className="wa-chat-bg flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-6">
             {dragging && (
@@ -1011,6 +1013,15 @@ export function Workbench({ email }: { email: string }) {
       {showMemory && (
         <Modal label="工作台记忆" onClose={() => setShowMemory(false)}>
           <MemoryPanel onClose={() => setShowMemory(false)} />
+        </Modal>
+      )}
+      {showFollowUp && currentId && active.website && (
+        <Modal label="回访优惠" onClose={() => setShowFollowUp(false)}>
+          <FollowUpPanel
+            conversation={active}
+            onClose={() => setShowFollowUp(false)}
+            onChanged={(saved) => patchLocal(saved.id, (c) => ({ ...c, followUps: saved.followUps, updatedAt: saved.updatedAt }))}
+          />
         </Modal>
       )}
       {showShare && currentId && (

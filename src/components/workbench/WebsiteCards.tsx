@@ -8,7 +8,7 @@ const LANGUAGE: Record<string, string> = { en: "英文", "zh-CN": "简体中文"
 const range = (low: number, high: number) => (low === high ? `$${low}` : `$${low} – $${high}`);
 
 /** Who the website customer is and how to reach them; staff follow up by phone or WhatsApp. */
-export function WebsiteVisitorBar({ visitor }: { visitor: WebsiteVisitor }) {
+export function WebsiteVisitorBar({ visitor, onFollowUp }: { visitor: WebsiteVisitor; onFollowUp?: () => void }) {
   const digits = visitor.phone.replace(/\D/g, "");
   const whatsapp = digits.length === 10 ? `1${digits}` : digits;
   return (
@@ -41,6 +41,11 @@ export function WebsiteVisitorBar({ visitor }: { visitor: WebsiteVisitor }) {
         <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">客人没有留联系方式，无法回访</span>
       )}
       <span>客人用{LANGUAGE[visitor.locale] ?? visitor.locale}</span>
+      {onFollowUp && (visitor.phone || visitor.email) && (
+        <button type="button" onClick={onFollowUp} className="rounded-full bg-[#00a884] px-3 py-0.5 font-semibold text-white">
+          📣 回访优惠
+        </button>
+      )}
       {visitor.booking && (
         <span className="font-semibold text-[#008069]">
           想预约 {visitor.booking.date} {visitor.booking.time}

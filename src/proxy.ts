@@ -38,9 +38,13 @@ function workbenchRoute(request: NextRequest): NextResponse | null {
   return null;
 }
 
-/** Shared workbench conversations (no sign-in, three days): main site only, never indexed or cached. */
+/**
+ * Shared workbench conversations (no sign-in, three days) and the follow-up
+ * email's unsubscribe page: main site only, no locale, never indexed or cached.
+ */
 function shareRoute(request: NextRequest): NextResponse | null {
-  if (!request.nextUrl.pathname.startsWith("/share/")) return null;
+  const { pathname } = request.nextUrl;
+  if (!pathname.startsWith("/share/") && !pathname.startsWith("/unsubscribe/")) return null;
   const response = NextResponse.next();
   response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   response.headers.set("Cache-Control", "no-store");
@@ -69,6 +73,6 @@ export default function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next|api|favicon.ico|logo.png|robots.txt|sitemap.xml|llms.txt|indexnow-|images/).*)",
+    "/((?!_next|api|favicon.ico|logo.png|robots.txt|sitemap.xml|llms.txt|indexnow-|images/|email/).*)",
   ],
 };

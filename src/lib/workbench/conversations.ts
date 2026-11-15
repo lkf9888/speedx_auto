@@ -7,6 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { cloudflareKv, type KvClient } from "./kv";
 import type { Conversation, ConversationSummary, PendingQuery, ShareLink, Turn, Vehicle } from "./conversation-types";
+import type { FollowUpRecord } from "./followup";
 import type { PriceTier } from "./price-tier";
 import { getShareStore, shareKey } from "./shares";
 import { finalCustomerText, readFinalTotals } from "./final-price";
@@ -162,6 +163,13 @@ export class ConversationStore {
     return this.change(id, by, (c) => {
       const clean = title.replace(/\s+/g, " ").trim().slice(0, TITLE_LENGTH);
       c.title = clean || c.turns.find((t) => t.role === "user")?.text.slice(0, 30) || "";
+    });
+  }
+
+  /** Record a follow-up offer sent to the website customer. */
+  async addFollowUp(id: string, by: string, record: FollowUpRecord): Promise<Conversation> {
+    return this.change(id, by, (c) => {
+      c.followUps = [...(c.followUps ?? []), record].slice(-30);
     });
   }
 

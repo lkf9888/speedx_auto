@@ -6,6 +6,7 @@
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import type { AlldataDraft } from "./alldata-draft";
 import type { MemoryProposal } from "./assistant";
+import type { FollowUpRecord } from "./followup";
 import type { PriceTier } from "./price-tier";
 import type { StaffQuote } from "./quote";
 
@@ -58,6 +59,8 @@ export interface Conversation {
   priceTier?: PriceTier;
   /** Read-only links to this conversation that work without signing in. */
   shares?: ShareLink[];
+  /** Follow-up offers sent to (or logged for) a website customer. */
+  followUps?: FollowUpRecord[];
 }
 
 /** A no-login link to a snapshot of a conversation; it stops working at expiresAt. */
