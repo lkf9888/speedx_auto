@@ -24,6 +24,7 @@ import {
   type CatalogApi,
   type VehicleRef,
 } from "@/lib/worldpac/catalog";
+import { westcanLookup } from "@/lib/westcan/nexpart";
 import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
 import { dtTireConfigured, getDtTireClient, type DtTireClient } from "@/lib/dt-tire/client";
 import { stockCount, type DtTire } from "@/lib/dt-tire/parse";
@@ -456,10 +457,27 @@ async function staffTires(size: string, season: string, wheelmart: () => Wheelma
 }
 
 const quoteOutcome = (quote: StaffQuote) => ({
-  content: JSON.stringify({ status: "ok", summary: summarizeStaffQuote(quote) }),
+  content: JSON.stringify({
+    status: "ok",
+    summary: summarizeStaffQuote(quote),
+    ...(quote.westcan
+      ? { westcan: "No WorldPac local stock: the page is now checking Westcan from staff's Chrome and the card will update by itself (Westcan comes before WorldPac ordered-in parts). Say the card shows the final parts price; don't present the ordered-in price as final." }
+      : {}),
+  }),
   isError: false,
   events: [{ type: "quote", quote } as WorkbenchEvent],
 });
+
+/** Nothing WorldPac has locally: the quote gets a Westcan check (Kevin, 2026-11-15). */
+async function withWestcan(quote: StaffQuote, vehicle: VehicleRef, partCategory: string | undefined, position: string, bothSides: boolean): Promise<StaffQuote> {
+  const local = quote.options.some((o) => !o.outOfStock && !o.eta && o.partNumber);
+  if (local || !partCategory) return quote;
+  const lookup = await Promise.race([
+    westcanLookup(vehicle, partCategory, position, { bothSides }).catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+  ]);
+  return lookup ? { ...quote, westcan: { lookup } } : quote;
+}
 
 const MAX_VARIANTS = 3;
 
@@ -612,7 +630,8 @@ export async function runWorkbenchTool(
       : shared.halved
         ? { ...job, laborHours: shared.chargedHours, laborNote: `与「${shared.otherName}」同时施工，工时按一半（原 ${job.laborHours} h → ${shared.chargedHours} h）。${job.laborNote}` }
         : { ...job, laborNote: `与「${shared.otherName}」同时施工：本项工时全收，对方按一半。${job.laborNote}` };
-    return quoteOutcome(buildLaborQuote(describeVehicle(vehicle), charged, newEstimateId()));
+    const built = buildLaborQuote(describeVehicle(vehicle), charged, newEstimateId());
+    return quoteOutcome(await withWestcan(built, vehicle, quoted.partCategory, quoted.position, bothSides));
   }
   if (name === "quote_extra_part") {
     const vehicle = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;

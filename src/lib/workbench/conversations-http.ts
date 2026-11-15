@@ -5,6 +5,7 @@
 import { staffUser, type StaffUser } from "./access";
 import { ConversationError, getConversationStore, type ConversationStore } from "./conversations";
 import { isPriceTier } from "./price-tier";
+import type { WestcanAnswer } from "./westcan";
 
 export interface ConversationDeps {
   user: (request: Request) => Promise<StaffUser | null>;
@@ -92,6 +93,13 @@ export async function handleConversation(request: Request, id: string, deps: Con
       if (card && typeof card.itemId === "string" && card.kind === "quote" && card.totals !== undefined) {
         const conversation = await store.markCard(id, user.email, { kind: "quote", itemId: card.itemId, totals: card.totals });
         deps.log({ action: card.totals === null ? "final_price_cleared" : "final_price", email: user.email, id, quote: card.itemId });
+        return json({ conversation });
+      }
+      if (card && typeof card.itemId === "string" && card.kind === "westcan") {
+        const answer = (body.card as { answer?: unknown }).answer as WestcanAnswer | undefined;
+        if (!answer || typeof answer !== "object" || !["ok", "need_engine", "no_vehicle"].includes(String(answer.status))) return json({ error: "invalid" }, 400);
+        const conversation = await store.applyWestcan(id, user.email, card.itemId, answer);
+        deps.log({ action: "westcan", email: user.email, id, quote: card.itemId });
         return json({ conversation });
       }
       if (card && typeof card.itemId === "string" && (card.kind === "draft" || card.kind === "memory")) {

@@ -60,13 +60,49 @@ function rowMarkup(quote: StaffQuote, row: StaffQuoteOption, tier: PriceTier): n
  * and PDF. Staff can change the customer prices after bargaining ("改价"); the
  * agreed prices are saved for everyone and used for the text and the PDF.
  */
+/** Where the Westcan check stands: running, failed here, or what it found. */
+function WestcanLine({ quote, error, onRetry }: { quote: StaffQuote; error?: string; onRetry?: () => void }) {
+  const checked = quote.westcan?.checked;
+  if (checked) {
+    return (
+      <p data-testid="westcan-status" className="px-4 pt-2 text-xs text-ink-600">
+        {checked.found > 0 && !checked.note ? `已查 Westcan：${checked.found} 个可用零件，已按拿货价 × 1.3 加进报价。` : `已查 Westcan：${checked.note ?? "没有可用零件。"}`}
+      </p>
+    );
+  }
+  if (error) {
+    return (
+      <p data-testid="westcan-status" className="flex flex-wrap items-center gap-2 px-4 pt-2 text-xs text-amber-800">
+        <span>WorldPac 本地没货，没查成 Westcan：{error}</span>
+        {onRetry && (
+          <button type="button" onClick={onRetry} className="rounded-full border border-amber-700 px-2 py-0.5 font-semibold hover:bg-amber-50">
+            重试 Westcan
+          </button>
+        )}
+      </p>
+    );
+  }
+  // Read-only views (share links) don't run the check.
+  if (!onRetry) return null;
+  return (
+    <p data-testid="westcan-status" className="px-4 pt-2 text-xs text-sky-800">
+      WorldPac 本地没货，正在用这台电脑的 Chrome 查 Westcan…
+    </p>
+  );
+}
+
 export function StaffQuoteCard({
   quote: stored,
   onSaveFinal,
   tier = "retail",
+  westcanError,
+  onRetryWestcan,
 }: {
   quote: StaffQuote;
   onSaveFinal?: (totals: Totals) => Promise<boolean>;
+  /** Why the Westcan check couldn't run on this computer. */
+  westcanError?: string;
+  onRetryWestcan?: () => void;
   /** The conversation's price; the card shows only that one. */
   tier?: PriceTier;
 }) {
@@ -200,9 +236,12 @@ export function StaffQuoteCard({
         </p>
       )}
 
+      {quote.westcan && <WestcanLine quote={quote} error={westcanError} onRetry={onRetryWestcan} />}
+
       {quote.options.length > 0 && visible.length === 0 && (
         <p data-testid="no-stock" className="px-4 py-3 text-amber-800">
-          {quote.supplier === "worldpac" ? "WorldPac 本地仓库没有现货，" : "没有现货，"}这张卡不列价格。目前没有接其他零件供货商，可以打电话问别的供货商。
+          {quote.supplier === "worldpac" ? "WorldPac 本地仓库没有现货，" : "没有现货，"}这张卡不列价格。
+          {quote.westcan?.checked ? "Westcan 也没有，" : ""}可以打电话问别的供货商。
         </p>
       )}
 
@@ -247,9 +286,14 @@ export function StaffQuoteCard({
                     )}
                     <div className="font-medium text-ink-900">{[o.brand, o.label].filter(Boolean).join(" ")}</div>
                     {o.partNumber && <div className="font-mono text-xs text-ink-500">#{o.partNumber}</div>}
+                    {o.source === "westcan" && (
+                      <div data-testid="westcan-badge" className="mt-0.5 mr-1 inline-block rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-semibold text-sky-900">
+                        Westcan{o.eta ? "" : " Richmond 有货"}
+                      </div>
+                    )}
                     {o.eta && (
                       <div data-testid="eta" className="mt-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
-                        本地没货，调货 · {o.eta}
+                        {o.source === "westcan" ? "其他分店调货" : "本地没货，调货"} · {o.eta}
                       </div>
                     )}
                     {o.core !== null && <div className="text-xs text-amber-700">核心件押金 {money(o.core)}</div>}
@@ -337,7 +381,7 @@ export function StaffQuoteCard({
                 发给客人（WhatsApp / 微信）
               </button>
             )}
-            {onSaveFinal && visible.length > 0 && (
+            {onSaveFinal && visible.length > 0 && !(stored.westcan && !stored.westcan.checked) && (
               <button type="button" onClick={startEditing} className="rounded-full border border-amber-400 px-4 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50">
                 ✎ 改价
               </button>

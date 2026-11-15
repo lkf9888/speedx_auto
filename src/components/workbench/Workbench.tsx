@@ -26,6 +26,7 @@ import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
 import { distinctJobs, PriceChoiceCard, QuoteSheetSummary } from "./QuoteSheetSummary";
 import { StaffQuoteCard } from "./StaffQuoteCard";
+import { bridgeErrorText, callAlldata, BridgeError } from "@/lib/workbench/alldata-bridge";
 import { WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
 
 type Turn = SharedTurn;
@@ -134,6 +135,18 @@ function Modal({ label, onClose, children }: { label: string; onClose: () => voi
 }
 
 /** The staff repair workbench: one shared, cloud-saved set of conversations for every staff member, like a WhatsApp group. */
+/** Westcan is checked only for quotes this new: opening an old conversation doesn't re-price it. */
+const WESTCAN_FRESH_MS = 60 * 60 * 1000;
+
+function westcanErrorText(error: unknown): string {
+  // Extensions from before Westcan answer "unknown operation".
+  if (error instanceof BridgeError && error.code === "bad_request" && /unknown operation/.test(error.message)) {
+    return "这台电脑的 SPEEDX 扩展是旧版本：到 chrome://extensions 找到“SPEEDX ALLDATA 助手”点刷新，再重试。";
+  }
+  if (error instanceof BridgeError) return bridgeErrorText(error);
+  return "Westcan 结果没保存上，请重试。";
+}
+
 export function Workbench({ email }: { email: string }) {
   const hydrated = useSyncExternalStore(noSubscribe, () => true, () => false);
   const [summaries, setSummaries] = useState<ConversationSummary[]>([]);
@@ -249,6 +262,61 @@ export function Workbench({ email }: { email: string }) {
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "end", behavior: "instant" });
   }, [active.turns.length, activePending, active.id]);
+
+  /** Westcan checks that failed here (no extension, not signed in), by quote; staff can retry. */
+  const [westcanErrors, setWestcanErrors] = useState<Record<string, string>>({});
+  const westcanRunning = useRef(new Set<string>());
+  /** Old quotes staff asked to check anyway. */
+  const westcanForced = useRef(new Set<string>());
+
+  /** Quotes with no WorldPac local stock: look the job up in Westcan from this Chrome, once the turn is saved. */
+  useEffect(() => {
+    if (!currentId || activePending || active.updatedAt === 0) return;
+    const due = active.turns
+      .flatMap((t) => t.quotes)
+      .filter((q) => q.westcan && !q.westcan.checked && !westcanErrors[q.id] && !westcanRunning.current.has(q.id));
+    const old = (q: StaffQuote) => Date.now() - Date.parse(q.createdAt) > WESTCAN_FRESH_MS && !westcanForced.current.has(q.id);
+    // An old quote isn't re-priced by just opening its conversation; staff can still ask.
+    const stale = due.filter(old);
+    if (stale.length) setWestcanErrors((all) => ({ ...all, ...Object.fromEntries(stale.map((q) => [q.id, "这张报价超过 1 小时，没有自动查。"])) }));
+    for (const quote of due.filter((q) => !old(q))) void runWestcan(active.id, quote);
+    // runWestcan only uses setters and refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentId, activePending, active, westcanErrors]);
+
+  async function runWestcan(conversationId: string, quote: StaffQuote) {
+    westcanRunning.current.add(quote.id);
+    try {
+      const answer = await callAlldata("westcanSearch", quote.westcan!.lookup, 60_000);
+      const response = await fetch(`/api/workbench/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ card: { kind: "westcan", itemId: quote.id, answer } }),
+      });
+      if (!response.ok) throw new Error("save");
+      const { conversation } = (await response.json()) as { conversation?: Conversation };
+      const saved = conversation?.turns.flatMap((t) => t.quotes).find((q) => q.id === quote.id);
+      if (!saved || !conversation) throw new Error("save");
+      patchLocal(conversationId, (c) => ({
+        ...c,
+        updatedAt: conversation.updatedAt,
+        turns: c.turns.map((t) => (t.quotes.some((q) => q.id === quote.id) ? { ...t, quotes: t.quotes.map((q) => (q.id === quote.id ? saved : q)) } : t)),
+      }));
+    } catch (error) {
+      setWestcanErrors((all) => ({ ...all, [quote.id]: westcanErrorText(error) }));
+    } finally {
+      westcanRunning.current.delete(quote.id);
+    }
+  }
+
+  function retryWestcan(quoteId: string) {
+    westcanForced.current.add(quoteId);
+    setWestcanErrors((all) => {
+      const rest = { ...all };
+      delete rest[quoteId];
+      return rest;
+    });
+  }
 
   function patchLocal(id: string, change: (c: Conversation) => Conversation) {
     setLoaded((all) => ({ ...all, [id]: change(all[id] ?? fresh(id)) }));
@@ -892,10 +960,12 @@ export function Workbench({ email }: { email: string }) {
                         <div className="mt-2 space-y-2">
                           {turn.quotes.map((quote) => (
                             <StaffQuoteCard
-                              key={quote.id}
+                              key={`${quote.id}-${quote.westcan?.checked ? "w" : ""}`}
                               quote={quote}
                               tier={active.priceTier ?? "retail"}
                               onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
+                              westcanError={westcanErrors[quote.id]}
+                              onRetryWestcan={currentId ? () => retryWestcan(quote.id) : undefined}
                             />
                           ))}
                         </div>
@@ -904,10 +974,12 @@ export function Workbench({ email }: { email: string }) {
                   ) : (
                     turn.quotes.map((quote) => (
                       <StaffQuoteCard
-                        key={quote.id}
+                        key={`${quote.id}-${quote.westcan?.checked ? "w" : ""}`}
                         quote={quote}
                         tier={active.priceTier ?? "retail"}
                         onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
+                        westcanError={westcanErrors[quote.id]}
+                        onRetryWestcan={currentId ? () => retryWestcan(quote.id) : undefined}
                       />
                     ))
                   )}

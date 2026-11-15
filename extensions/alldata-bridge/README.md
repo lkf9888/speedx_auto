@@ -26,6 +26,15 @@ ALLDATA 有反机器人防护，服务器不能替我们登录，所以这些操
 
 建单时技师默认 Jason、服务顾问默认 Kevin（和 ALLDATA 里“Create New Document”一样）；工时都记在 “Basic Labor” 费率下。转工单、开发票、收款仍在 ALLDATA 里操作。
 
+## Westcan（Nexpart）查价（1.1.0 起）
+
+WorldPac 本地仓库没货时，工作台会自动用这台电脑的 Chrome 去 Westcan 的 Nexpart（https://3501660.nexpart.com）查同一个零件：
+
+- 需要在同一个 Chrome 里登录 Nexpart，并**保持一个 Nexpart 标签页开着**（没有开着的，扩展会在后台打开目录页；没登录会提示先登录）。
+- 只查价格和库存，不下单、不保存任何东西。扩展会在 Nexpart 里选中这台车（和员工手动选车一样）。
+- 报价规则：Westcan 零件按拿货价 × 1.3；顺序是 WorldPac 本地有货 → Westcan（Richmond 有货优先，其次其他分店、明天到）→ WorldPac 调货 → 待补价。
+- Nexpart 分不清发动机时，卡片会提示先告诉助手发动机或 VIN。
+
 ## 更新
 
 扩展代码有更新时，把新文件覆盖到同一个文件夹，然后在 `chrome://extensions` 里点这个扩展的刷新按钮。

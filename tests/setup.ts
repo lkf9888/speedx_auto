@@ -5,3 +5,4 @@ import { afterEach } from "vitest";
 afterEach(() => {
   cleanup();
 });
+process.env.WESTCAN_LOOKUP = "off";

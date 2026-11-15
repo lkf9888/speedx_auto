@@ -364,4 +364,140 @@ async function openPdf(args) {
   return { opened: true };
 }
 
-const OPS = { status, searchDocuments, searchCustomers, createEstimate, openPdf };
+// ------------------------------------------------------------------ Westcan (Nexpart)
+//
+// Westcan Auto Parts sells through Nexpart. The workbench asks for one job's
+// parts (vehicle + part type + position); the lookup runs as same-origin
+// requests in this computer's own signed-in Nexpart tab, the way Nexpart's
+// catalog page makes them. Nothing is ordered and nothing is stored.
+
+const NEXPART = "https://3501660.nexpart.com";
+const NEXPART_CATALOG = `${NEXPART}/acesCat.php?glsId=aces`;
+
+/** A loaded tab on Westcan's own Nexpart site (another seller's Nexpart would be another store). */
+async function nexpartTab() {
+  const tabs = await chrome.tabs.query({ url: `${NEXPART}/*` });
+  const ready = tabs.find((t) => t.status === "complete");
+  if (ready) return ready.id;
+  if (tabs[0]) {
+    await waitForLoad(tabs[0].id);
+    return tabs[0].id;
+  }
+  const tab = await chrome.tabs.create({ url: NEXPART_CATALOG, active: false });
+  await waitForLoad(tab.id);
+  return tab.id;
+}
+
+/** Runs inside the Nexpart page: vehicle → engine/trim → parts, as the catalog page asks for them. */
+async function nexpartSearch(q) {
+  const meta = document.querySelector("meta[name=csrf-token]");
+  if (!meta || !meta.content || /login|signin/i.test(location.pathname)) return { status: "not_signed_in" };
+  const token = meta.content;
+  const post = async (url, params) => {
+    const r = await fetch(`${url}?r=${Date.now()}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "x-csrf-token": token },
+      body: new URLSearchParams(params).toString(),
+    });
+    const t = await r.text();
+    try {
+      return JSON.parse(t);
+    } catch {
+      return { __html: /log ?in|sign ?in|password/i.test(t) ? "login" : "other" };
+    }
+  };
+  const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim();
+  // "2.5 L4" ~ "2.5L L4"; turbo only when both say so.
+  const engineScore = (want, desc) => {
+    const w = norm(want), d = norm(desc);
+    if (!w) return 0;
+    const disp = w.match(/(\d\.\d)/), cyl = w.match(/\b([lvhw]\d{1,2})\b/);
+    let score = 0;
+    if (disp && d.includes(disp[1])) score += 2;
+    if (cyl && new RegExp(`\\b${cyl[1]}\\b`).test(d)) score += 1;
+    if (/turbo/.test(w) === /turbo/.test(d)) score += 0.5;
+    // A hybrid only when WorldPac says hybrid ("2.5L L4" over "2.5L L4 FULL HYBRID").
+    if (/hybrid|phev|fhev|electric/.test(w) === /hybrid|phev|fhev|electric/.test(d)) score += 0.5;
+    return score;
+  };
+  let picked = null;
+  let engineList = [];
+  for (const model of q.models) {
+    const eng = await post("acesCatalogYmmeAjax.php", { ajaxCall: "json", year: String(q.year), make: String(q.makeId), model: String(model.id), catTypeId: "8" });
+    if (eng && eng.__html === "login") return { status: "not_signed_in" };
+    const engines = Object.entries((eng && eng.engines) || {}).filter(([id]) => id !== "0");
+    if (engines.length === 0) continue;
+    engineList = engines.map(([, e]) => e.desc);
+    const ranked = engines.map(([id, e]) => ({ id, e, score: engineScore(q.engine, e.desc) })).sort((a, b) => b.score - a.score);
+    const best = ranked[0];
+    // Several engines and no way to tell them apart: the staff member names the engine.
+    if (engines.length > 1 && (best.score < 2 || (ranked[1] && ranked[1].score === best.score))) return { status: "need_engine", engines: engineList.slice(0, 8) };
+    const subs = Object.entries(best.e.submodels || {});
+    const sub = subs.find(([, name]) => q.submodel && norm(name) === norm(q.submodel)) || subs[0] || ["", ""];
+    picked = { model, engineId: best.id, engine: best.e.desc, subId: sub[0], subName: sub[1] };
+    break;
+  }
+  if (!picked) return { status: "no_vehicle", engines: engineList };
+  const veh = await post("acesCatalogYmmeAjax.php", {
+    ajaxCall: "json", ymmeMode: "doContinue", selYear: String(q.year), selMakeId: String(q.makeId), selMake: q.make, selModelId: String(picked.model.id), selModel: q.model,
+    selVehType: String(picked.model.vehType), selSubModelId: picked.subId, selSubModel: picked.subName, selEngineId: picked.engineId, selEngine: picked.engine,
+    selVin: "", selPlate: "", selState: "", selRoNum: "0", selRoBrId: "0", catTypeId: "8",
+  });
+  if (!veh || !veh.BaseVehId) return { status: "no_vehicle", engines: engineList };
+  const cat = await post("acesCatalogResults.php", {
+    ajaxCall: "json", getCatData: "1", mode: "part", sort: "bestMatch ASC", limit: "50", lookupType: "parts", logPartTypes: "1",
+    baseVid: String(veh.BaseVehId), vid: String(veh.VehicleId), vidDesc: "", vin: "", state: "", plate: "",
+    year: String(q.year), make: String(q.makeId), makeDesc: q.make, model: String(picked.model.id), modelDesc: q.model, vehType: String(picked.model.vehType),
+    trim: picked.subId, trimDesc: picked.subName, engine: picked.engineId, engineDesc: picked.engine, udcfId: "1130",
+    ptypes: JSON.stringify(q.partTypes), usgs: JSON.stringify(q.usages), usgNames: "[]", sources: '["partSearch"]', datetime: "", resultView: "gallery", isSmartSearch: "0", msPartTypeId: "0",
+  });
+  const vehicle = `${q.year} ${q.make} ${q.model} ${picked.subName} ${picked.engine}`.replace(/\s+/g, " ").trim();
+  if (!cat || !cat.part_count) return { status: "ok", vehicle, rows: [] };
+  const items = await post("acesCatalogResults.php", { limit: "50", offset: "0", offset_page: "0", offset_start: "0", resultView: "gallery", baseSellerId: "0" });
+  const s = (v, max = 120) => (v === null || v === undefined ? "" : String(v).slice(0, max));
+  const rows = (Array.isArray(items) ? items : []).slice(0, 50).map((i) => ({
+    brand: s(i.mfgName, 80),
+    partNumber: s(i.partNumber, 40),
+    partType: s(i.partType, 10),
+    position: Array.isArray(i.position) ? i.position.map((p) => s(p, 30)).join(", ") : s(i.position, 60),
+    description: s(i.description),
+    cost: s(i.priceCost, 20),
+    list: s(i.priceList || i.listPrice, 20),
+    stockHere: Number(i.stockQtyPri) || 0,
+    stockOther: Number(i.stockQtyOthers) || 0,
+    branch: s(i.branchName, 60),
+    eta: s(i.commentETA, 60),
+    specialOrder: String(i.isSpecialOrder) === "1",
+    perCar: s(i.perVeh || i.qtypv, 6),
+  }));
+  return { status: "ok", vehicle, rows };
+}
+
+// One lookup at a time: Nexpart keeps the current search in the session, so
+// two at once would read each other's parts.
+let westcanQueue = Promise.resolve();
+
+function westcanSearch(args) {
+  const run = westcanQueue.then(() => westcanSearchNow(args));
+  westcanQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function westcanSearchNow(args) {
+  const year = positiveInt(args.year);
+  const makeId = positiveInt(args.makeId);
+  const models = (Array.isArray(args.models) ? args.models : []).slice(0, 4).filter((m) => m && positiveInt(m.id) && positiveInt(m.vehType));
+  const partTypes = (Array.isArray(args.partTypes) ? args.partTypes : []).filter(positiveInt).slice(0, 4);
+  const usages = (Array.isArray(args.usages) ? args.usages : []).filter(positiveInt).slice(0, 8);
+  if (!year || !makeId || models.length === 0 || partTypes.length === 0) throw new BridgeError("bad_request", "bad lookup");
+  const query = { year, makeId, make: text(args.make, 60), model: text(args.model, 60), models, engine: text(args.engine, 60), submodel: text(args.submodel, 60), partTypes, usages };
+  const tabId = await nexpartTab();
+  const [run] = await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: nexpartSearch, args: [query] });
+  const result = run && run.result;
+  if (!result) throw new BridgeError("westcan_error", "no answer from the Nexpart page");
+  if (result.status === "not_signed_in") throw new BridgeError("westcan_not_signed_in");
+  return result;
+}
+
+const OPS = { status, searchDocuments, searchCustomers, createEstimate, openPdf, westcanSearch };

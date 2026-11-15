@@ -9,6 +9,7 @@ import type { StaffPartOption } from "@/lib/worldpac/catalog";
 import { customerText } from "./customer-text";
 import { surchargeOf } from "./surcharge";
 import type { FinalPrices } from "./final-price";
+import type { WestcanLookup } from "@/lib/westcan/nexpart";
 
 export { customerText };
 
@@ -45,6 +46,8 @@ export interface StaffQuoteOption {
   profit: number | null;
   /** Profit as a share of the customer total, 0–1. */
   margin: number | null;
+  /** Where the part comes from when it isn't WorldPac. */
+  source?: "westcan";
   /** Every price field WorldPac sent, by field name. */
   prices: Record<string, number>;
   /** Other raw fields, for working out what WorldPac sends. */
@@ -68,6 +71,13 @@ export interface StaffQuote {
   createdAt: string;
   /** Prices staff agreed with the customer; the numbers above stay the assistant's. */
   final?: FinalPrices;
+  /**
+   * Westcan check (Kevin, 2026-11-15): when WorldPac has no local stock, the
+   * workbench looks the job up in Westcan's Nexpart from staff's own Chrome and
+   * the server merges the answer (see westcan.ts). Order: WorldPac local →
+   * Westcan → WorldPac ordered in → 待补价.
+   */
+  westcan?: { lookup: WestcanLookup; checked?: { at: string; found: number; vehicle?: string; note?: string } };
 }
 
 const money = (value: number) => Math.round(value * 100) / 100;
@@ -122,7 +132,7 @@ function applyStockRule(options: Array<StaffQuoteOption & { local: boolean; avai
   });
 }
 
-function finish(option: Omit<StaffQuoteOption, "profit" | "margin">): StaffQuoteOption {
+export function finish(option: Omit<StaffQuoteOption, "profit" | "margin">): StaffQuoteOption {
   const profit = option.costTotal === null ? null : money(option.customerTotal - option.costTotal);
   const margin = profit === null || option.customerTotal <= 0 ? null : Math.round((profit / option.customerTotal) * 1000) / 1000;
   return { ...option, profit, margin };

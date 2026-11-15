@@ -5,6 +5,8 @@
  * protocol is window.postMessage on the page's own origin.
  */
 
+import type { WestcanLookup } from "@/lib/westcan/nexpart";
+
 export const BRIDGE_CHANNEL = "speedx-alldata";
 
 export type AlldataDocumentType = "Estimate" | "RepairOrder" | "Invoice";
@@ -29,6 +31,29 @@ export interface AlldataCustomerRow {
   vehicles: Array<{ customerVehicleId: number; description: string; vin: string }>;
 }
 
+/** One part as Westcan's Nexpart catalog lists it (strings as Nexpart sends them; the server checks them). */
+export interface WestcanRow {
+  brand: string;
+  partNumber: string;
+  partType: string;
+  position: string;
+  description: string;
+  /** Our cost and Westcan's list price, e.g. "43.52"; empty when not priced (special orders). */
+  cost: string;
+  list: string;
+  /** Units at our branch (W.C Richmond) and at Westcan's other branches. */
+  stockHere: number;
+  stockOther: number;
+  branch: string;
+  eta: string;
+  specialOrder: boolean;
+  perCar: string;
+}
+
+export type WestcanSearchResult =
+  | { status: "ok"; vehicle: string; rows: WestcanRow[] }
+  | { status: "need_engine" | "no_vehicle"; engines: string[] };
+
 export interface BridgeOps {
   status: { args: Record<string, never>; result: { version: string; signedIn: boolean } };
   searchDocuments: { args: { search: string }; result: { documents: AlldataDocumentRow[] } };
@@ -44,9 +69,10 @@ export interface BridgeOps {
     result: { documentId: number; estimateNumber: number; customerAttached: boolean };
   };
   openPdf: { args: { documentId: number; documentType: AlldataDocumentType }; result: { opened: true } };
+  westcanSearch: { args: WestcanLookup; result: WestcanSearchResult };
 }
 
-export type BridgeErrorCode = "not_installed" | "not_signed_in" | "timeout" | "alldata_error" | "bad_request";
+export type BridgeErrorCode = "not_installed" | "not_signed_in" | "timeout" | "alldata_error" | "bad_request" | "westcan_not_signed_in" | "westcan_error";
 
 export class BridgeError extends Error {
   constructor(readonly code: BridgeErrorCode, message: string = code) {
@@ -61,6 +87,8 @@ export const BRIDGE_ERRORS: Record<BridgeErrorCode, string> = {
   timeout: "ALLDATA 没有回应，请确认 ALLDATA 页面能正常打开后再试。",
   alldata_error: "ALLDATA 拒绝了这次操作。",
   bad_request: "请求内容不完整。",
+  westcan_not_signed_in: "这台电脑的 Chrome 没登录 Westcan（Nexpart），请先打开 3501660.nexpart.com 登录。",
+  westcan_error: "Westcan（Nexpart）没有正常回应。",
 };
 
 let counter = 0;

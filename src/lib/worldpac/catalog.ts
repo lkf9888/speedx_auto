@@ -777,6 +777,8 @@ interface ServiceData {
   otherPartNames: string[];
   partsNote: string;
   hasPartCategory: boolean;
+  /** The job's main part category ("N1896"): Westcan's Nexpart catalog uses the same ACES part type. */
+  partCategory: string;
   /** Raw response, account prices included: only sanitizePartQuotes or staffPartQuotes may read it. */
   pna: PnaResponse | null;
   positionId: number | null;
@@ -880,6 +882,7 @@ async function loadServiceData(
     ].slice(0, 6),
     partsNote,
     hasPartCategory: Boolean(primary?.categoryCode),
+    partCategory: primary?.categoryCode ?? "",
     pna,
     positionId: operation.positionID ?? operation.position?.id ?? null,
   };
@@ -1148,7 +1151,7 @@ export function staffPartQuotes(response: PnaResponse, positionId: number | null
 }
 
 export type StaffServiceQuote =
-  | (Omit<Extract<ServiceQuote, { status: "ok" }>, "partOptions"> & { partOptions: StaffPartOption[] })
+  | (Omit<Extract<ServiceQuote, { status: "ok" }>, "partOptions"> & { partOptions: StaffPartOption[]; partCategory?: string })
   | NotOk;
 
 export async function quoteServiceForStaff(
@@ -1181,6 +1184,7 @@ export async function quoteServiceForStaff(
     partOptions,
     otherPartNames: data.otherPartNames,
     partsNote: data.partsNote,
+    partCategory: data.partCategory,
   };
 }
 

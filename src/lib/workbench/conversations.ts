@@ -11,6 +11,7 @@ import type { FollowUpRecord } from "./followup";
 import type { PriceTier } from "./price-tier";
 import { getShareStore, shareKey } from "./shares";
 import { finalCustomerText, readFinalTotals } from "./final-price";
+import { mergeWestcan, type WestcanAnswer } from "./westcan";
 
 const PREFIX = "workbench-conv-v1:";
 export const MAX_CONVERSATIONS = 300;
@@ -226,6 +227,8 @@ export class ConversationStore {
         if (!quote) throw new ConversationError("That quote isn't in this conversation.", "not_found");
         const totals = card.totals === null ? null : readFinalTotals(card.totals, quote.options.length);
         if (card.totals !== null && !totals) throw new ConversationError("Give a price for at least one option.", "invalid");
+        // The options are about to change: prices saved now would land on the wrong ones.
+        if (totals && quote.westcan && !quote.westcan.checked) throw new ConversationError("Westcan is still being checked; set the price after the card updates.", "invalid");
         if (totals) quote.final = { totals, by, at: this.now() };
         else delete quote.final;
         quote.customerText = finalCustomerText(quote);
@@ -239,6 +242,23 @@ export class ConversationStore {
           turn.memories = turn.memories.map((m) => (m.id === card.itemId ? { ...m, saved: true } : m));
         }
       }
+    });
+  }
+
+  /** Westcan's answer for a quote (looked up in staff's Chrome): merged once, by the server's rules. */
+  async applyWestcan(id: string, by: string, quoteId: string, answer: WestcanAnswer): Promise<Conversation> {
+    return this.change(id, by, (c) => {
+      for (const turn of c.turns) {
+        const index = turn.quotes.findIndex((q) => q.id === quoteId);
+        if (index < 0) continue;
+        const quote = turn.quotes[index];
+        if (!quote.westcan) throw new ConversationError("That quote has no Westcan check.", "invalid");
+        // Checked already (another tab, a retry): keep the first answer.
+        if (quote.westcan.checked) return;
+        turn.quotes[index] = mergeWestcan(quote, answer, new Date(this.now()));
+        return;
+      }
+      throw new ConversationError("That quote isn't in this conversation.", "not_found");
     });
   }
 
