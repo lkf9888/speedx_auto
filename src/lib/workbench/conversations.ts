@@ -7,6 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { cloudflareKv, type KvClient } from "./kv";
 import type { Conversation, ConversationSummary, PendingQuery, Turn, Vehicle } from "./conversation-types";
+import type { PriceTier } from "./price-tier";
 import { finalCustomerText, readFinalTotals } from "./final-price";
 
 const PREFIX = "workbench-conv-v1:";
@@ -159,6 +160,12 @@ export class ConversationStore {
     return this.change(id, by, (c) => {
       const clean = title.replace(/\s+/g, " ").trim().slice(0, TITLE_LENGTH);
       c.title = clean || c.turns.find((t) => t.role === "user")?.text.slice(0, 30) || "";
+    });
+  }
+
+  async setPriceTier(id: string, by: string, tier: PriceTier): Promise<Conversation> {
+    return this.change(id, by, (c) => {
+      c.priceTier = tier;
     });
   }
 

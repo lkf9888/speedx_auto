@@ -4,12 +4,11 @@ import { useState } from "react";
 import { optionLinks, type ProductLink } from "@/lib/workbench/links";
 import { finalCustomerText, priceOption, withFinalPrices } from "@/lib/workbench/final-price";
 import { staffName } from "@/lib/workbench/conversation-types";
-import type { StaffQuote } from "@/lib/workbench/quote";
-import { surchargeOf } from "@/lib/workbench/surcharge";
+import { atTier, noFriendPrice, TIER_LABEL, tierLabor, tierMarkup, type PriceTier } from "@/lib/workbench/price-tier";
+import type { StaffQuote, StaffQuoteOption } from "@/lib/workbench/quote";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 const money = (value: number | null) => (value === null ? "—" : usd.format(value));
-const percent = (value: number | null) => (value === null ? "—" : `${Math.round(value * 100)}%`);
 
 const KIND_LABEL: Record<StaffQuote["kind"], string> = {
   labor: "工时 + 零件",
@@ -50,12 +49,29 @@ function ProductLinks({ links }: { links: ProductLink[] }) {
 
 type Totals = Record<string, number> | null;
 
+/** Markup in dollars on a row as shown (its total may be a final price). */
+function rowMarkup(quote: StaffQuote, row: StaffQuoteOption, tier: PriceTier): number | null {
+  return tierMarkup(quote, { ...row, referralTotal: row.customerTotal, friendTotal: row.customerTotal }, tier);
+}
+
 /**
- * One staff quote: every option with cost and margin, and a customer-safe text
+ * One staff quote at the conversation's chosen price (Kevin, 2026-11-14): only
+ * options in stock, with cost and markup in dollars, and a customer-safe text
  * and PDF. Staff can change the customer prices after bargaining ("改价"); the
  * agreed prices are saved for everyone and used for the text and the PDF.
  */
-export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSaveFinal?: (totals: Totals) => Promise<boolean> }) {
+export function StaffQuoteCard({
+  quote: stored,
+  onSaveFinal,
+  tier = "retail",
+}: {
+  quote: StaffQuote;
+  onSaveFinal?: (totals: Totals) => Promise<boolean>;
+  /** The conversation's price; the card shows only that one. */
+  tier?: PriceTier;
+}) {
+  // Every total at the chosen price; agreed (final) prices still win.
+  const quote = atTier(stored, tier);
   const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
   const [raw, setRaw] = useState(false);
   /** Options left out of the customer text (unticked); out-of-stock ones start unticked so they aren't copied by accident. */
@@ -74,6 +90,8 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
   };
   // While editing, the row shows what the typed price would give.
   const rows = editing ? quote.options.map((o, i) => priceOption(quote, o, draftTotal(i))) : priced.options;
+  /** Out-of-stock options are left off the card entirely. */
+  const visible = quote.options.flatMap((o, i) => (o.outOfStock ? [] : [i]));
   const chosen = priced.options.filter((_, i) => !left.has(i));
   const textForCustomer = finalCustomerText(quote, (i) => !left.has(i));
 
@@ -99,7 +117,7 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
 
   function saveEdits() {
     const totals: Record<string, number> = {};
-    for (let i = 0; i < quote.options.length; i += 1) {
+    for (const i of visible) {
       const value = draftTotal(i);
       if (value === undefined) {
         setNotice("每个价格都要填一个数字");
@@ -141,8 +159,7 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
   }
 
   const showCost = quote.kind === "labor" || quote.kind === "tires";
-  /** Friend price column: only when some option has one (quotes saved before it existed have none). */
-  const showFriend = showCost && quote.options.some((o) => o.friendTotal != null);
+  const labor = tierLabor(quote, tier);
 
   return (
     <article data-testid="staff-quote" className="rounded-xl border border-ink-200 bg-white text-sm shadow-sm">
@@ -154,6 +171,11 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
             {quote.position ? ` · ${quote.position}` : ""}
           </h3>
           <p className="text-xs text-ink-500">{quote.vehicle}</p>
+          {showCost && (
+            <p data-testid="quote-tier" className="mt-1 inline-block rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800">
+              按{TIER_LABEL[tier]}
+            </p>
+          )}
           {quote.final && (
             <p data-testid="final-badge" className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
               最终价 · {staffName(quote.final.by)} 修改
@@ -163,41 +185,41 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
         <span className="shrink-0 font-mono text-xs text-ink-400">{quote.id}</span>
       </header>
 
-      {quote.labor && (
-        <p className="border-b border-ink-100 px-4 py-2 text-ink-700">
-          工时 <b className="tabular-nums">{quote.labor.hours} h</b> × {money(quote.labor.rate)} ={" "}
-          <b className="tabular-nums">{money(quote.labor.walkIn)}</b>
-          <span className="text-ink-500"> · 推荐价 / 朋友价 {money(quote.labor.referral)}</span>
+      {quote.labor && labor !== null && (
+        <p data-testid="labor-line" className="border-b border-ink-100 px-4 py-2 text-ink-700">
+          工时 <b className="tabular-nums">{quote.labor.hours} h</b> × {money(quote.labor.hours > 0 ? Math.round((labor / quote.labor.hours) * 100) / 100 : quote.labor.rate)} ={" "}
+          <b className="tabular-nums">{money(labor)}</b>
         </p>
       )}
 
-      {quote.options.length > 0 && (
+      {quote.options.length > 0 && visible.length === 0 && (
+        <p data-testid="no-stock" className="px-4 py-3 text-amber-800">
+          {quote.supplier === "worldpac" ? "WorldPac 本地仓库没有现货，" : "没有现货，"}这张卡不列价格。可以用其他供货商查，或打电话问。
+        </p>
+      )}
+
+      {visible.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-left tabular-nums">
+          <table className="w-full min-w-[440px] border-collapse text-left tabular-nums">
             <thead className="bg-ink-50 text-xs text-ink-500">
               <tr>
                 <th className="px-3 py-2 font-medium">选项</th>
                 <th className="px-3 py-2 font-medium">数量</th>
                 <th className="px-3 py-2 text-right font-medium">{quote.kind === "tires" ? "每条（含安装）" : quote.kind === "labor" ? "零件售价" : "单价"}</th>
-                {showCost && <th className="px-3 py-2 text-right font-medium">进价</th>}
-                {showCost && <th className="px-3 py-2 text-right font-medium">加价</th>}
-                <th className="px-3 py-2 text-right font-medium">{quote.kind === "labor" && quote.labor ? "客户总价（零件+工时）" : "客户总价"}</th>
-                {quote.kind === "labor" && <th className="px-3 py-2 text-right font-medium">推荐价</th>}
-                {showFriend && (
-                  <th className="px-3 py-2 text-right font-medium" title="WorldPac 零件 = 进价 + $100（每个零件号）；其他供货商 = 进价 × 1.3；工时 $96/h">
-                    朋友价
-                  </th>
-                )}
-                {showCost && <th className="px-3 py-2 text-right font-medium">毛利</th>}
-                {showCost && <th className="px-3 py-2 text-right font-medium">毛利率</th>}
-                <th className="px-3 py-2 font-medium">库存 / 类别</th>
+                {showCost && <th className="px-3 py-2 text-right font-medium">{quote.kind === "tires" ? "进价 / 条" : "进价"}</th>}
+                {showCost && <th className="px-3 py-2 text-right font-medium">{quote.kind === "tires" ? "加价（合计）" : "加价"}</th>}
+                <th className="px-3 py-2 text-right font-medium">{quote.kind === "labor" && quote.labor ? `${TIER_LABEL[tier]}（零件+工时）` : showCost ? TIER_LABEL[tier] : "客户总价"}</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((o, i) => (
+              {rows.map((o, i) => {
+                if (quote.options[i].outOfStock) return null;
+                const markup = rowMarkup(quote, o, tier);
+                const partsSell = quote.kind === "labor" ? Math.round((o.customerTotal - (labor ?? 0)) * 100) / 100 : o.unitPrice;
+                return (
                 <tr key={`${o.label}-${i}`} className="border-t border-ink-100 align-top">
                   <td className="px-3 py-2">
-                    {quote.options.length > 1 && (
+                    {visible.length > 1 && (
                       <label className="mb-1 flex items-center gap-1.5 text-[11px] text-ink-500">
                         <input
                           type="checkbox"
@@ -221,11 +243,11 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
                     <ProductLinks links={optionLinks(quote, o)} />
                   </td>
                   <td className="px-3 py-2">{o.quantity}</td>
-                  <td className="px-3 py-2 text-right">{money(o.unitPrice)}</td>
-                  {showCost && <td className="px-3 py-2 text-right">{money(o.unitCost)}</td>}
+                  <td className="px-3 py-2 text-right">{money(partsSell)}</td>
+                  {showCost && <td className="px-3 py-2 text-right">{money(quote.kind === "tires" ? o.unitCost : o.costTotal)}</td>}
                   {showCost && (
                     <td data-testid="surcharge" className="px-3 py-2 text-right text-ink-600">
-                      {surchargeOf(quote, quote.options[i]) === null ? "—" : `+${Math.round(surchargeOf(quote, quote.options[i])! * 100)}%`}
+                      {markup === null ? "—" : `${markup >= 0 ? "+" : "−"}${money(Math.abs(markup))}`}
                     </td>
                   )}
                   <td className="px-3 py-2 text-right font-semibold text-ink-900">
@@ -244,26 +266,11 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
                       money(o.customerTotal)
                     )}
                     {o.originalTotal !== null && <div className="text-[11px] font-normal text-ink-400 line-through">{money(o.originalTotal)}</div>}
+                    {noFriendPrice(stored.options[i], tier) && <div className="text-[11px] font-normal text-ink-400">没有进价，按零售价</div>}
                   </td>
-                  {quote.kind === "labor" && <td className="px-3 py-2 text-right text-ink-600">{money(o.referralTotal)}</td>}
-                  {showFriend && (
-                    <td data-testid="friend-total" className="px-3 py-2 text-right text-ink-600">
-                      {money(o.friendTotal ?? null)}
-                    </td>
-                  )}
-                  {showCost && <td className="px-3 py-2 text-right">{money(o.profit)}</td>}
-                  {showCost && (
-                    <td
-                      className={`px-3 py-2 text-right font-medium ${
-                        o.margin === null ? "text-ink-400" : o.margin < 0.25 ? "text-amber-700" : "text-emerald-700"
-                      }`}
-                    >
-                      {percent(o.margin)}
-                    </td>
-                  )}
-                  <td className="px-3 py-2 text-xs text-ink-600">{o.stock || "—"}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -274,7 +281,6 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
           {quote.notes.map((note) => (
             <li key={note}>• {note}</li>
           ))}
-          {quote.kind === "labor" && <li>• 进价按 WorldPac 字段 {quote.costField} 计算。</li>}
         </ul>
       )}
 
@@ -301,7 +307,7 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
               disabled={chosen.length === 0}
               className="rounded-full bg-ink-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-600"
             >
-              {left.size === 0 ? "复制客户报价" : `复制客户报价（${chosen.length} 个选项）`}
+              {chosen.length === visible.length ? "复制客户报价" : `复制客户报价（${chosen.length} 个选项）`}
             </button>
             {quote.options.length > 0 && (
               <button

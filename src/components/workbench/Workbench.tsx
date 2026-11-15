@@ -15,12 +15,14 @@ import {
   type Turn as SharedTurn,
   WEBSITE_CUSTOMER,
 } from "@/lib/workbench/conversation-types";
+import { PRICE_TIERS, TIER_HINT, TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
 import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
 import { HouseRulesPanel } from "./HouseRulesPanel";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
+import { PriceChoiceCard, QuoteSheetSummary } from "./QuoteSheetSummary";
 import { StaffQuoteCard } from "./StaffQuoteCard";
 import { WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
 
@@ -300,6 +302,17 @@ export function Workbench({ email }: { email: string }) {
     }).catch(() => null);
   }
 
+  /** Staff picked which price this conversation quotes: saved for everyone; from the choice card it also carries on the quote. */
+  async function choosePriceTier(conversationId: string, tier: PriceTier, carryOn: boolean) {
+    patchLocal(conversationId, (c) => ({ ...c, priceTier: tier }));
+    await fetch(`/api/workbench/conversations/${conversationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ priceTier: tier }),
+    }).catch(() => null);
+    if (carryOn) void send(`按${TIER_LABEL[tier]}报价`);
+  }
+
   /** Save a new title; an empty title goes back to the first question. */
   async function renameConversation(id: string, title: string) {
     setRenaming(null);
@@ -426,6 +439,8 @@ export function Workbench({ email }: { email: string }) {
     const drafts: AlldataDraft[] = [];
     const memories: MemoryProposal[] = [];
     let nextVehicle = active.vehicle;
+    let priceChoice = false;
+    let nextTier: PriceTier | null = null;
     try {
       const response = await fetch("/api/workbench/chat", {
         method: "POST",
@@ -458,6 +473,8 @@ export function Workbench({ email }: { email: string }) {
               | { type: "quote"; quote: StaffQuote }
               | { type: "alldata_draft"; draft: AlldataDraft }
               | { type: "memory_proposal"; proposal: MemoryProposal }
+              | { type: "price_choice" }
+              | { type: "price_tier"; tier: PriceTier }
               | { type: "message"; text: string }
               | { type: "saved"; turns: Turn[] }
               | { type: "error"; code: "busy" | "unavailable" }
@@ -467,6 +484,8 @@ export function Workbench({ email }: { email: string }) {
             else if (event.type === "quote") quotes.push(event.quote);
             else if (event.type === "alldata_draft") drafts.push(event.draft);
             else if (event.type === "memory_proposal") memories.push(event.proposal);
+            else if (event.type === "price_choice") priceChoice = true;
+            else if (event.type === "price_tier") nextTier = event.tier;
             else if (event.type === "message") reply = event.text;
             else if (event.type === "saved") saved = event.turns;
             else if (event.type === "error") failure = event.code;
@@ -478,18 +497,20 @@ export function Workbench({ email }: { email: string }) {
       failure = "unavailable";
     }
     const stored = saved as Turn[] | null;
+    const tier: PriceTier | null = nextTier;
     patchLocal(id, (c) => {
       const before = c.turns.filter((t) => t.id !== mine.id);
+      const withTier = tier ? { priceTier: tier } : {};
       if (stored) {
         // The cloud's copy of my question and the answer; keep my thumbnails.
         const [question, answer] = stored;
-        return { ...c, vehicle: nextVehicle, turns: [...before, { ...question, attachments: mine.attachments }, answer] };
+        return { ...c, ...withTier, vehicle: nextVehicle, turns: [...before, { ...question, attachments: mine.attachments }, answer] };
       }
       if (!failure && !reply && quotes.length === 0 && drafts.length === 0 && memories.length === 0) failure = "empty";
       const answer: Turn = failure
         ? { id: `local-a-${Date.now()}`, role: "assistant", author: ASSISTANT, text: ERRORS[failure], quotes, drafts, memories, localOnly: true, at: Date.now() }
-        : { id: `local-a-${Date.now()}`, role: "assistant", author: ASSISTANT, text: reply, quotes, drafts, memories, at: Date.now() };
-      return { ...c, vehicle: nextVehicle, turns: [...before, mine, answer] };
+        : { id: `local-a-${Date.now()}`, role: "assistant", author: ASSISTANT, text: reply, quotes, drafts, memories, at: Date.now(), ...(priceChoice ? { priceChoice: true } : {}) };
+      return { ...c, ...withTier, vehicle: nextVehicle, turns: [...before, mine, answer] };
     });
     setPending((p) => {
       const rest = { ...p };
@@ -840,8 +861,17 @@ export function Workbench({ email }: { email: string }) {
                       <WebsiteEstimateCard card={card} />
                     </div>
                   ))}
+                  {turn.priceChoice && (
+                    <PriceChoiceCard current={active.priceTier} disabled={Boolean(activePending) || !currentId} onChoose={(tier) => void choosePriceTier(active.id, tier, true)} />
+                  )}
+                  {turn.quotes.filter((q) => q.kind !== "team_quote").length > 1 && <QuoteSheetSummary quotes={turn.quotes} tier={active.priceTier ?? "retail"} />}
                   {turn.quotes.map((quote) => (
-                    <StaffQuoteCard key={quote.id} quote={quote} onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined} />
+                    <StaffQuoteCard
+                      key={quote.id}
+                      quote={quote}
+                      tier={active.priceTier ?? "retail"}
+                      onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
+                    />
                   ))}
                   {turn.drafts?.map((draft) => (
                     <AlldataDraftCard key={draft.id} draft={draft} onCreated={(created) => markCreated(active.id, draft.id, created)} />
@@ -870,6 +900,26 @@ export function Workbench({ email }: { email: string }) {
           </main>
 
           <form onSubmit={onSubmit} className="bg-[color:var(--wb-header)] px-3 py-2">
+            {currentId && active.turns.length > 0 && !active.website && (
+              <div className="mb-1.5 flex items-center gap-2 text-xs text-[color:var(--wb-muted)]">
+                <label htmlFor="price-tier" className="shrink-0 whitespace-nowrap">报价按</label>
+                <select
+                  id="price-tier"
+                  value={active.priceTier ?? ""}
+                  onChange={(e) => e.target.value && void choosePriceTier(active.id, e.target.value as PriceTier, false)}
+                  title={active.priceTier ? TIER_HINT[active.priceTier] : "还没选：AI 报价前会先问"}
+                  className="shrink-0 rounded-md border border-[color:var(--wb-line)] bg-[#fff] px-2 py-0.5 text-xs text-[#111b21]"
+                >
+                  {!active.priceTier && <option value="">还没选</option>}
+                  {PRICE_TIERS.map((tier) => (
+                    <option key={tier} value={tier}>
+                      {TIER_LABEL[tier]}
+                    </option>
+                  ))}
+                </select>
+                {active.priceTier && <span className="hidden truncate sm:inline">{TIER_HINT[active.priceTier]}</span>}
+              </div>
+            )}
             {(files.length > 0 || fileNotice) && (
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 {files.map((file, index) => (

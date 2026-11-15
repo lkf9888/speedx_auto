@@ -26,7 +26,7 @@ export interface StaffQuoteOption {
   /** Core charge per unit, when WorldPac sends one. */
   core: number | null;
   stock: string;
-  /** The supplier has none: left out of the customer copy unless staff tick it. */
+  /** Not in stock (WorldPac: not in a local warehouse): left off the quote card and the customer copy. */
   outOfStock?: boolean;
   /** Customer total for this option: parts + labor (walk-in). */
   customerTotal: number;
@@ -127,6 +127,8 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
       unitCost,
       core: typeof p.prices.corePrice === "number" && p.prices.corePrice > 0 ? p.prices.corePrice : null,
       stock: p.inStockLocally ? `本地有货（${p.qtyAvailable ?? "?"}）` : p.availability || "未知",
+      // Kevin, 2026-11-14: only parts in local stock go on the quote.
+      ...(p.inStockLocally ? {} : { outOfStock: true }),
       customerTotal: money(listTotal + walkIn),
       referralTotal: money(listTotal + referral),
       friendTotal: unitCost === null ? null : money(friendWorldpacParts(unitCost, p.quantity, listTotal)! + referral),
@@ -159,7 +161,7 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
     job.laborNote && `工时说明：${job.laborNote}`,
     job.partsNote && `零件：${job.partsNote}`,
     job.otherPartNames.length ? `可能还需要：${job.otherPartNames.join("、")}` : "",
-    "零件售价 = WorldPac 建议零售价（List）；“加价”= 售价 ÷ 进价 − 1。毛利 = 客户总价（零件售价 + 工时）− 零件进价，未扣人工成本。",
+    "零件售价按这个会话选的价格；“加价”= 零件售价 − 进价（不含工时）。只列 WorldPac 本地仓库有货的零件。",
   ].filter(Boolean) as string[];
   return withText({
     id,
@@ -220,6 +222,8 @@ export function buildPartsQuote(vehicle: string, partName: string, position: str
       unitCost,
       core: typeof p.prices.corePrice === "number" && p.prices.corePrice > 0 ? p.prices.corePrice : null,
       stock: p.inStockLocally ? `本地有货（${p.qtyAvailable ?? "?"}）` : p.availability || "未知",
+      // Kevin, 2026-11-14: only parts in local stock go on the quote.
+      ...(p.inStockLocally ? {} : { outOfStock: true }),
       customerTotal: listTotal,
       referralTotal: listTotal,
       friendTotal: friendWorldpacParts(unitCost, p.quantity, listTotal),
@@ -383,7 +387,9 @@ export function summarizeStaffQuote(quote: StaffQuote): string {
   const labor = quote.labor
     ? `Labor: ${quote.labor.hours} h × $${quote.labor.rate} = $${quote.labor.walkIn} (referral and friend $${quote.labor.referral}).`
     : "";
-  const options = quote.options
+  const shown = quote.options.filter((o) => !o.outOfStock);
+  const hidden = quote.options.length - shown.length;
+  const options = shown
     .map(
       (o, i) =>
         `${i + 1}. ${[o.brand, o.label].filter(Boolean).join(" ")}${o.partNumber ? ` #${o.partNumber}` : ""} ×${o.quantity}: unit $${o.unitPrice}` +
@@ -392,5 +398,10 @@ export function summarizeStaffQuote(quote: StaffQuote): string {
         `${o.profit !== null ? `, profit $${o.profit}${o.margin !== null ? ` (${Math.round(o.margin * 100)}%)` : ""}` : ""}${o.stock ? `, ${o.stock}` : ""}`,
     )
     .join("\n");
-  return [head, labor, options, quote.notes.join(" "), quote.supplier ? (LINKS[quote.supplier] ?? "") : ""].filter(Boolean).join("\n");
+  const stock = hidden
+    ? shown.length
+      ? `${hidden} more option${hidden > 1 ? "s" : ""} not in stock ${quote.supplier === "worldpac" ? "locally " : ""}are left off the card; don't mention them.`
+      : `No option is in stock${quote.supplier === "worldpac" ? " at a local WorldPac warehouse" : ""}, so the card shows none. Tell staff; no other parts supplier is connected yet, so they can try the card's search links or call a supplier.`
+    : "";
+  return [head, labor, options, stock, quote.notes.join(" "), quote.supplier ? (LINKS[quote.supplier] ?? "") : ""].filter(Boolean).join("\n");
 }

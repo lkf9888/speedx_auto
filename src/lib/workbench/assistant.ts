@@ -35,6 +35,7 @@ import { MAX_NOTE_LENGTH } from "./memory";
 import { laborShortfall, MIN_LABOR_HOURS, minimumLaborNote } from "@/lib/repair-chat/pricing";
 import { customerText } from "./customer-text";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
+import { isPriceTier, TIER_LABEL, type PriceTier } from "./price-tier";
 import { buildFlatQuote, buildLaborQuote, buildPartsQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
 
 export const WORKBENCH_MODEL = process.env.WORKBENCH_MODEL || "claude-sonnet-5-5";
@@ -44,7 +45,11 @@ export type WorkbenchEvent =
   | Extract<ChatEvent, { type: "vehicle" }>
   | { type: "quote"; quote: StaffQuote }
   | { type: "alldata_draft"; draft: AlldataDraft }
-  | { type: "memory_proposal"; proposal: MemoryProposal };
+  | { type: "memory_proposal"; proposal: MemoryProposal }
+  /** The assistant asks which price to quote: the page shows the choices. */
+  | { type: "price_choice" }
+  /** Staff named the price in words: the conversation remembers it. */
+  | { type: "price_tier"; tier: PriceTier };
 
 /** A note the assistant suggests keeping; saved only when staff press save on its card. */
 export interface MemoryProposal {
@@ -67,7 +72,8 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - Don't say what a part includes beyond what the tool lists. A "strut assembly" may be a bare strut or a loaded (quick) strut with the spring and mount: unless the tool says so, tell staff to check the contents by part number before choosing the labor, since a bare strut needs the spring moved over.
 - The cards show where each price came from (WorldPac, DT Tire Hub, the partner list, shop flat prices) and link buttons; the tool summary says which. Don't tell staff a supplier wasn't checked or that there are no links when the card has them.
 - If staff ask for text to send a customer, write it with customer prices only, never cost or margin (the card's "copy for customer" button does the same). Put any note for staff first; then a line "—— 发给客人 ——" and the customer text, with nothing after it, so staff can copy everything below that line.
-- Friend price (owner's rule): when staff say the customer is a friend (朋友 / 朋友价 / friend), quote each option's friend total from the tool result instead of the customer total, for the rest of this conversation unless staff say otherwise: WorldPac parts at cost + $100 per part number (not per unit, and never above the list price), other suppliers' parts and tires at cost × 1.3 (tires keep the eco fee and mounting), labor at the referral rate. Say it's the friend price. Where an option has no friend total (no cost known, or a shop flat price), say so and give the normal price. In text for the customer, give the friend totals as the price without explaining how they were worked out, never cost or markup.
+- Which price to quote (owner's rule): each conversation quotes one price, which staff choose: 零售价 (retail: the customer total), 推荐价 (referral: labor at $96/h) or 朋友价 (friend: WorldPac parts at cost + $100 per part number, not per unit and never above the list price, other suppliers' parts and tires at cost × 1.3 with eco fee and mounting, labor at $96/h). The per-turn note says which one is chosen. If none is chosen yet, before your first pricing tool call (get_estimate, quote_extra_part, get_flat_price, find_tires, find_brand_tires, find_parts) call ask_price_tier and stop there: write one short line asking which price, and quote nothing until staff choose. When staff name a price in words ("按朋友价", "客户是朋友", "零售价", "推荐价"), call set_price_tier with it, then go on. Once chosen, give only that price's totals (the tool results list them as customer / referral / friend), say which price it is, and don't list the other prices unless staff ask. Where an option has no friend total (no cost known, or a shop flat price), say it's at the retail price. In text for the customer, give the chosen totals without explaining how they were worked out, never cost or markup.
+- When staff ask for several jobs together (front and rear rotors, pads and rotors, an oil change with brakes), quote each job with its own tool call in the same reply: the page puts all of this reply's quotes into one combined quote sheet with a grand total, so just give the combined total in a line or two. Quotes only list parts in local stock; if a job has none in stock, say so.
 
 # Shop labor rules
 - The shop doesn't repair or rebuild transmissions (fluid services are fine), replace auto glass, do wheel alignments, or repair exhaust systems and mufflers. If staff ask about those, say so and suggest referring the customer elsewhere; the labor-guide tools won't list alignment or exhaust jobs.
@@ -194,6 +200,26 @@ const PROPOSE_MEMORY: Anthropic.Beta.BetaTool = {
   },
 };
 
+const ASK_PRICE_TIER: Anthropic.Beta.BetaTool = {
+  name: "ask_price_tier",
+  description:
+    "Ask staff which price this conversation should quote (retail, referral or friend). Shows them three buttons; their choice comes back as their next message. Use it before the first quote when no price is chosen yet.",
+  strict: true,
+  input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+};
+
+const SET_PRICE_TIER: Anthropic.Beta.BetaTool = {
+  name: "set_price_tier",
+  description: "Record the price staff named for this conversation (retail 零售价, referral 推荐价, friend 朋友价). Every quote card in the conversation then shows that price.",
+  strict: true,
+  input_schema: {
+    type: "object",
+    properties: { tier: { type: "string", enum: ["retail", "referral", "friend"] } },
+    required: ["tier"],
+    additionalProperties: false,
+  },
+};
+
 const FIND_FLEET_CAR: Anthropic.Beta.BetaTool = {
   name: "find_fleet_car",
   description:
@@ -302,7 +328,7 @@ export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => ST
     };
   }
   return tool;
-}).concat(FIND_BRAND_TIRES, FIND_PARTS, DRAFT_ALLDATA_ESTIMATE, PROPOSE_MEMORY, FIND_FLEET_CAR);
+}).concat(FIND_BRAND_TIRES, FIND_PARTS, DRAFT_ALLDATA_ESTIMATE, PROPOSE_MEMORY, FIND_FLEET_CAR, ASK_PRICE_TIER, SET_PRICE_TIER);
 
 const MAX_BRAND_TIRES = 12;
 export const MAX_TIRE_COUNT = 20;
@@ -536,6 +562,17 @@ export async function runWorkbenchTool(
 ): Promise<{ content: string; isError: boolean; events: WorkbenchEvent[] }> {
   const input = withLatestVehicle(rawInput, knownVehicleKey);
   if (name === "find_fleet_car") return findFleetCar(tato, input);
+  if (name === "ask_price_tier") {
+    return {
+      content: JSON.stringify({ status: "shown", note: "Staff see three price buttons. Ask in one short line which price to quote, quote nothing yet, and stop." }),
+      isError: false,
+      events: [{ type: "price_choice" }],
+    };
+  }
+  if (name === "set_price_tier") {
+    if (!isPriceTier(input.tier)) return { content: JSON.stringify({ error: "tier must be retail, referral or friend" }), isError: true, events: [] };
+    return { content: JSON.stringify({ status: "set", tier: input.tier }), isError: false, events: [{ type: "price_tier", tier: input.tier }] };
+  }
   if (name === "find_brand_tires") return findBrandTires(dt, input, knownVehicleKey, newEstimateId);
   if (name === "propose_memory") {
     const text = typeof input.text === "string" ? input.text.replace(/\s+/g, " ").trim() : "";
@@ -634,14 +671,22 @@ export async function runWorkbenchTool(
   return { content, isError: outcome.isError, events };
 }
 
+/** What the assistant is told about the conversation's price each turn. */
+export function priceTierNote(tier: PriceTier | undefined): string {
+  return tier
+    ? `Price for this conversation: ${TIER_LABEL[tier]} (${tier}). Quote that price's totals.`
+    : "No price chosen for this conversation yet: call ask_price_tier before the first quote.";
+}
+
 export const WORKBENCH_PROFILE: ChatProfile<WorkbenchEvent> = {
   model: WORKBENCH_MODEL,
   effort: "medium",
   system: WORKBENCH_PROMPT,
   tools: WORKBENCH_TOOLS,
-  turnContext: (_request, _earlier, vehicle) =>
+  turnContext: (request, _earlier, vehicle) =>
     [
       `Today at the shop (Vancouver time): ${shopToday(new Date())}.`,
+      priceTierNote(isPriceTier(request.priceTier) ? request.priceTier : undefined),
       vehicle ? `Vehicle already confirmed in this conversation: ${vehicle.label} (vehicle_key: ${vehicle.key}). Reuse it unless staff switch vehicles.` : "",
     ]
       .filter(Boolean)

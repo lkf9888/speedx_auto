@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { StaffQuoteCard } from "@/components/workbench/StaffQuoteCard";
 import { WORKBENCH_PROMPT } from "@/lib/workbench/assistant";
 import { askRulesAssistant } from "@/lib/workbench/house-rules-agent";
-import { buildLaborQuote, buildPartsQuote, buildTireQuote, summarizeStaffQuote, type StaffQuote } from "@/lib/workbench/quote";
+import { buildLaborQuote, buildPartsQuote, buildTireQuote, summarizeStaffQuote } from "@/lib/workbench/quote";
 import type { StaffPartOption } from "@/lib/worldpac/catalog";
 
 // Kevin, 2026-11-14: friend price = WorldPac parts at cost + $100 per part
@@ -73,23 +73,17 @@ describe("friend price on staff quotes", () => {
   it("tells the model the friend total, and the prompt says when to use it", () => {
     const quote = buildLaborQuote("Car", job([part("PAD-1", 250, 80)]), "W-6", env);
     expect(summarizeStaffQuote(quote)).toContain("friend $276");
-    expect(WORKBENCH_PROMPT).toMatch(/Friend price .*朋友/);
-    expect(WORKBENCH_PROMPT).toContain("cost + $100 per part number (not per unit, and never above the list price)");
+    expect(WORKBENCH_PROMPT).toContain("朋友价 (friend: WorldPac parts at cost + $100 per part number, not per unit and never above the list price");
+    expect(WORKBENCH_PROMPT).toMatch(/客户是朋友.*set_price_tier/);
   });
 });
 
 describe("the staff quote card", () => {
-  it("shows a friend price column", () => {
-    render(<StaffQuoteCard quote={buildLaborQuote("Car", job([part("PAD-1", 250, 80)]), "W-7", env)} />);
-    expect(screen.getByRole("columnheader", { name: "朋友价" })).toBeInTheDocument();
-    expect(screen.getByTestId("friend-total")).toHaveTextContent("$276");
-  });
-
-  it("leaves the column out on quotes saved before friend prices existed", () => {
-    const quote = buildLaborQuote("Car", job([part("PAD-1", 250, 80)]), "W-8", env);
-    const old: StaffQuote = { ...quote, options: quote.options.map((o) => { const copy = { ...o }; delete copy.friendTotal; return copy; }) };
-    render(<StaffQuoteCard quote={old} />);
-    expect(screen.queryByRole("columnheader", { name: "朋友价" })).toBeNull();
+  it("shows the friend price when the conversation quotes it", () => {
+    render(<StaffQuoteCard quote={buildLaborQuote("Car", job([part("PAD-1", 250, 80)]), "W-7", env)} tier="friend" />);
+    expect(screen.getByTestId("quote-tier")).toHaveTextContent("按朋友价");
+    expect(screen.getByRole("columnheader", { name: "朋友价（零件+工时）" })).toBeInTheDocument();
+    expect(screen.getByText("$276.00")).toBeInTheDocument();
   });
 });
 

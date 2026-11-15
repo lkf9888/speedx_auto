@@ -186,7 +186,7 @@ describe("Wheel Mart in the quotes", () => {
     expect(new URL(links[0].url).searchParams.get("ProductSearch[size]")).toBe("2256517");
   });
 
-  it("workbench card: tires Wheel Mart has none of start unticked for the customer copy", async () => {
+  it("workbench card: tires Wheel Mart has none of are left off the card and the customer copy", async () => {
     noPriceList();
     vi.stubEnv("TIRE_MARKUP", "1.3");
     const out = await runWorkbenchTool(api, "find_tires", { size: "225/65R17", season: "all_weather", count: 4 }, () => "W-2", null, () => null, () => null, () => fakeClient());
@@ -198,9 +198,10 @@ describe("Wheel Mart in the quotes", () => {
     const writeText = vi.fn(async (text: string) => void text);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     render(<StaffQuoteCard quote={quote} />);
-    expect(screen.getByRole("checkbox", { name: /Lanvigator/ })).not.toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /Delinte/ })).toBeChecked();
-    await userEvent.click(screen.getByRole("button", { name: "复制客户报价（1 个选项）" }));
+    // Kevin, 2026-11-14: only what's in stock goes on the quote.
+    expect(screen.queryByText(/Lanvigator/)).toBeNull();
+    expect(screen.getByText(/Delinte/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "复制客户报价" }));
     expect(writeText.mock.calls[0][0]).toContain("AW6");
     expect(writeText.mock.calls[0][0]).not.toContain("CATCHFORS");
   });

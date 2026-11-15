@@ -4,6 +4,7 @@
  */
 import { staffUser, type StaffUser } from "./access";
 import { ConversationError, getConversationStore, type ConversationStore } from "./conversations";
+import { isPriceTier } from "./price-tier";
 
 export interface ConversationDeps {
   user: (request: Request) => Promise<StaffUser | null>;
@@ -75,6 +76,11 @@ export async function handleConversation(request: Request, id: string, deps: Con
       if (typeof body.title === "string") {
         const conversation = await store.rename(id, user.email, body.title);
         deps.log({ action: "rename", email: user.email, id, title: conversation.title });
+        return json({ conversation });
+      }
+      if (isPriceTier(body.priceTier)) {
+        const conversation = await store.setPriceTier(id, user.email, body.priceTier);
+        deps.log({ action: "price_tier", email: user.email, id, tier: body.priceTier });
         return json({ conversation });
       }
       if (typeof body.archived === "boolean") {

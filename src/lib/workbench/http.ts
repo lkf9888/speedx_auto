@@ -18,6 +18,7 @@ import { getConversationStore, newTurnId, type ConversationStore } from "./conve
 import { ASSISTANT, type Turn, type Vehicle } from "./conversation-types";
 import type { AlldataDraft } from "./alldata-draft";
 import type { MemoryProposal } from "./assistant";
+import type { PriceTier } from "./price-tier";
 import type { StaffQuote } from "./quote";
 import { withFinalPrices } from "./final-price";
 
@@ -193,7 +194,7 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
   }
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const reply: { text: string; quotes: StaffQuote[]; drafts: AlldataDraft[]; memories: MemoryProposal[]; vehicle?: Vehicle; error: string | null } = {
+      const reply: { text: string; quotes: StaffQuote[]; drafts: AlldataDraft[]; memories: MemoryProposal[]; vehicle?: Vehicle; error: string | null; priceChoice?: boolean; tier?: PriceTier } = {
         text: "",
         quotes: [],
         drafts: [],
@@ -205,6 +206,8 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
         else if (event.type === "alldata_draft") reply.drafts.push(event.draft);
         else if (event.type === "memory_proposal") reply.memories.push(event.proposal);
         else if (event.type === "vehicle") reply.vehicle = event.vehicle;
+        else if (event.type === "price_choice") reply.priceChoice = true;
+        else if (event.type === "price_tier") reply.tier = event.tier;
         else if (event.type === "status" && store && conversationId) store.pending.set(conversationId, { by: user.email, status: event.status, since: Date.now() });
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       };
@@ -218,6 +221,7 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
             locale: "zh-CN",
             vehicleKey: request_.vehicleKey,
             attachments: request_.attachments.length ? attachmentBlocks(request_.attachments) : undefined,
+            priceTier: stored?.priceTier,
           },
           send,
           () => `W-${randomBytes(4).toString("hex").toUpperCase()}`,
@@ -242,10 +246,12 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
             quotes: reply.quotes,
             ...(reply.drafts.length ? { drafts: reply.drafts } : {}),
             ...(reply.memories.length ? { memories: reply.memories } : {}),
+            ...(reply.priceChoice ? { priceChoice: true } : {}),
             ...(reply.error || (!reply.text && !reply.quotes.length) ? { localOnly: true } : {}),
           };
           if (!answer.text && !answer.quotes.length && !answer.drafts && !answer.memories) answer.text = REPLY_ERRORS.empty;
           try {
+            if (reply.tier) await store.setPriceTier(conversationId, user.email, reply.tier);
             await store.append(conversationId, user.email, [answer], reply.vehicle);
             send({ type: "saved", turns: [userTurn, answer] });
           } catch (error) {

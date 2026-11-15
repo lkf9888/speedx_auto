@@ -6,6 +6,7 @@
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import type { AlldataDraft } from "./alldata-draft";
 import type { MemoryProposal } from "./assistant";
+import type { PriceTier } from "./price-tier";
 import type { StaffQuote } from "./quote";
 
 export interface SentFile {
@@ -34,6 +35,8 @@ export interface Turn {
   estimates?: EstimateCard[];
   /** The reply waits for the customer's name and phone: they haven't seen it yet. */
   held?: boolean;
+  /** The assistant asked which price to quote; the card shows the choices. */
+  priceChoice?: boolean;
 }
 
 export type Vehicle = { key: string; label: string } | null;
@@ -51,6 +54,8 @@ export interface Conversation {
   archived?: boolean;
   /** Set on a website customer's chat with the public assistant. */
   website?: WebsiteVisitor;
+  /** Which price this conversation quotes; unset until staff choose. */
+  priceTier?: PriceTier;
 }
 
 /** Who the website customer is. Name and phone are for staff only; never sent to the AI. */

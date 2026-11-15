@@ -14,10 +14,12 @@ export function customerText(quote: Omit<StaffQuote, "customerText">): string {
     `车辆：${quote.vehicle || "—"}`,
     `项目：${quote.service}${quote.position ? `（${quote.position.replace(/,?\s*both sides/i, "，左右两边").replace(/^Both sides$/i, "左右两边")}）` : ""}`,
   ];
-  if (quote.kind === "team_quote" || quote.options.length === 0) {
+  // Out-of-stock options never go to the customer.
+  const options = quote.options.filter((o) => !o.outOfStock);
+  if (quote.kind === "team_quote" || options.length === 0) {
     lines.push("这项需要到店检查后报价。");
   } else {
-    quote.options.forEach((o, i) => {
+    options.forEach((o, i) => {
       const name = [o.brand, o.label].filter(Boolean).join(" ");
       const each =
         quote.kind === "tires" ? `，每条 ${dollars(o.unitPrice)} × ${o.quantity}` : quote.kind === "labor" && o.quantity > 1 ? ` × ${o.quantity}` : "";

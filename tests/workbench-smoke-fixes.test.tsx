@@ -107,8 +107,8 @@ describe("F01/F05: both sides", () => {
           quotes: [
             {
               productQuotes: [
-                { appID: "a1", partDescription: "Strut Assembly", manufacturerPart: "22-214089", listPrice: 678.16, unitPrice: 173.46, position: { id: 22 } },
-                { appID: "a2", partDescription: "Shock Absorber", manufacturerPart: "340115", listPrice: 260.49, unitPrice: 116.66, position: { id: 22 } },
+                { appID: "a1", partDescription: "Strut Assembly", manufacturerPart: "22-214089", listPrice: 678.16, unitPrice: 173.46, position: { id: 22 }, availability: "tomorrow-local", qtyAvailable: 4 },
+                { appID: "a2", partDescription: "Shock Absorber", manufacturerPart: "340115", listPrice: 260.49, unitPrice: 116.66, position: { id: 22 }, availability: "tomorrow-local", qtyAvailable: 4 },
               ],
             },
           ],

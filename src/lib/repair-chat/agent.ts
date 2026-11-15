@@ -52,6 +52,8 @@ export interface ChatRequest {
   vehicleKey: string | null;
   /** Content blocks (photos, PDFs, file text) placed before the message; only the staff workbench sets this. */
   attachments?: Anthropic.Beta.BetaContentBlockParam[];
+  /** The workbench conversation's chosen price (retail / referral / friend); only the staff workbench sets this. */
+  priceTier?: string;
 }
 
 export interface ChatResult<E = ChatEvent> {
