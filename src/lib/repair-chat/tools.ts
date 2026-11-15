@@ -536,6 +536,8 @@ export async function runTool(
   wheelmart: () => WheelmartClient | null = getWheelmartClient,
   /** Applied to every priced card before the model sees it (the owner's discounts on the website). */
   adjustCard: AdjustCard = keepCard,
+  /** The owner's closed days, on top of REPAIR_BOOKING_CLOSED_DATES. */
+  extraClosed: ReadonlySet<string> = new Set(),
 ): Promise<ToolOutcome> {
   const input = withLatestVehicle(rawInput, knownVehicleKey);
   switch (name) {
@@ -793,6 +795,7 @@ export async function runTool(
       const date = typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : "";
       const time = typeof input.time === "string" ? input.time : "";
       const closed = parseClosedDates(process.env.REPAIR_BOOKING_CLOSED_DATES);
+      for (const day of extraClosed) closed.add(day);
       const now = new Date();
       if (!date || !isBookable(date, time, now, closed)) {
         const open = bookableDays(now, closed);

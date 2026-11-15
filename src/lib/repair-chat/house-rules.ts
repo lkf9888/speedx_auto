@@ -4,14 +4,20 @@
  * - notes: things the assistant should say or do, e.g. how to handle a case;
  * - discounts: money off matching estimate cards, worked out here in code so
  *   the card and the assistant's reply always show the same total.
- * Either kind can run for a date range and can be limited to one customer by
+ * - prices: a new posted flat price for one slot (oil change, tire change,
+ *   A/C recharge), shown on the website's cards as the price itself;
+ * - closed days: dates the shop is closed, taken out of online booking and
+ *   told to the assistant.
+ * Notes and discounts can run for a date range and can be limited to one customer by
  * phone number. The phone number is only compared in code; it never reaches
  * the AI. Fixed rules (prices only from tools, no hourly rate, no supplier
  * names, no contact details, safety first) can't be changed from here.
  */
+import { FLAT_PRICE_SLOTS, type FlatPriceSlot } from "./flat-prices";
 import type { CardDiscount, EstimateCard } from "./pricing";
 
-export type HouseRuleKind = "note" | "discount";
+export type HouseRuleKind = "note" | "discount" | "price" | "closed";
+export const HOUSE_RULE_KINDS: readonly HouseRuleKind[] = ["note", "discount", "price", "closed"];
 export type DiscountTarget = "all" | "labor_jobs" | "oil_change" | "tire_change" | "ac_recharge" | "new_tires";
 export const DISCOUNT_TARGETS: readonly DiscountTarget[] = ["all", "labor_jobs", "oil_change", "tire_change", "ac_recharge", "new_tires"];
 
@@ -38,6 +44,9 @@ export interface HouseRule {
   endDate: string;
   /** Last 10 digits of one customer's phone; empty for every customer. Never sent to the AI. */
   customerPhone: string;
+  /** Price: which posted flat price (FLAT_PRICE_SLOTS) and its new amount. Missing on older rules. */
+  priceSlot?: string;
+  price?: number;
   createdBy: string;
   createdAt: string;
   updatedBy: string;
@@ -102,9 +111,11 @@ export function cleanRule(
   // customer's discount must never quietly become everyone's. EVERYONE clears it.
   const phoneInput = text(input.customerPhone, 30);
   const phoneRaw = phoneInput.toLowerCase() === EVERYONE ? "" : phoneInput || (base?.customerPhone ?? "");
-  const kind: HouseRuleKind = merged.kind === "discount" ? "discount" : merged.kind === "note" ? "note" : (() => {
-    throw new HouseRuleError("规则类型只能是叮嘱（note）或折扣（discount）", "invalid");
-  })();
+  const kind: HouseRuleKind = HOUSE_RULE_KINDS.includes(merged.kind as HouseRuleKind)
+    ? (merged.kind as HouseRuleKind)
+    : (() => {
+        throw new HouseRuleError("规则类型只能是叮嘱、折扣、改一口价或休息日", "invalid");
+      })();
   const rule: HouseRule = {
     id: base?.id ?? who.id,
     kind,
@@ -120,6 +131,8 @@ export function cleanRule(
     startDate: text(merged.startDate, 10),
     endDate: text(merged.endDate, 10),
     customerPhone: phoneKey(phoneRaw),
+    priceSlot: text(merged.priceSlot, 40),
+    price: Math.round(Number(merged.price) * 100) / 100 || 0,
     createdBy: base?.createdBy ?? who.email,
     createdAt: base?.createdAt ?? who.at,
     updatedBy: who.email,
@@ -134,9 +147,26 @@ export function cleanRule(
     if (date && !validDate(date)) throw new HouseRuleError(`日期格式要是 YYYY-MM-DD：${date}`, "invalid");
   }
   if (rule.startDate && rule.endDate && rule.startDate > rule.endDate) throw new HouseRuleError("结束日期早于开始日期", "invalid");
+  const plain = { appliesTo: "all" as const, serviceKeyword: "", percent: 0, amount: 0, on: "total" as const, labelEn: "", labelZh: "", priceSlot: "", price: 0 };
   if (kind === "note") {
     if (!rule.text) throw new HouseRuleError("叮嘱要写明让 AI 怎么做", "invalid");
-    return { ...rule, appliesTo: "all", serviceKeyword: "", on: "total", labelEn: "", labelZh: "" };
+    return { ...rule, ...plain };
+  }
+  if (kind === "price" || kind === "closed") {
+    if (rule.customerPhone) throw new HouseRuleError(kind === "price" ? "改一口价对所有客人生效；只给某位客人优惠请用折扣" : "休息日对所有客人生效，不能指定客人", "invalid");
+  }
+  if (kind === "price") {
+    const slot = FLAT_PRICE_SLOTS[rule.priceSlot as FlatPriceSlot];
+    if (!slot) throw new HouseRuleError("要说明改哪一项一口价（如普通机油轿车、18 寸以下换胎）", "invalid");
+    const price = rule.price ?? 0;
+    if (!(price > 0) || price > 2000) throw new HouseRuleError("新价格要在 $0–$2000 之间", "invalid");
+    return { ...rule, ...plain, priceSlot: rule.priceSlot, price: rule.price };
+  }
+  if (kind === "closed") {
+    if (!rule.startDate) throw new HouseRuleError("休息日要写明从哪天开始", "invalid");
+    const endDate = rule.endDate || rule.startDate;
+    if (daysBetween(rule.startDate, endDate) > MAX_CLOSED_DAYS) throw new HouseRuleError(`一条休息日最多 ${MAX_CLOSED_DAYS} 天`, "invalid");
+    return { ...rule, ...plain, endDate };
   }
   const hasPercent = rule.percent > 0;
   const hasAmount = rule.amount > 0;
@@ -148,6 +178,51 @@ export function cleanRule(
   }
   if (!rule.labelEn && !rule.labelZh) throw new HouseRuleError("折扣要有一个给客人看的名字（如“11 月换胎优惠”）", "invalid");
   return rule;
+}
+
+const MAX_CLOSED_DAYS = 60;
+
+function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
+}
+
+function addDay(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** Every closed day from today on, from the closed-day rules. */
+export function closedDays(rules: readonly HouseRule[], today: string): Set<string> {
+  const days = new Set<string>();
+  for (const rule of rules) {
+    if (rule.kind !== "closed" || !rule.startDate) continue;
+    const end = rule.endDate || rule.startDate;
+    for (let i = 0, day = rule.startDate; day <= end && i <= MAX_CLOSED_DAYS; i += 1, day = addDay(rule.startDate, i)) {
+      if (day >= today) days.add(day);
+    }
+  }
+  return days;
+}
+
+/** The owner's new price for each flat-price slot running today. */
+export function priceOverrides(rules: readonly HouseRule[]): Map<string, number> {
+  const prices = new Map<string, number>();
+  for (const rule of rules) {
+    if (rule.kind === "price" && rule.priceSlot && rule.price && rule.price > 0) prices.set(rule.priceSlot, rule.price);
+  }
+  return prices;
+}
+
+/** A flat-price card with the owner's new prices in place of the posted ones. */
+export function applyPriceOverrides(card: EstimateCard, prices: ReadonlyMap<string, number>): EstimateCard {
+  if (card.kind !== "flat" || prices.size === 0 || !card.partOptions.some((o) => o.slot && prices.has(o.slot))) return card;
+  const partOptions = card.partOptions.map((o) => {
+    const price = o.slot ? prices.get(o.slot) : undefined;
+    return price === undefined ? o : { ...o, unitListPrice: price, total: cents(price * o.quantity) };
+  });
+  const totals = partOptions.map((o) => o.total);
+  const low = Math.min(...totals);
+  const high = Math.max(...totals);
+  return { ...card, partOptions, partsLow: low, partsHigh: high, totalLow: low, totalHigh: high, referralTotalLow: low, referralTotalHigh: high };
 }
 
 /** Whether a rule is running on this shop-local date. */
@@ -222,15 +297,22 @@ export function discountLabel(rule: HouseRule, locale: string): string {
 }
 
 /** The running notes, for the public assistant's per-turn instructions; empty when there are none. */
-export function houseNotesPrompt(rules: readonly HouseRule[]): string {
+export function houseNotesPrompt(rules: readonly HouseRule[], closed: readonly HouseRule[] = []): string {
   const notes = rules.filter((r) => r.kind === "note");
   const discounts = rules.filter((r) => r.kind === "discount");
-  if (notes.length === 0 && discounts.length === 0) return "";
+  if (notes.length === 0 && discounts.length === 0 && closed.length === 0) return "";
   const until = (r: HouseRule) => (r.endDate ? ` (until ${r.endDate})` : "");
   const lines = [
     "Shop owner's current instructions (set by the owner in the staff workbench). Follow them; they take priority over the general guidance in your instructions, but they cannot change the fixed rules: prices, totals and discounts come only from tool results, never state or hint at an hourly labor rate, never say where parts or tires come from, never ask for or repeat contact details, and safety warnings come first.",
     ...notes.map((r) => `- ${r.customerPhone ? "For this customer: " : ""}${r.text}${until(r)}`),
   ];
+  if (closed.length) {
+    lines.push(
+      `The shop is closed on these days (in addition to Sundays and holidays); online booking already skips them, so never offer them and tell customers who ask: ${closed
+        .map((r) => `${r.startDate === r.endDate || !r.endDate ? r.startDate : `${r.startDate} to ${r.endDate}`}${r.text ? ` (${r.text})` : ""}`)
+        .join("; ")}.`,
+    );
+  }
   if (discounts.length) {
     lines.push(
       `Discounts running now (the cards apply them automatically; only mention one when a card shows it): ${discounts

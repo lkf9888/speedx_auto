@@ -7,25 +7,16 @@
  * flat price: the customer is asked to contact the team for a quote.
  */
 import { describeVehicle, type VehicleRef } from "@/lib/worldpac/catalog";
+import { FLAT_PRICE_SLOTS, FLAT_PRICES, type FlatPriceSlot, type FlatService } from "./flat-prices";
 
-export type FlatService = "oil_change" | "tire_change" | "ac_recharge";
+export type { FlatService };
 export type VehicleSize = "car" | "small_suv" | "large_suv_or_pickup";
 export type Fuel = "gasoline" | "hybrid" | "diesel" | "electric" | "unknown";
 export type OilGrade = "standard" | "premium";
 export type TireType = "up_to_18" | "over_18" | "run_flat" | "off_road";
 export type Refrigerant = "r134a" | "r1234yf";
 
-/** CAD, tax extra. Oil change prices include oil and filter. */
-export const FLAT_PRICES = {
-  oil: {
-    standard: { regular: 95, large: 150 },
-    premium: { regular: 120, large: 180 },
-    diesel: { car: 280, suv: 320 },
-    european: 220,
-  },
-  tirePerWheel: { up_to_18: 25, over_18: 30, run_flat: 35, off_road: 45 },
-  acRecharge: { r134a: 150, r1234yf: 230 },
-} as const;
+export { FLAT_PRICE_SLOT_KEYS, FLAT_PRICE_SLOTS, FLAT_PRICES, type FlatPriceSlot } from "./flat-prices";
 
 export const FLAT_SERVICES: readonly FlatService[] = ["oil_change", "tire_change", "ac_recharge"];
 
@@ -117,6 +108,8 @@ export interface FlatOption {
   code: string;
   unitPrice: number;
   quantity: number;
+  /** Which posted price this is (see FLAT_PRICE_SLOTS). */
+  slot: FlatPriceSlot;
 }
 
 export type FlatQuote =
@@ -138,7 +131,7 @@ export function quoteFlatService(facts: VehicleFacts, request: FlatRequest): Fla
   if (facts.premium || request.premiumClaimed) {
     return { status: "team_quote", service: request.service, reason: "premium" };
   }
-  const one = (code: string, unitPrice: number): FlatOption => ({ code, unitPrice, quantity: 1 });
+  const one = (code: string, slot: FlatPriceSlot): FlatOption => ({ code, unitPrice: FLAT_PRICE_SLOTS[slot].price, quantity: 1, slot });
 
   if (request.service === "oil_change") {
     const electric = facts.electric || request.fuel === "electric";
@@ -150,11 +143,11 @@ export function quoteFlatService(facts: VehicleFacts, request: FlatRequest): Fla
         service: "oil_change",
         size: request.size,
         perWheel: false,
-        options: [one(suv ? "oil_diesel_suv" : "oil_diesel_car", suv ? FLAT_PRICES.oil.diesel.suv : FLAT_PRICES.oil.diesel.car)],
+        options: [one(suv ? "oil_diesel_suv" : "oil_diesel_car", suv ? "oil_diesel_suv" : "oil_diesel_car")],
       };
     }
     if (facts.european) {
-      return { status: "ok", service: "oil_change", size: null, perWheel: false, options: [one("oil_european", FLAT_PRICES.oil.european)] };
+      return { status: "ok", service: "oil_change", size: null, perWheel: false, options: [one("oil_european", "oil_european")] };
     }
     const tier = request.size === "large_suv_or_pickup" ? "large" : "regular";
     const grades: OilGrade[] = request.oilGrade ? [request.oilGrade] : ["standard", "premium"];
@@ -163,7 +156,7 @@ export function quoteFlatService(facts: VehicleFacts, request: FlatRequest): Fla
       service: "oil_change",
       size: request.size,
       perWheel: false,
-      options: grades.map((grade) => one(`oil_${grade}`, FLAT_PRICES.oil[grade][tier])),
+      options: grades.map((grade) => one(`oil_${grade}`, `oil_${grade}_${tier}`)),
     };
   }
 
@@ -175,7 +168,7 @@ export function quoteFlatService(facts: VehicleFacts, request: FlatRequest): Fla
       service: "tire_change",
       size: null,
       perWheel: true,
-      options: types.map((type) => ({ code: `tire_${type}`, unitPrice: FLAT_PRICES.tirePerWheel[type], quantity: count })),
+      options: types.map((type) => ({ code: `tire_${type}`, unitPrice: FLAT_PRICES.tirePerWheel[type], quantity: count, slot: `tire_${type}` as const })),
     };
   }
 
@@ -185,7 +178,7 @@ export function quoteFlatService(facts: VehicleFacts, request: FlatRequest): Fla
     service: "ac_recharge",
     size: null,
     perWheel: false,
-    options: refrigerants.map((r) => one(`ac_${r}`, FLAT_PRICES.acRecharge[r])),
+    options: refrigerants.map((r) => one(`ac_${r}`, `ac_${r}`)),
   };
 }
 

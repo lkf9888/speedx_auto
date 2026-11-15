@@ -18,6 +18,8 @@ export interface EstimatePartOption {
   total: number;
   inStockLocally: boolean;
   note: string;
+  /** Flat cards: which posted price this option is, so the owner's price changes can find it. */
+  slot?: string;
 }
 
 /**
@@ -211,6 +213,7 @@ export function buildFlatEstimate(
     total: money(o.unitPrice * o.quantity),
     inStockLocally: false,
     note: "",
+    slot: o.slot,
   }));
   const totals = partOptions.map((p) => p.total);
   const low = Math.min(...totals);

@@ -6,6 +6,9 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ChatProfile } from "@/lib/repair-chat/agent";
 import { runTool as runPublicTool, statusForTool, TOOLS, withLatestVehicle, type ChatEvent } from "@/lib/repair-chat/tools";
+import { shopNow } from "@/lib/repair-chat/booking";
+import { applyPriceOverrides, priceOverrides, rulesFor } from "@/lib/repair-chat/house-rules";
+import { getHouseRulesStore } from "./house-rules-store";
 import { ecoFee, loadTireList, mountingPerTire, sizeKey, type TireListing } from "@/lib/repair-chat/tires";
 import { shopToday } from "@/lib/repair-chat/prompt";
 import {
@@ -487,7 +490,20 @@ async function quoteEachVariant(
 }
 
 /** Mounting the customer's own tires: the price depends only on the tire, so staff needn't name the car. */
-function tireChangeQuote(input: Record<string, unknown>, id: string): StaffQuote {
+/**
+ * The owner's new flat prices running today (set in 调教对外助手), so staff
+ * quote the same flat prices as the website. Never blocks a quote.
+ */
+async function staffPriceOverrides(): Promise<Map<string, number>> {
+  try {
+    const rules = (await getHouseRulesStore()?.list()) ?? [];
+    return priceOverrides(rulesFor(rules, shopNow(new Date()).date, null));
+  } catch {
+    return new Map();
+  }
+}
+
+function tireChangeQuote(input: Record<string, unknown>, id: string, prices: ReadonlyMap<string, number> = new Map()): StaffQuote {
   const parsedCount = readTireCount(input.tire_count);
   const count = typeof parsedCount === "number" ? parsedCount : 4;
   const LABELS: Record<keyof typeof FLAT_PRICES.tirePerWheel, string> = {
@@ -500,7 +516,7 @@ function tireChangeQuote(input: Record<string, unknown>, id: string): StaffQuote
   const types = asked ? [asked] : (Object.keys(LABELS) as Array<keyof typeof LABELS>);
   return buildFlatQuote(
     "换胎（客人自带轮胎）",
-    types.map((type) => ({ label: LABELS[type], quantity: count, unitPrice: FLAT_PRICES.tirePerWheel[type] })),
+    types.map((type) => ({ label: LABELS[type], quantity: count, unitPrice: prices.get(`tire_${type}`) ?? FLAT_PRICES.tirePerWheel[type] })),
     "按每条轮胎收，含拆装和动平衡。",
     id,
   );
@@ -587,7 +603,7 @@ export async function runWorkbenchTool(
     return quoteOutcome(buildPartsQuote(describeVehicle(vehicle), found.partName, position ?? "", found.options, newEstimateId()));
   }
   if (name === "get_flat_price" && input.service === "tire_change" && !(typeof input.vehicle_key === "string" && decodeVehicleKey(input.vehicle_key))) {
-    return quoteOutcome(tireChangeQuote(input, newEstimateId()));
+    return quoteOutcome(tireChangeQuote(input, newEstimateId(), await staffPriceOverrides()));
   }
   if (name === "find_tires") {
     const size = typeof input.size === "string" ? input.size.slice(0, 40) : "";
@@ -603,7 +619,8 @@ export async function runWorkbenchTool(
     return quoteOutcome(buildTireQuote(decoded ? describeVehicle(decoded) : "—", size.toUpperCase(), options, count, newEstimateId()));
   }
   // Vehicle lookup, service search and the shop's flat prices are the public tools as they are.
-  const outcome = await runPublicTool(api, name, input, newEstimateId, "zh-CN", knownVehicleKey);
+  const prices = name === "get_flat_price" ? await staffPriceOverrides() : new Map<string, number>();
+  const outcome = await runPublicTool(api, name, input, newEstimateId, "zh-CN", knownVehicleKey, undefined, undefined, (card) => applyPriceOverrides(card, prices));
   const events: WorkbenchEvent[] = [];
   let content = outcome.content;
   for (const event of outcome.events) {

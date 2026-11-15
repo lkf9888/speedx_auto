@@ -3,7 +3,7 @@ import { handleBookingSlots, handleDefaultBooking } from "@/lib/repair-chat/http
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export function GET(): Response {
+export function GET(): Promise<Response> {
   return handleBookingSlots();
 }
 

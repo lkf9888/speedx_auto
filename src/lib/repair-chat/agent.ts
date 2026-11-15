@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { decodeVehicleKey, describeVehicle, type CatalogApi } from "@/lib/worldpac/catalog";
 import { minimumLaborCard, minimumLaborNote, type EstimateCard } from "./pricing";
 import { shopNow } from "./booking";
-import { applyDiscounts, discountLabel, houseNotesPrompt, rulesFor, withoutDiscount, type HouseRule } from "./house-rules";
+import { applyDiscounts, applyPriceOverrides, closedDays, discountLabel, houseNotesPrompt, priceOverrides, rulesFor, withoutDiscount, type HouseRule } from "./house-rules";
 import { WorldpacError } from "@/lib/worldpac/client";
 import { detectCustomerLanguage, safetyWarning, SYSTEM_PROMPT, turnContext } from "./prompt";
 import { hideHourlyRate } from "./hourly-rate";
@@ -99,8 +99,9 @@ async function publicTool(
   cardLocale: "en" | "zh-CN" | "zh-TW",
   knownVehicleKey: string | null,
   adjustCard?: AdjustCard,
+  extraClosed?: ReadonlySet<string>,
 ): Promise<ToolOutcome> {
-  const outcome = await runTool(api, name, input, newEstimateId, cardLocale, knownVehicleKey, undefined, undefined, adjustCard);
+  const outcome = await runTool(api, name, input, newEstimateId, cardLocale, knownVehicleKey, undefined, undefined, adjustCard, extraClosed);
   return {
     ...outcome,
     events: outcome.events.map((event) =>
@@ -142,15 +143,30 @@ export function publicProfile(
   house: { rules: readonly HouseRule[]; customerPhone: string | null; now?: Date } | null,
 ): ChatProfile<ChatEvent> {
   if (!house) return PUBLIC_PROFILE;
-  const running = rulesFor(house.rules, shopNow(house.now ?? new Date()).date, house.customerPhone);
-  if (running.length === 0) return PUBLIC_PROFILE;
-  const notes = houseNotesPrompt(running);
+  const today = shopNow(house.now ?? new Date()).date;
+  const running = rulesFor(house.rules, today, house.customerPhone);
+  // Closed days are told ahead of time, not only on the day.
+  const upcomingClosed = house.rules.filter((r) => r.kind === "closed" && (r.endDate || r.startDate) >= today);
+  if (running.length === 0 && upcomingClosed.length === 0) return PUBLIC_PROFILE;
+  const notes = houseNotesPrompt(running, upcomingClosed);
+  const prices = priceOverrides(running);
+  const closed = closedDays(house.rules, today);
   return {
     ...PUBLIC_PROFILE,
     turnContext: (request, earlier, vehicle) => `${PUBLIC_PROFILE.turnContext(request, earlier, vehicle)}\n${notes}`,
     runTool: (api, name, input, newEstimateId, cardLocale, knownVehicleKey) =>
-      publicTool(api, name, input, newEstimateId, cardLocale, knownVehicleKey, (card: EstimateCard) =>
-        applyDiscounts(card, running, (rule) => matchScript(discountLabel(rule, cardLocale), SCRIPT_FOR_LOCALE[cardLocale] ?? "English")),
+      publicTool(
+        api,
+        name,
+        input,
+        newEstimateId,
+        cardLocale,
+        knownVehicleKey,
+        (card: EstimateCard) =>
+          applyDiscounts(applyPriceOverrides(card, prices), running, (rule) =>
+            matchScript(discountLabel(rule, cardLocale), SCRIPT_FOR_LOCALE[cardLocale] ?? "English"),
+          ),
+        closed,
       ),
   };
 }

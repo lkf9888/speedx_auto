@@ -6,7 +6,7 @@ import { locales, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
 import { company } from "@/lib/company";
 import { publicProfile, rediscountHeld, runChat, type ChatTurn, type MessagesClient } from "@/lib/repair-chat/agent";
-import type { HouseRule } from "@/lib/repair-chat/house-rules";
+import { closedDays, type HouseRule } from "@/lib/repair-chat/house-rules";
 import { getHouseRulesStore } from "@/lib/workbench/house-rules-store";
 import {
   createLeadNotifier,
@@ -15,7 +15,7 @@ import {
   type Lead,
   type LeadNotifier,
 } from "@/lib/repair-chat/lead";
-import { isBookable, bookableDays, parseClosedDates, SLOT_TIMES } from "@/lib/repair-chat/booking";
+import { isBookable, bookableDays, parseClosedDates, shopNow, SLOT_TIMES } from "@/lib/repair-chat/booking";
 import { composeBookingEmail, composeCallbackEmail, createFollowUpHandler, createMailer, type Mailer } from "@/lib/repair-chat/followup";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 import { SessionStore, type ChatSession } from "@/lib/repair-chat/session";
@@ -548,14 +548,17 @@ async function sendBooking(
   await deps.notify({ type: "booking_requested", lead, locale, at: now.toISOString(), ...booking });
 }
 
-function closedDates() {
-  return parseClosedDates(process.env.REPAIR_BOOKING_CLOSED_DATES);
+/** Closed days: REPAIR_BOOKING_CLOSED_DATES plus the owner's closed-day rules from the workbench. */
+async function closedDates(deps: Pick<RouteDeps, "houseRules">, now: Date): Promise<Set<string>> {
+  const closed = parseClosedDates(process.env.REPAIR_BOOKING_CLOSED_DATES);
+  for (const day of closedDays(await readHouseRules(deps), shopNow(now).date)) closed.add(day);
+  return closed;
 }
 
 /** Open days and half-hour slots for the booking card. */
-export function handleBookingSlots(now = new Date()): Response {
+export async function handleBookingSlots(now = new Date(), deps: Pick<RouteDeps, "houseRules"> = defaultDeps): Promise<Response> {
   return Response.json(
-    { days: bookableDays(now, closedDates()) },
+    { days: bookableDays(now, await closedDates(deps, now)) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -563,7 +566,7 @@ export function handleBookingSlots(now = new Date()): Response {
 /** The visitor picked a time on the booking card: email the shop to confirm it. */
 export async function handleBooking(
   request: Request,
-  deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "allowlist" | "mailer" | "inbox"> & { limiter: RateLimiter },
+  deps: Pick<RouteDeps, "configured" | "notify" | "sessions" | "allowlist" | "mailer" | "inbox" | "houseRules"> & { limiter: RateLimiter },
   now = new Date(),
 ): Promise<Response> {
   if (foreignOrigin(request)) return Response.json({ error: "forbidden" }, { status: 403 });
@@ -579,7 +582,7 @@ export async function handleBooking(
   const date = typeof raw?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.date) ? raw.date : null;
   const time = typeof raw?.time === "string" && (SLOT_TIMES as readonly string[]).includes(raw.time) ? raw.time : null;
   if (!lead || !locale || !date || !time) return Response.json({ error: "invalid" }, { status: 400 });
-  if (!isBookable(date, time, now, closedDates())) return Response.json({ error: "slot" }, { status: 409 });
+  if (!isBookable(date, time, now, await closedDates(deps, now))) return Response.json({ error: "slot" }, { status: 409 });
   if (isEvalRequest(request)) return Response.json({ ok: true });
   if (!trusted(request, deps.allowlist) && deps.limiter.check(clientIp(request))) {
     return Response.json({ error: "busy" }, { status: 429 });
@@ -603,6 +606,7 @@ export function handleDefaultBooking(request: Request): Promise<Response> {
     allowlist: defaultDeps.allowlist,
     mailer: defaultDeps.mailer,
     inbox: defaultDeps.inbox,
+    houseRules: defaultDeps.houseRules,
     limiter: bookingLimiter,
   });
 }

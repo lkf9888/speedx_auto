@@ -53,7 +53,7 @@ describe("booking slots", () => {
   });
 
   it("serves the open days without caching", async () => {
-    const response = handleBookingSlots(new Date("2026-10-13T20:10:00Z"));
+    const response = await handleBookingSlots(new Date("2026-10-13T20:10:00Z"), {});
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(((await response.json()) as { days: unknown[] }).days.length).toBeGreaterThan(20);
   });

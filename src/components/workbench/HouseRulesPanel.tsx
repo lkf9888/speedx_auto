@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { FLAT_PRICE_SLOTS, type FlatPriceSlot } from "@/lib/repair-chat/flat-prices";
 import { EVERYONE, type HouseRule, type HouseRuleChange } from "@/lib/repair-chat/house-rules";
+
+const KIND: Record<HouseRule["kind"], { label: string; badge: string }> = {
+  note: { label: "叮嘱", badge: "bg-sky-100 text-sky-900" },
+  discount: { label: "折扣", badge: "bg-amber-100 text-amber-900" },
+  price: { label: "改价", badge: "bg-emerald-100 text-emerald-900" },
+  closed: { label: "休息日", badge: "bg-rose-100 text-rose-900" },
+};
 import type { RulesProposal } from "@/lib/workbench/house-rules-agent";
 
 interface RulesState {
@@ -56,6 +64,14 @@ function when(rule: { startDate?: string; endDate?: string }, today: string): st
 
 function describe(rule: Partial<HouseRule>): string {
   if (rule.kind === "note") return rule.text ?? "";
+  if (rule.kind === "price") {
+    const slot = FLAT_PRICE_SLOTS[rule.priceSlot as FlatPriceSlot];
+    return slot ? `${slot.zh}：$${slot.price} → $${rule.price}` : `一口价 ${rule.priceSlot ?? ""} → $${rule.price}`;
+  }
+  if (rule.kind === "closed") {
+    const days = !rule.endDate || rule.endDate === rule.startDate ? `${rule.startDate}` : `${rule.startDate} 到 ${rule.endDate}`;
+    return `${days} 不营业，网上预约跳过这几天${rule.text ? `（${rule.text}）` : ""}`;
+  }
   const off = rule.percent ? `${rule.percent}%` : `$${rule.amount}`;
   const what = `${TARGET[rule.appliesTo ?? "all"] ?? ""}${rule.serviceKeyword ? `（名称含“${rule.serviceKeyword}”）` : ""}`;
   return `${what}${rule.on === "labor" ? "工时" : "总价"}减 ${off}；卡片上写“${rule.labelZh || rule.labelEn}”`;
@@ -81,7 +97,7 @@ function ChangeLine({ change, rules, today }: { change: HouseRuleChange; rules: 
     <li>
       <span className="font-semibold text-[#027eb5]">{change.action === "add" ? "新增" : "修改"}</span>{" "}
       <span className="font-semibold">{rule.title}</span>
-      <span className="text-[color:var(--wb-muted)]">（{rule.kind === "discount" ? "折扣" : "叮嘱"} · {when(rule, today)}{phone ? ` · ${tail(phone)}` : ""}）</span>
+      <span className="text-[color:var(--wb-muted)]">（{KIND[rule.kind ?? "note"]?.label ?? "规则"} · {when(rule, today)}{phone ? ` · ${tail(phone)}` : ""}）</span>
       {toEveryone && old?.customerPhone && <span className="ml-1 rounded bg-red-100 px-1 text-xs font-semibold text-red-800">范围从指定客人改成所有客人</span>}
       <br />
       <span className="whitespace-pre-wrap">{describe(rule)}</span>
@@ -182,7 +198,7 @@ export function HouseRulesPanel({ onClose }: { onClose: () => void }) {
         <div>
           <h2 className="text-base font-semibold text-[color:var(--wb-text)]">调教对外助手</h2>
           <p className="text-xs text-[color:var(--wb-muted)]">
-            网站维修页上给客人报价的 AI 会遵守这里的规则：叮嘱它怎么说、怎么处理特殊情况，或者给某段时间、某位客人打折。用中文直接说，AI 起草后你点“确认生效”才会改，一分钟内网站就会照做。进价、时薪、客人联系方式这些红线这里改不了。
+            网站维修页上给客人报价的 AI 会遵守这里的规则：叮嘱它怎么说、怎么处理特殊情况，给某段时间、某位客人打折，直接改一口价，或者设休息日。用中文直接说，AI 起草后你点“确认生效”才会改，一分钟内网站就会照做。进价、时薪、客人联系方式这些红线这里改不了。
           </p>
         </div>
         <button type="button" onClick={onClose} aria-label="关闭调教对外助手" className="rounded px-2 text-lg text-[color:var(--wb-muted)] hover:text-[color:var(--wb-text)]">
@@ -200,8 +216,8 @@ export function HouseRulesPanel({ onClose }: { onClose: () => void }) {
               const ended = Boolean(rule.endDate && rule.endDate < today);
               return (
                 <li key={rule.id} data-testid="house-rule" className={`flex gap-3 py-2 ${ended ? "opacity-50" : ""}`}>
-                  <span className={`mt-0.5 h-fit shrink-0 rounded px-1.5 py-0.5 text-[0.7rem] font-semibold ${rule.kind === "discount" ? "bg-amber-100 text-amber-900" : "bg-sky-100 text-sky-900"}`}>
-                    {rule.kind === "discount" ? "折扣" : "叮嘱"}
+                  <span className={`mt-0.5 h-fit shrink-0 rounded px-1.5 py-0.5 text-[0.7rem] font-semibold ${KIND[rule.kind]?.badge ?? KIND.note.badge}`}>
+                    {KIND[rule.kind]?.label ?? "规则"}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-[color:var(--wb-text)]">{rule.title}</p>
@@ -229,7 +245,7 @@ export function HouseRulesPanel({ onClose }: { onClose: () => void }) {
           <div className="max-h-[45vh] space-y-2 overflow-y-auto px-4 py-3" aria-live="polite">
             {turns.length === 0 && (
               <p className="text-[color:var(--wb-muted)]">
-                例如：“这个月换胎每条减 $5，到 11 月 30 号”、“电话 778-555-0100 的客人换刹车片打九折”、“客人问能不能当天修好，就说要看零件到货，一般当天能做”。
+                例如：“这个月换胎每条减 $5，到 11 月 30 号”、“电话 778-555-0100 的客人换刹车片打九折”、“客人问能不能当天修好，就说要看零件到货，一般当天能做”、“普通机油轿车改成 $89”、“12 月 24 到 26 号休息”。
               </p>
             )}
             {turns.map((turn, index) => (
