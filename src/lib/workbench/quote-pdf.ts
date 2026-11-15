@@ -88,7 +88,7 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
   const rows = sheetRows ?? quote.options.map((o, i) =>
     el("tr", { fontSize: "13px" }, undefined, [
       cell(String(i + 1)),
-      cell(toEnglish([o.brand, o.label].filter(Boolean).join(" ")) + (quote.kind === "labor" ? " (parts & labour)" : "")),
+      cell(toEnglish([o.brand, o.label].filter(Boolean).join(" ")) + (quote.kind === "labor" ? " (parts & labour)" : "") + (o.source === "used" ? " – used part, warranty as stated by the seller" : "")),
       cell(String(o.quantity), "right"),
       cell(unitShown ? money(o.unitPrice) : "", "right"),
       cell(money(o.customerTotal), "right", true),

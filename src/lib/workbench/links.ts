@@ -10,6 +10,7 @@
  * not be listed there, or may be listed with another price and shipping.
  */
 import type { StaffQuote, StaffQuoteOption } from "./quote";
+import { usedSearchLinks } from "./used-part";
 
 export interface ProductLink {
   label: string;
@@ -29,7 +30,8 @@ function tireSize(text: string): string {
   return text.match(/\b(?:LT|P)?\d{3}\/\d{2}Z?R\d{2}\b|\b\d{2}[xX*]\d{1,2}(?:\.\d{1,2})?R\d{2}\b/)?.[0]?.toUpperCase() ?? "";
 }
 
-export function optionLinks(quote: Pick<StaffQuote, "kind" | "supplier" | "service">, option: Pick<StaffQuoteOption, "brand" | "label" | "partNumber">): ProductLink[] {
+export function optionLinks(quote: Pick<StaffQuote, "kind" | "supplier" | "service"> & { vehicle?: string }, option: Pick<StaffQuoteOption, "brand" | "label" | "partNumber"> & { source?: StaffQuoteOption["source"] }): ProductLink[] {
+  if (option.source === "used") return usedSearchLinks(quote.vehicle ?? "", option.label.replace(/\s*\(used.*$/, ""));
   const part = option.partNumber.trim();
   if (quote.kind === "labor" && part) {
     const named = [option.brand, part].filter(Boolean).join(" ");

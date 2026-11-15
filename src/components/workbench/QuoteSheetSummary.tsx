@@ -30,8 +30,8 @@ function inStock(quote: StaffQuote, tier: PriceTier, custom: CustomPricing | nul
 
 const jobName = (q: StaffQuote) => (q.kind === "tires" ? "新轮胎（含安装）" : `${q.service}${q.position ? ` · ${q.position}` : ""}`);
 /** Staff see the part number; the customer copy doesn't (it would let them shop the part elsewhere). */
-const optionName = (o: { brand: string; label: string; partNumber: string }, withNumber = true) =>
-  [o.brand, o.label].filter(Boolean).join(" ") + (withNumber && o.partNumber ? ` #${o.partNumber}` : "");
+const optionName = (o: { brand: string; label: string; partNumber: string; source?: string }, withNumber = true) =>
+  [o.brand, o.label].filter(Boolean).join(" ") + (withNumber && o.partNumber ? ` #${o.partNumber}` : "") + (!withNumber && o.source === "used" ? "（二手件，质保以卖家陈述为准）" : "");
 
 /**
  * The jobs in one reply. Cards for the same job are alternatives, not extras
@@ -63,7 +63,9 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
   const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
 
   const lines = jobs.map((job) => {
-    const cheapest = job.options.reduce<(typeof job.options)[number] | null>((best, o) => (!best || o.option.customerTotal < best.option.customerTotal ? o : best), null);
+    // A used part is only quoted when staff pick it (or when nothing new can be had).
+    const choices = job.options.some((o) => o.option.source !== "used") ? job.options.filter((o) => o.option.source !== "used") : job.options;
+    const cheapest = choices.reduce<(typeof job.options)[number] | null>((best, o) => (!best || o.option.customerTotal < best.option.customerTotal ? o : best), null);
     const chosen = job.options.find((o) => o.key === picked[job.key]) ?? cheapest;
     return { ...job, chosen };
   });
@@ -93,7 +95,7 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
       const first = priced[0]?.chosen?.quote ?? quotes[0];
       const sheet = {
         rows: lines.map((l) => ({
-          label: `${l.name}${l.chosen ? ` – ${optionName(l.chosen.option, false)}` : ""}`,
+          label: `${l.name}${l.chosen ? ` – ${[l.chosen.option.brand, l.chosen.option.label].filter(Boolean).join(" ")}${l.chosen.option.source === "used" ? " (used part, warranty as stated by the seller)" : ""}` : ""}`,
           amount: l.chosen ? l.chosen.option.customerTotal : null,
           ...(l.chosen?.option.eta ? { note: "special order" } : {}),
         })),

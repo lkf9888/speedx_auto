@@ -47,7 +47,7 @@ export interface StaffQuoteOption {
   /** Profit as a share of the customer total, 0–1. */
   margin: number | null;
   /** Where the part comes from when it isn't WorldPac. */
-  source?: "westcan" | "lordco";
+  source?: "westcan" | "lordco" | "used";
   /** Every price field WorldPac sent, by field name. */
   prices: Record<string, number>;
   /** Other raw fields, for working out what WorldPac sends. */
@@ -56,6 +56,8 @@ export interface StaffQuoteOption {
 
 export interface StaffQuote {
   id: string;
+  /** Used part (Kevin, 2026-11-15): search links, and the used option once staff report what they found. */
+  used?: { part: string; links: Array<{ label: string; url: string; copy?: string }> };
   kind: StaffQuoteKind;
   /** Where the options come from; decides the link buttons. */
   supplier?: "worldpac" | "dt" | "partner_tires" | "shop";

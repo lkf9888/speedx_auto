@@ -26,6 +26,7 @@ import {
 } from "@/lib/worldpac/catalog";
 import { westcanLookup } from "@/lib/westcan/nexpart";
 import { checkWestcanOnServer } from "./westcan-server";
+import { buildUsedQuote } from "./used-part";
 import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
 import { dtTireConfigured, getDtTireClient, type DtTireClient } from "@/lib/dt-tire/client";
 import { stockCount, type DtTire } from "@/lib/dt-tire/parse";
@@ -68,6 +69,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - For repairs, find_services then get_estimate. For oil changes, mounting the customer's own tires and A/C recharges, get_flat_price.
 - New tires come from two suppliers. find_tires is the partner price list (good-value brands). find_brand_tires searches DT Tire Hub live for international brands (Michelin, Bridgestone, Continental, Goodyear, Pirelli, Toyo, Yokohama…), sold at MSRP. If staff name an international brand or ask for "大牌/名牌", use find_brand_tires; if they just ask for tires of a size, run both and compare.
 - Each result is shown to staff as a quote card, and several jobs in one reply also get a combined quote sheet with the grand total. Write for someone new to the job (Kevin, 2026-11-14: "even a beginner should be able to quote"): in a few short lines say what the customer pays at the chosen price (parts and labour, before tax), whether the shop does the job, and when the parts arrive if they're ordered in. Don't mention cost, profit, margin, markup, stock counts or part numbers unless staff ask; they're on the card under 各项明细. Never add up totals yourself: repeat the totals on the cards and the quote sheet (the sheet adds the jobs, one option each). If an option is ordered in, say when it arrives. If a job has no price (待补价), say so in one line; don't send staff to call suppliers.
+- Used parts (Kevin, 2026-11-15): only when staff ask for one (usually an engine, transmission, driveshaft or another costly assembly). Never offer a used part to the customer or mention one in text for the customer unless staff ask for that text. Call used_part without part_cost first: the card gives staff the search links (Car-Part Pro, eBay.ca, LKQ Canada) and you tell them in one line to search and come back with the yard, price, shipping and the seller's warranty. When they do, call used_part again with those details; pass the warranty exactly as relayed and never promise one of the shop's own: the customer text says only that the warranty follows the seller's statement. The card shows the used price (the yard's price × 1.3 plus shipping, plus labor); repeat it, don't add it up yourself.
 - Never invent a price, cost or labor time; use only tool results. If a figure is missing (for example no cost on a part), say so.
 - Reply in Chinese. When the staff message is written in English sentences, the whole reply is in English, notes to staff included; car names, part names, VINs and tire sizes in English inside a Chinese message don't count ("2018 Toyota Camry LE 前刹车片" and "205/55R16 四季胎" get Chinese replies). Be brief and practical: short lines, "•" bullets, no headings or bold.
 - Say what every price is: the part's list price, the customer total with labor, or the tire's installed price. Never call a total with labor the part price.
@@ -112,6 +114,34 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - Staff can also see, edit and delete all notes in the "记忆" panel at the top of the workbench.`;
 
 const STAFF_TOOL_NAMES = ["identify_vehicle", "set_vehicle_details", "check_recalls", "find_services", "get_estimate", "quote_extra_part", "get_flat_price", "find_tires"];
+
+const USED_PART: Anthropic.Beta.BetaTool = {
+  name: "used_part",
+  description:
+    "Used part quote, ONLY when staff ask for a used part (engines, transmissions, driveshafts and other costly assemblies). Without part_cost it shows search links (Car-Part Pro, eBay.ca, LKQ Canada) with the labor and no part price; staff search there and come back with what they found. With part_cost it builds the quote: the yard's price × 1.3 plus shipping, plus labor. Shown to staff as a card; the customer text says it is a used part with the seller's warranty and never names the yard or the cost. Leave out any detail staff didn't give.",
+  // Not strict: its optional fields would be nullable unions, and strict tools share a limit of 16 of those.
+  input_schema: {
+    type: "object",
+    properties: {
+      vehicle_key: { type: "string", description: "From identify_vehicle" },
+      service: { type: "string", description: "The job, in English, e.g. Engine R&R. Use the same name as the new-part quote for this job when there is one, so they sit together on the quote sheet." },
+      position: { type: "string", description: "Front / Rear or similar, only when it applies" },
+      labor_hours: { type: "number", description: "Labor hours from the labor guide or the earlier quote; if you don't know them, ask staff or run get_estimate first" },
+      part: { type: "string", description: "The used part in English, e.g. Engine assembly 2.5L" },
+      yard: { type: "string", description: "Where it was found (yard or seller name), if staff said" },
+      grade: { type: "string", description: "Grade (A/B/C) if staff said" },
+      mileage_km: { type: "integer", description: "Mileage in km if staff said" },
+      warranty: { type: "string", description: "The seller's warranty exactly as staff relayed it (e.g. 90 days); never invent one" },
+      part_cost: { type: "number", description: "The yard's price per unit in CAD; leave out until staff have found one" },
+      shipping: { type: "number", description: "Shipping for the whole order in CAD; 0 when staff pick it up" },
+      quantity: { type: "integer", description: "Units; default 1" },
+      eta: { type: "string", description: "How long until it arrives, as staff said it, e.g. 3 days" },
+      part_number: { type: "string", description: "Part or stock number if staff gave one" },
+    },
+    required: ["vehicle_key", "service", "part"],
+    additionalProperties: false,
+  },
+};
 
 const FIND_BRAND_TIRES: Anthropic.Beta.BetaTool = {
   name: "find_brand_tires",
@@ -330,7 +360,7 @@ export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => ST
     };
   }
   return tool;
-}).concat(FIND_BRAND_TIRES, FIND_PARTS, DRAFT_ALLDATA_ESTIMATE, PROPOSE_MEMORY, FIND_FLEET_CAR, ASK_PRICE_TIER, SET_PRICE_TIER);
+}).concat(FIND_BRAND_TIRES, FIND_PARTS, USED_PART, DRAFT_ALLDATA_ESTIMATE, PROPOSE_MEMORY, FIND_FLEET_CAR, ASK_PRICE_TIER, SET_PRICE_TIER);
 
 const MAX_BRAND_TIRES = 12;
 export const MAX_TIRE_COUNT = 20;
@@ -651,6 +681,33 @@ export async function runWorkbenchTool(
     }
     if (found.status === "no_parts") return { content: JSON.stringify({ status: "not_found", note: "No priced part found by name; try find_parts." }), isError: false, events: [] };
     return quoteOutcome(buildLaborQuote(describeVehicle(vehicle), found.job, newEstimateId()));
+  }
+  if (name === "used_part") {
+    const vehicle = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;
+    if (!vehicle) return { content: JSON.stringify({ error: "Unknown vehicle_key. Call identify_vehicle first." }), isError: true, events: [] };
+    const str = (v: unknown) => (typeof v === "string" ? v : null);
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    const quote = buildUsedQuote(
+      {
+        vehicle: describeVehicle(vehicle),
+        service: str(input.service) ?? "",
+        position: str(input.position),
+        laborHours: num(input.labor_hours),
+        part: str(input.part) ?? "",
+        yard: str(input.yard),
+        grade: str(input.grade),
+        mileageKm: num(input.mileage_km),
+        warranty: str(input.warranty),
+        partCost: num(input.part_cost),
+        shipping: num(input.shipping),
+        quantity: num(input.quantity),
+        eta: str(input.eta),
+        partNumber: str(input.part_number),
+      },
+      newEstimateId(),
+    );
+    if (!quote) return { content: JSON.stringify({ error: "A used part needs the labor hours and the part name. Ask staff, or run get_estimate for the job first." }), isError: true, events: [] };
+    return quoteOutcome(quote);
   }
   if (name === "find_parts") {
     const vehicle = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;
