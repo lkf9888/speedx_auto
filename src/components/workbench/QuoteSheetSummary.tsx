@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { withFinalPrices } from "@/lib/workbench/final-price";
-import { atTier, TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
+import { atTier, TIER_HINT, TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
 import type { StaffQuote } from "@/lib/workbench/quote";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
@@ -141,22 +141,24 @@ export function distinctJobs(quotes: StaffQuote[]): number {
   return new Set(quotes.filter((q) => q.kind !== "team_quote").map((q) => (q.kind === "tires" ? "tires" : `${q.service}|${q.position}`))).size;
 }
 
-/** The assistant asks which price to quote: three buttons; the choice is saved and sent as the next message. */
+/** The assistant asks which price to quote, in the chat: one button per price with its rule; the choice is saved and sent as the next message. */
 export function PriceChoiceCard({ current, onChoose, disabled }: { current?: PriceTier; onChoose: (tier: PriceTier) => void; disabled?: boolean }) {
   const tiers: PriceTier[] = ["retail", "referral", "friend"];
   return (
     <div data-testid="price-choice" className="ml-auto w-full max-w-xl rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-[#111b21]">
-      <p className="text-xs font-semibold text-sky-900">按哪个价报？</p>
-      <div className="mt-2 flex flex-wrap gap-2">
+      <p className="text-xs font-semibold text-sky-900">按哪个价报？{current ? `（现在按${TIER_LABEL[current]}，点别的可以换）` : ""}</p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
         {tiers.map((tier) => (
           <button
             key={tier}
             type="button"
             disabled={disabled}
+            aria-pressed={current === tier}
             onClick={() => onChoose(tier)}
-            className={`rounded-full px-4 py-1.5 text-xs font-semibold ${current === tier ? "bg-sky-700 text-white" : "border border-sky-300 bg-white text-sky-900 hover:bg-sky-100"} disabled:opacity-50`}
+            className={`rounded-lg px-3 py-2 text-left disabled:opacity-50 ${current === tier ? "bg-sky-700 text-white" : "border border-sky-300 bg-white text-sky-900 hover:bg-sky-100"}`}
           >
-            {TIER_LABEL[tier]}
+            <span className="block text-sm font-semibold">{TIER_LABEL[tier]}</span>
+            <span className={`mt-0.5 block text-[11px] leading-4 ${current === tier ? "text-sky-100" : "text-sky-800/80"}`}>{TIER_HINT[tier]}</span>
           </button>
         ))}
       </div>

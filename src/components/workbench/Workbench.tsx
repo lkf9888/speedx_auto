@@ -15,7 +15,7 @@ import {
   type Turn as SharedTurn,
   WEBSITE_CUSTOMER,
 } from "@/lib/workbench/conversation-types";
-import { PRICE_TIERS, TIER_HINT, TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
+import { TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
 import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
@@ -901,26 +901,6 @@ export function Workbench({ email }: { email: string }) {
           </main>
 
           <form onSubmit={onSubmit} className="bg-[color:var(--wb-header)] px-3 py-2">
-            {currentId && active.turns.length > 0 && !active.website && (
-              <div className="mb-1.5 flex items-center gap-2 text-xs text-[color:var(--wb-muted)]">
-                <label htmlFor="price-tier" className="shrink-0 whitespace-nowrap">报价按</label>
-                <select
-                  id="price-tier"
-                  value={active.priceTier ?? ""}
-                  onChange={(e) => e.target.value && void choosePriceTier(active.id, e.target.value as PriceTier, false)}
-                  title={active.priceTier ? TIER_HINT[active.priceTier] : "还没选：AI 报价前会先问"}
-                  className="shrink-0 rounded-md border border-[color:var(--wb-line)] bg-[#fff] px-2 py-0.5 text-xs text-[#111b21]"
-                >
-                  {!active.priceTier && <option value="">还没选</option>}
-                  {PRICE_TIERS.map((tier) => (
-                    <option key={tier} value={tier}>
-                      {TIER_LABEL[tier]}
-                    </option>
-                  ))}
-                </select>
-                {active.priceTier && <span className="hidden truncate sm:inline">{TIER_HINT[active.priceTier]}</span>}
-              </div>
-            )}
             {(files.length > 0 || fileNotice) && (
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 {files.map((file, index) => (

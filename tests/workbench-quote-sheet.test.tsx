@@ -139,8 +139,15 @@ describe("choosing the price", () => {
   it("shows three buttons and reports the pick", async () => {
     const onChoose = vi.fn();
     render(<PriceChoiceCard onChoose={onChoose} />);
-    await userEvent.click(screen.getByRole("button", { name: "朋友价" }));
+    await userEvent.click(screen.getByRole("button", { name: /^朋友价/ }));
     expect(onChoose).toHaveBeenCalledWith("friend");
+  });
+
+  it("explains each price in the chat card and marks the one in use", () => {
+    render(<PriceChoiceCard current="referral" onChoose={() => {}} />);
+    expect(screen.getByRole("button", { name: /^推荐价/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^朋友价/ })).toHaveTextContent("WorldPac 零件进价 + $100");
+    expect(screen.getByText(/现在按推荐价/)).toBeInTheDocument();
   });
 
   it("is saved on the conversation from the page or from the chat, and sent to the model", async () => {
