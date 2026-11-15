@@ -1,6 +1,6 @@
 /**
- * Server-side session against Westcan's Nexpart site (3501660.nexpart.com),
- * so a Westcan lookup doesn't depend on a staff computer's Chrome extension.
+ * Server-side session against a supplier's Nexpart site (Westcan 3501660, Lordco 1000027),
+ * so a lookup doesn't depend on a staff computer's Chrome extension.
  * Same idea as the DT Tire client: sign in with the shop's own account from
  * env vars, keep the session cookies in memory, sign in again when it expires.
  *
@@ -16,8 +16,9 @@
 import { CookieJar } from "@/lib/worldpac/client";
 import type { WestcanLookup } from "./nexpart";
 
-const ORIGIN = "https://3501660.nexpart.com";
-const CATALOG = `${ORIGIN}/acesCat.php?glsId=aces`;
+/** Nexpart sites: one per supplier account (Westcan 3501660, Lordco 1000027); the pages and endpoints are the same. */
+export const WESTCAN_ORIGIN = "https://3501660.nexpart.com";
+export const LORDCO_ORIGIN = "https://1000027.nexpart.com";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REDIRECTS = 8;
 /** After a refusal (bad password, verification wanted) the account is left alone this long. */
@@ -68,7 +69,7 @@ export function engineScore(want: string, desc: string): number {
 
 const clip = (v: unknown, max = 120) => (v === null || v === undefined ? "" : String(v).slice(0, max));
 
-export class WestcanClient {
+export class NexpartClient {
   private readonly jar = new CookieJar();
   private csrf: string | null = null;
   private loginInFlight: Promise<void> | null = null;
@@ -78,7 +79,12 @@ export class WestcanClient {
     private readonly credentials: { username: string; password: string },
     private readonly fetchImpl: FetchLike = fetch,
     private readonly now: () => number = Date.now,
+    private readonly origin: string = WESTCAN_ORIGIN,
   ) {}
+
+  private get catalog() {
+    return `${this.origin}/acesCat.php?glsId=aces`;
+  }
 
   /** One Westcan lookup. Throws WestcanServerError when the server can't do it. */
   async search(lookup: WestcanLookup): Promise<WestcanSearchAnswer> {
@@ -128,7 +134,7 @@ export class WestcanClient {
 
   private async signIn(username: string, password: string): Promise<void> {
     // The login page sets the session cookie the form post needs.
-    const page = await this.request(`${ORIGIN}/login-nexpart.html`, { headers: { Accept: "text/html" } });
+    const page = await this.request(`${this.origin}/login-nexpart.html`, { headers: { Accept: "text/html" } });
     await page.body?.cancel();
     if (!page.ok) throw new WestcanServerError(`Nexpart login page returned ${page.status}`, "error");
 
@@ -140,9 +146,9 @@ export class WestcanClient {
       product: "1",
       return_url: "login-nexpart.html",
     });
-    const post = await this.request(`${ORIGIN}/do_login.php`, {
+    const post = await this.request(`${this.origin}/do_login.php`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "text/html", Origin: ORIGIN, Referer: `${ORIGIN}/login-nexpart.html` },
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "text/html", Origin: this.origin, Referer: `${this.origin}/login-nexpart.html` },
       body: form.toString(),
     });
     await post.body?.cancel();
@@ -151,10 +157,10 @@ export class WestcanClient {
     // A refusal sends us back to the login page with err=1 (checked live with a made-up account).
     if (/err=|red=failed/i.test(location)) throw new WestcanServerError("Nexpart rejected the username or password", "login_failed");
     if (VERIFICATION.test(location)) throw new WestcanServerError("Nexpart wants a verification step", "verification_required");
-    await this.follow(new URL(location, ORIGIN).toString());
+    await this.follow(new URL(location, this.origin).toString());
 
     // Signed in only when the catalog page hands out its security token.
-    const catalog = await this.request(CATALOG, { headers: { Accept: "text/html" } });
+    const catalog = await this.request(this.catalog, { headers: { Accept: "text/html" } });
     if (catalog.status >= 300 && catalog.status < 400) {
       const where = catalog.headers.get("location") ?? "";
       await catalog.body?.cancel();
@@ -174,7 +180,7 @@ export class WestcanClient {
   private async follow(start: string): Promise<void> {
     let url = start;
     for (let hop = 0; hop < MAX_REDIRECTS; hop += 1) {
-      if (new URL(url).origin !== ORIGIN) throw new WestcanServerError("Nexpart login redirected off-site", "error");
+      if (new URL(url).origin !== this.origin) throw new WestcanServerError("Nexpart login redirected off-site", "error");
       const response = await this.request(url, { headers: { Accept: "text/html" } });
       const location = response.headers.get("location");
       await response.body?.cancel();
@@ -191,14 +197,14 @@ export class WestcanClient {
 
   /** One POST to a Nexpart catalog endpoint; throws SessionExpired when it answers with the login page. */
   private async post(path: string, params: Params): Promise<unknown> {
-    const response = await this.request(`${ORIGIN}/${path}?r=${this.now()}`, {
+    const response = await this.request(`${this.origin}/${path}?r=${this.now()}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest",
         "x-csrf-token": this.csrf ?? "",
-        Origin: ORIGIN,
-        Referer: CATALOG,
+        Origin: this.origin,
+        Referer: this.catalog,
       },
       body: new URLSearchParams(params).toString(),
     });
@@ -347,14 +353,27 @@ const VERIFICATION = /verif|otp|2fa|mfa|two.?factor|one.?time|confirm.?(device|c
 
 class SessionExpired extends Error {}
 
+export { NexpartClient as WestcanClient };
+
 export function westcanServerConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   return Boolean(env.WESTCAN_USERNAME && env.WESTCAN_PASSWORD);
 }
 
-let shared: WestcanClient | null = null;
+let westcan: NexpartClient | null = null;
+let lordco: NexpartClient | null = null;
 
-/** Process-wide client built from env vars; one Nexpart session shared by all staff. */
-export function getWestcanClient(): WestcanClient {
-  if (!shared) shared = new WestcanClient({ username: process.env.WESTCAN_USERNAME ?? "", password: process.env.WESTCAN_PASSWORD ?? "" });
-  return shared;
+/** Process-wide Westcan client built from env vars; one Nexpart session shared by all staff. */
+export function getWestcanClient(): NexpartClient {
+  if (!westcan) westcan = new NexpartClient({ username: process.env.WESTCAN_USERNAME ?? "", password: process.env.WESTCAN_PASSWORD ?? "" });
+  return westcan;
+}
+
+export function lordcoServerConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.LORDCO_USERNAME && env.LORDCO_PASSWORD);
+}
+
+/** Lordco's own Nexpart account (LORDCO_USERNAME / LORDCO_PASSWORD). */
+export function getLordcoClient(): NexpartClient {
+  if (!lordco) lordco = new NexpartClient({ username: process.env.LORDCO_USERNAME ?? "", password: process.env.LORDCO_PASSWORD ?? "" }, fetch, Date.now, LORDCO_ORIGIN);
+  return lordco;
 }

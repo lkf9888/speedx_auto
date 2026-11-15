@@ -47,7 +47,7 @@ export interface StaffQuoteOption {
   /** Profit as a share of the customer total, 0–1. */
   margin: number | null;
   /** Where the part comes from when it isn't WorldPac. */
-  source?: "westcan";
+  source?: "westcan" | "lordco";
   /** Every price field WorldPac sent, by field name. */
   prices: Record<string, number>;
   /** Other raw fields, for working out what WorldPac sends. */
@@ -77,7 +77,7 @@ export interface StaffQuote {
    * the server merges the answer (see westcan.ts). Order: WorldPac local →
    * Westcan → WorldPac ordered in → 待补价.
    */
-  westcan?: { lookup: WestcanLookup; checked?: { at: string; found: number; vehicle?: string; note?: string }; /** Why the server's own Nexpart session couldn't check (staff's extension then does). */ server?: "not_configured" | "login_failed" | "verification_required" | "error" };
+  westcan?: { lookup: WestcanLookup; checked?: { at: string; found: number; vehicle?: string; note?: string }; /** Why the server's own Nexpart session couldn't check (staff's extension then does). */ lordco?: { at: string; found: number; note?: string }; server?: "not_configured" | "login_failed" | "verification_required" | "error" };
 }
 
 const money = (value: number) => Math.round(value * 100) / 100;

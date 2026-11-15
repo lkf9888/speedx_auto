@@ -13,6 +13,8 @@ import { etaLabel, finish, FRIEND_OTHER_MARKUP, type StaffQuote, type StaffQuote
 
 /** Westcan parts: our cost times this is the customer's part price. */
 export const WESTCAN_MARKUP = 1.3;
+/** Lordco (Nexpart site 1000027): same rule, cost times 1.3 (Kevin, 2026-11-15). */
+export const LORDCO_MARKUP = 1.3;
 const MAX_OPTIONS = 8;
 const MAX_ROWS = 50;
 
@@ -114,8 +116,15 @@ function pairSides(parts: Part[]): Part[] {
   return [...plain, ...sets];
 }
 
-function toOption(p: Part, quote: StaffQuote): StaffQuoteOption & { local: boolean } {
-  const unitPrice = money(p.unitCost * WESTCAN_MARKUP);
+type Supplier = "westcan" | "lordco";
+const SUPPLIERS: Record<Supplier, { name: string; markup: number; here: string; other: string }> = {
+  westcan: { name: "Westcan", markup: WESTCAN_MARKUP, here: "Westcan Richmond 有货", other: "Westcan 其他分店有货" },
+  lordco: { name: "Lordco", markup: LORDCO_MARKUP, here: "Lordco 本店有货", other: "Lordco 其他分店有货" },
+};
+
+function toOption(p: Part, quote: StaffQuote, supplier: Supplier = "westcan"): StaffQuoteOption & { local: boolean } {
+  const info = SUPPLIERS[supplier];
+  const unitPrice = money(p.unitCost * info.markup);
   const partsTotal = money(unitPrice * p.quantity);
   const walkIn = quote.labor?.walkIn ?? 0;
   const referral = quote.labor?.referral ?? 0;
@@ -131,15 +140,15 @@ function toOption(p: Part, quote: StaffQuote): StaffQuoteOption & { local: boole
       unitPrice,
       unitCost: p.unitCost,
       core: null,
-      stock: local ? `Westcan Richmond 有货（${p.here}）` : `Westcan 其他分店有货（${p.other}）`,
+      stock: local ? `${info.here}（${p.here}）` : `${info.other}（${p.other}）`,
       ...(eta ? { eta } : {}),
-      source: "westcan",
+      source: supplier,
       customerTotal: money(partsTotal + walkIn),
       referralTotal: money(partsTotal + referral),
       friendTotal: money(p.unitCost * p.quantity * FRIEND_OTHER_MARKUP + referral),
       costTotal: money(p.unitCost * p.quantity),
       prices: { priceCost: p.unitCost, ...(p.list !== null ? { priceList: p.list } : {}) },
-      fields: { supplier: "Westcan", position: p.position },
+      fields: { supplier: info.name, position: p.position },
     }),
     local,
   };
@@ -190,6 +199,51 @@ export function mergeWestcan(quote: StaffQuote, answer: WestcanAnswer, now = new
     westcan: { ...quote.westcan, checked: checked(unique.length) },
   };
   // Saved final prices point at option numbers that just moved.
+  delete merged.final;
+  return { ...merged, customerText: customerText(merged) };
+}
+
+/** A Nexpart option offered from a branch we can pick up from today. */
+const nexpartLocal = (o: StaffQuoteOption) => Boolean(o.source) && !o.outOfStock && !o.eta;
+
+/** Whether Lordco is worth asking: nothing local from WorldPac or Westcan yet. */
+export function needsLordco(quote: StaffQuote): boolean {
+  return Boolean(quote.westcan?.checked) && !quote.westcan?.lordco && !quote.options.some((o) => worldpacLocal(o) || nexpartLocal(o));
+}
+
+/**
+ * Lordco's answer merged in after Westcan's (Kevin, 2026-11-15: Westcan first,
+ * Lordco next, then WorldPac ordered in). Only used when neither WorldPac nor
+ * Westcan has the part locally; Lordco's local stock then hides the next-day
+ * branch options.
+ */
+export function mergeLordco(quote: StaffQuote, answer: WestcanAnswer, now = new Date()): StaffQuote {
+  if (!quote.westcan || quote.westcan.lordco) return quote;
+  const at = now.toISOString();
+  const done = (found: number, note?: string) => ({ ...quote, westcan: { ...quote.westcan!, lordco: { at, found, ...(note ? { note } : {}) } } });
+  if (answer.status !== "ok") return done(0, "Lordco 的目录里没找到这台车。");
+  const offered = pairSides(readWestcanRows(answer.rows, quote.westcan.lookup.multiplier, quote.westcan.lookup.partTypes))
+    .map((p) => toOption(p, quote, "lordco"))
+    .sort((a, b) => Number(b.local) - Number(a.local) || a.customerTotal - b.customerTotal);
+  const unique = offered.filter((o, i) => offered.findIndex((x) => x.brand === o.brand && x.partNumber === o.partNumber) === i).slice(0, MAX_OPTIONS);
+  if (unique.length === 0) return done(0, "Lordco 也没有能用的现货。");
+  if (!needsLordco(quote) && quote.options.some((o) => worldpacLocal(o) || nexpartLocal(o))) return done(unique.length, "已有本地有货，没用 Lordco。");
+  const shown = quote.options.filter((o) => o.source === "westcan" && !o.outOfStock);
+  const mine = unique.map(({ local, ...o }) => ({ ...o, _local: local }));
+  const all = [...shown.map((o) => ({ ...o, _local: false })), ...mine];
+  const anyLocal = mine.some((o) => o._local);
+  const sorted = all.sort((a, b) => Number(b._local) - Number(a._local) || a.customerTotal - b.customerTotal);
+  const ranked = sorted.map(({ _local, ...o }) => (anyLocal && !_local ? { ...o, eta: undefined, outOfStock: true } : o));
+  const rest = quote.options.filter((o) => !(o.source === "westcan" && !o.outOfStock));
+  const merged: StaffQuote = {
+    ...quote,
+    options: [...ranked, ...rest].map((o) => {
+      const { eta, ...others } = o;
+      return eta ? { ...others, eta } : others;
+    }),
+    notes: [...quote.notes.filter((n) => !n.startsWith("Lordco")), "Lordco 零件按拿货价 × 1.3 报价。顺序：WorldPac 本地 → Westcan → Lordco → WorldPac 调货。"],
+    westcan: { ...quote.westcan, lordco: { at, found: unique.length } },
+  };
   delete merged.final;
   return { ...merged, customerText: customerText(merged) };
 }

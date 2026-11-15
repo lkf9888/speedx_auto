@@ -286,14 +286,14 @@ export function StaffQuoteCard({
                     )}
                     <div className="font-medium text-ink-900">{[o.brand, o.label].filter(Boolean).join(" ")}</div>
                     {o.partNumber && <div className="font-mono text-xs text-ink-500">#{o.partNumber}</div>}
-                    {o.source === "westcan" && (
+                    {o.source && (
                       <div data-testid="westcan-badge" className="mt-0.5 mr-1 inline-block rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-semibold text-sky-900">
-                        Westcan{o.eta ? "" : " Richmond 有货"}
+                        {o.source === "lordco" ? "Lordco" : "Westcan"}{o.eta ? "" : o.source === "lordco" ? " 本店有货" : " Richmond 有货"}
                       </div>
                     )}
                     {o.eta && (
                       <div data-testid="eta" className="mt-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
-                        {o.source === "westcan" ? "其他分店调货" : "本地没货，调货"} · {o.eta}
+                        {o.source ? "其他分店调货" : "本地没货，调货"} · {o.eta}
                       </div>
                     )}
                     {o.core !== null && <div className="text-xs text-amber-700">核心件押金 {money(o.core)}</div>}
