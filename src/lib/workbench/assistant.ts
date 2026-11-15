@@ -25,6 +25,7 @@ import {
   type VehicleRef,
 } from "@/lib/worldpac/catalog";
 import { westcanLookup } from "@/lib/westcan/nexpart";
+import { checkWestcanOnServer } from "./westcan-server";
 import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
 import { dtTireConfigured, getDtTireClient, type DtTireClient } from "@/lib/dt-tire/client";
 import { stockCount, type DtTire } from "@/lib/dt-tire/parse";
@@ -461,7 +462,11 @@ const quoteOutcome = (quote: StaffQuote) => ({
     status: "ok",
     summary: summarizeStaffQuote(quote),
     ...(quote.westcan
-      ? { westcan: "No WorldPac local stock: the page is now checking Westcan from staff's Chrome and the card will update by itself (Westcan comes before WorldPac ordered-in parts). Say the card shows the final parts price; don't present the ordered-in price as final." }
+      ? {
+          westcan: quote.westcan.checked
+            ? `No WorldPac local stock, so Westcan was checked just now: ${quote.westcan.checked.note ?? `${quote.westcan.checked.found} option(s)`}. The options in the summary are final (Westcan comes before WorldPac ordered-in parts).`
+            : "No WorldPac local stock: the page is now checking Westcan from staff's Chrome and the card will update by itself (Westcan comes before WorldPac ordered-in parts). Say the card shows the final parts price; don't present the ordered-in price as final.",
+        }
       : {}),
   }),
   isError: false,
@@ -476,7 +481,8 @@ async function withWestcan(quote: StaffQuote, vehicle: VehicleRef, partCategory:
     westcanLookup(vehicle, partCategory, position, { bothSides }).catch(() => null),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
   ]);
-  return lookup ? { ...quote, westcan: { lookup } } : quote;
+  // The server's own Nexpart sign-in first; the staff extension is the fallback.
+  return lookup ? checkWestcanOnServer(quote, lookup) : quote;
 }
 
 const MAX_VARIANTS = 3;
