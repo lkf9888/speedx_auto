@@ -247,6 +247,11 @@ export function StaffQuoteCard({
                     )}
                     <div className="font-medium text-ink-900">{[o.brand, o.label].filter(Boolean).join(" ")}</div>
                     {o.partNumber && <div className="font-mono text-xs text-ink-500">#{o.partNumber}</div>}
+                    {o.eta && (
+                      <div data-testid="eta" className="mt-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
+                        本地没货，调货 · {o.eta}
+                      </div>
+                    )}
                     {o.core !== null && <div className="text-xs text-amber-700">核心件押金 {money(o.core)}</div>}
                     <ProductLinks links={optionLinks(quote, o)} />
                   </td>

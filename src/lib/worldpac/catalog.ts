@@ -63,6 +63,10 @@ export interface PartOption {
   quantity: number;
   inStockLocally: boolean;
   note: string;
+  /** Left or right part, when WorldPac sells the sides as different part numbers. */
+  side?: "L" | "R";
+  /** How many different part numbers this option is (2 for a left + right set). */
+  partCount?: number;
 }
 
 export type ServiceQuote =
@@ -570,6 +574,14 @@ function pickPrimaryCategory(
   return scored[0].score > 0 ? scored[0].a : candidates[0];
 }
 
+/** Left or right, from the part's position ("Front Left") or its description. */
+function sideOf(q: Record<string, unknown>): "L" | "R" | undefined {
+  const text = `${String((q.position as { description?: string } | undefined)?.description ?? "")} ${String(q.partDescription ?? "")}`;
+  const left = /\b(left|LH|driver)\b/i.test(text);
+  const right = /\b(right|RH|passenger)\b/i.test(text);
+  return left === right ? undefined : left ? "L" : "R";
+}
+
 /** Only these fields may leave this module for a part; nothing price-related but list. */
 /**
  * Whether a quoted part is for the labor operation's position. Same position
@@ -616,9 +628,77 @@ export function sanitizePartQuotes(
       quantity: Number.isInteger(quantity) && quantity > 0 && quantity <= 8 ? quantity : 1,
       inStockLocally: /local/i.test(String(q.availability ?? "")) && Number(q.qtyAvailable) > 0,
       note: String(app?.applicationNote ?? "").slice(0, 160),
+      ...(sideOf(q) ? { side: sideOf(q) } : {}),
     });
   }
-  return dedupe(options, (o) => `${o.series}|${o.description}|${o.listPrice}|${o.quantity}`, (a, b) => Number(b.inStockLocally) - Number(a.inStockLocally));
+  return dedupe(options, (o) => `${o.series}|${o.description}|${o.listPrice}|${o.quantity}|${o.side ?? ""}`, (a, b) => Number(b.inStockLocally) - Number(a.inStockLocally));
+}
+
+/** Jobs done on a whole axle, where a left and a right part are both needed (brake rotors, pads, shoes). */
+export const AXLE_SET_JOB = /\b(brake\s+)?(rotor|disc|pads?|shoes?)\b/i;
+
+const SIDE_WORDS = /\s*[,(-]?\s*\b(left|right|LH|RH|driver|passenger)\b( side)?\)?/gi;
+
+/**
+ * Left and right parts sold as different part numbers become one "left + right"
+ * option: both prices added, one labor charge on the card. Parts already sold
+ * as a set, or without a side, are left as they are.
+ */
+export function pairSides<T extends PartOption>(options: T[]): T[] {
+  const key = (o: T) => {
+    const extra = o as unknown as { brand?: string };
+    return `${extra.brand ?? ""}|${o.series}|${o.description.replace(SIDE_WORDS, "").trim().toLowerCase()}`;
+  };
+  const lefts = new Map<string, T[]>();
+  const rights = new Map<string, T[]>();
+  for (const o of options) {
+    if (o.side === "L") lefts.set(key(o), [...(lefts.get(key(o)) ?? []), o]);
+    if (o.side === "R") rights.set(key(o), [...(rights.get(key(o)) ?? []), o]);
+  }
+  const used = new Set<T>();
+  const sets: T[] = [];
+  const cheapest = (list: T[]) => [...list].sort((a, b) => Number(b.inStockLocally) - Number(a.inStockLocally) || a.listPrice - b.listPrice)[0];
+  for (const [k, ls] of lefts) {
+    const rs = rights.get(k);
+    if (!rs?.length) continue;
+    const l = cheapest(ls);
+    const r = cheapest(rs);
+    used.add(l);
+    used.add(r);
+    sets.push(combineSides(l, r));
+  }
+  return [...sets, ...options.filter((o) => !used.has(o))].sort((a, b) => a.listPrice * a.quantity - b.listPrice * b.quantity);
+}
+
+function combineSides<T extends PartOption>(l: T, r: T): T {
+  const ls = l as unknown as Partial<StaffPartOption>;
+  const rs = r as unknown as Partial<StaffPartOption>;
+  const money = (n: number) => Math.round(n * 100) / 100;
+  const base: PartOption = {
+    description: `${l.description.replace(SIDE_WORDS, "").trim()} (left + right set)`,
+    series: l.series,
+    listPrice: money(l.listPrice * l.quantity + r.listPrice * r.quantity),
+    quantity: 1,
+    inStockLocally: l.inStockLocally && r.inStockLocally,
+    note: [l.note, r.note].filter(Boolean).join(" ").slice(0, 160),
+    partCount: (l.partCount ?? 1) + (r.partCount ?? 1),
+  };
+  if (!ls.prices || !rs.prices) return base as T;
+  const prices: Record<string, number> = {};
+  for (const k of new Set([...Object.keys(ls.prices), ...Object.keys(rs.prices)])) {
+    prices[k] = money((ls.prices[k] ?? 0) * l.quantity + (rs.prices[k] ?? 0) * r.quantity);
+  }
+  const notLocal = !l.inStockLocally ? ls : !r.inStockLocally ? rs : ls;
+  const staff: StaffPartOption = {
+    ...base,
+    prices,
+    partNumber: `${ls.partNumber ?? ""} + ${rs.partNumber ?? ""}`,
+    brand: ls.brand ?? "",
+    availability: notLocal.availability ?? "",
+    qtyAvailable: ls.qtyAvailable == null || rs.qtyAvailable == null ? null : Math.min(ls.qtyAvailable, rs.qtyAvailable),
+    fields: ls.fields ?? {},
+  };
+  return staff as unknown as T;
 }
 
 /**
@@ -883,7 +963,8 @@ async function extraPartData(api: CatalogApi, vehicle: VehicleRef, kind: ExtraPa
 export async function quoteExtraPart(api: CatalogApi, vehicle: VehicleRef, kind: ExtraPart, position: string, count = 1): Promise<ExtraPartJob<PartOption>> {
   const data = await extraPartData(api, vehicle, kind, position, count);
   if (data.status === "has_labor_job") return data;
-  let options = data.pna ? representativeOptions(filterRealisticOptions(sanitizePartQuotes(data.pna, null))) : [];
+  // Rotors are per axle: a left and a right part number count as one set.
+  let options = data.pna ? representativeOptions(filterRealisticOptions(kind === "brake_rotor" ? pairSides(sanitizePartQuotes(data.pna, null)) : sanitizePartQuotes(data.pna, null))) : [];
   if (kind === "brake_caliper") options = options.map((o) => ({ ...o, quantity: count }));
   if (options.length === 0) return { status: "no_parts" };
   return { status: "ok", job: { status: "ok", ...data.common, partOptions: options } };
@@ -893,7 +974,7 @@ export async function quoteExtraPart(api: CatalogApi, vehicle: VehicleRef, kind:
 export async function quoteExtraPartForStaff(api: CatalogApi, vehicle: VehicleRef, kind: ExtraPart, position: string, count = 1): Promise<ExtraPartJob<StaffPartOption>> {
   const data = await extraPartData(api, vehicle, kind, position, count);
   if (data.status === "has_labor_job") return data;
-  let options = data.pna ? staffPartQuotes(data.pna, null) : [];
+  let options = data.pna ? (kind === "brake_rotor" ? pairSides(staffPartQuotes(data.pna, null)) : staffPartQuotes(data.pna, null)) : [];
   if (kind === "brake_caliper") options = options.map((o) => ({ ...o, quantity: count }));
   if (options.length === 0) return { status: "no_parts" };
   return { status: "ok", job: { status: "ok", ...data.common, partOptions: options } };
@@ -922,8 +1003,10 @@ export async function quoteService(
 
   const data = await loadServiceData(api, vehicle, serviceId, position);
   if (data.status !== "ok") return data;
+  // A whole-axle job needs the left and the right part: they count as one set.
+  const sets = (options: PartOption[]) => (AXLE_SET_JOB.test(data.serviceName) ? pairSides(options) : options);
   let partOptions = data.pna
-    ? representativeOptions(filterRealisticOptions(sanitizePartQuotes(data.pna, data.positionId, data.position)))
+    ? representativeOptions(filterRealisticOptions(sets(sanitizePartQuotes(data.pna, data.positionId, data.position))))
     : [];
   if (partOptions.length === 0 && !data.partsNote && data.hasPartCategory) {
     const ask = await detailsNeededForParts(api, vehicle);
@@ -931,7 +1014,7 @@ export async function quoteService(
   }
   if (partOptions.length === 0 && !data.partsNote) {
     const byName = await partsByJobName(api, vehicle, data).catch(() => null);
-    partOptions = byName ? representativeOptions(filterRealisticOptions(sanitizePartQuotes(byName, null))) : [];
+    partOptions = byName ? representativeOptions(filterRealisticOptions(sets(sanitizePartQuotes(byName, null)))) : [];
     if (partOptions.length > 0) data.partsNote = BY_NAME_NOTE;
   }
 
@@ -1024,6 +1107,7 @@ export function staffPartQuotes(response: PnaResponse, positionId: number | null
       availability: String(q.availability ?? "").slice(0, 60),
       qtyAvailable: Number.isFinite(qty) ? qty : null,
       fields,
+      ...(sideOf(q) ? { side: sideOf(q) } : {}),
     });
   }
   // One row per part: local stock first, then the lower account price.
@@ -1052,14 +1136,15 @@ export async function quoteServiceForStaff(
 ): Promise<StaffServiceQuote> {
   const data = await loadServiceData(api, vehicle, serviceId, position);
   if (data.status !== "ok") return data;
-  let partOptions = data.pna ? staffPartQuotes(data.pna, data.positionId, data.position) : [];
+  const sets = (options: StaffPartOption[]) => (AXLE_SET_JOB.test(data.serviceName) ? pairSides(options) : options);
+  let partOptions = data.pna ? sets(staffPartQuotes(data.pna, data.positionId, data.position)) : [];
   if (partOptions.length === 0 && !data.partsNote && data.hasPartCategory) {
     const ask = await detailsNeededForParts(api, vehicle);
     if (ask) return ask;
   }
   if (partOptions.length === 0 && !data.partsNote) {
     const byName = await partsByJobName(api, vehicle, data).catch(() => null);
-    partOptions = byName ? staffPartQuotes(byName, null) : [];
+    partOptions = byName ? sets(staffPartQuotes(byName, null)) : [];
     if (partOptions.length > 0) data.partsNote = BY_NAME_NOTE;
   }
   return {
@@ -1206,12 +1291,14 @@ export async function sharedLabor(
  * catalog lists once per car (qtyPerCar 1) is needed twice. A part already
  * listed two or more per car covers both sides as it is.
  */
-export function forBothSides<T extends { laborHours: number; laborNote: string; position: string; partOptions: Array<{ quantity: number }> }>(quote: T): T {
+export function forBothSides<T extends { laborHours: number; laborNote: string; position: string; partOptions: PartOption[] }>(quote: T): T {
+  // Left and right part numbers become one set; a part with no side is needed twice; a set is already both.
+  const paired = pairSides(quote.partOptions);
   return {
     ...quote,
     laborHours: Math.round(quote.laborHours * 2 * 100) / 100,
     position: quote.position ? `${quote.position}, both sides` : "Both sides",
-    laborNote: `Both sides: labor ${quote.laborHours} h per side × 2. Parts listed once per car are doubled (left and right may be different part numbers). ${quote.laborNote}`.trim(),
-    partOptions: quote.partOptions.map((p) => (p.quantity >= 2 ? p : { ...p, quantity: p.quantity * 2 })),
+    laborNote: `Both sides: labor ${quote.laborHours} h per side × 2. Left and right part numbers are quoted as one set; a part without a side is doubled. ${quote.laborNote}`.trim(),
+    partOptions: paired.map((p) => (p.side || (p.partCount ?? 1) >= 2 || p.quantity >= 2 ? p : { ...p, quantity: p.quantity * 2 })),
   };
 }

@@ -58,14 +58,41 @@ export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier
   const total = cents(priced.reduce((sum, l) => sum + l.chosen!.option.customerTotal, 0));
   const vehicle = quotes.find((q) => q.vehicle && q.vehicle !== "—")?.vehicle ?? "—";
 
+  // Kevin, 2026-11-14: a job with no price yet can still go out, marked 待补价.
+  const pending = lines.filter((l) => !l.chosen);
+  const eta = (l: (typeof lines)[number]) => (l.chosen?.option.eta ? `（需调货，${l.chosen.option.eta}）` : "");
   const text = [
     "【SPEEDX AUTO 维修报价】",
     `车辆：${vehicle}`,
-    ...priced.map((l, i) => `${i + 1}. ${l.name}：${optionName(l.chosen!.option, false)}，$${l.chosen!.option.customerTotal.toFixed(2)}`),
-    `合计：$${total.toFixed(2)}`,
+    ...lines.map((l, i) =>
+      l.chosen ? `${i + 1}. ${l.name}：${optionName(l.chosen.option, false)}，$${l.chosen.option.customerTotal.toFixed(2)}${eta(l)}` : `${i + 1}. ${l.name}：待补价（零件确认后补报）`,
+    ),
+    `${pending.length ? "已报价部分合计" : "合计"}：$${total.toFixed(2)}`,
     "以上为税前参考价，最终以到店检查为准。",
     `报价编号 ${priced.map((l) => l.chosen!.quote.id).join(" / ")}`,
   ].join("\n");
+  const [pdf, setPdf] = useState<"idle" | "making" | "failed">("idle");
+
+  async function makePdf() {
+    setPdf("making");
+    try {
+      const { downloadFile, quotePdf } = await import("@/lib/workbench/quote-pdf");
+      const first = priced[0]?.chosen?.quote ?? quotes[0];
+      const sheet = {
+        rows: lines.map((l) => ({
+          label: `${l.name}${l.chosen ? ` – ${optionName(l.chosen.option, false)}` : ""}`,
+          amount: l.chosen ? l.chosen.option.customerTotal : null,
+          ...(l.chosen?.option.eta ? { note: "special order" } : {}),
+        })),
+        total,
+      };
+      const file = await quotePdf({ ...withFinalPrices(first), id: priced.map((l) => l.chosen!.quote.id).join("-") || first.id, vehicle }, new Date(), sheet);
+      downloadFile(file);
+      setPdf("idle");
+    } catch {
+      setPdf("failed");
+    }
+  }
 
   async function copy() {
     try {
@@ -80,11 +107,11 @@ export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier
     <article data-testid="quote-sheet" className="rounded-xl border-2 border-brand-200 bg-white text-sm shadow-sm">
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-ink-100 px-4 py-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">合并报价单 · 按{TIER_LABEL[tier]}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">报价单 · 按{TIER_LABEL[tier]}{pending.length ? ` · ${pending.length} 项待补价` : ""}</p>
           <p className="text-xs text-ink-500">{vehicle}</p>
         </div>
         <p className="text-lg font-semibold tabular-nums text-ink-900" data-testid="quote-sheet-total">
-          合计 {money(total)}
+          {pending.length ? "已报价合计" : "合计"} {money(total)}
         </p>
       </header>
       <ul className="divide-y divide-ink-100">
@@ -92,7 +119,7 @@ export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier
           <li key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
             <span className="basis-full font-medium text-ink-900">{name}</span>
             {options.length === 0 ? (
-              <span className="text-amber-800">本地没有现货，未计入合计</span>
+              <span className="font-semibold text-amber-800">待补价（WorldPac 本地和调货都没有，先不计入合计）</span>
             ) : (
               <>
                 {options.length > 1 ? (
@@ -113,6 +140,7 @@ export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier
                   <span className="min-w-0 flex-1 truncate text-xs text-ink-600">{optionName(options[0].option)}</span>
                 )}
                 <span className="w-24 shrink-0 text-right font-semibold tabular-nums text-ink-900">{chosen ? money(chosen.option.customerTotal) : "—"}</span>
+                {chosen?.option.eta && <span className="basis-full text-xs font-semibold text-amber-800">本地没货，调货 · {chosen.option.eta}</span>}
               </>
             )}
           </li>
@@ -125,11 +153,20 @@ export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier
           disabled={priced.length === 0}
           className="rounded-full bg-ink-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
         >
-          复制合并报价给客人
+          复制报价给客人
         </button>
+        <button
+          type="button"
+          onClick={() => void makePdf()}
+          disabled={priced.length === 0 || pdf === "making"}
+          className="rounded-full border border-ink-900 px-4 py-1.5 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
+        >
+          {pdf === "making" ? "正在生成 PDF…" : "下载 PDF 报价单"}
+        </button>
+        {pdf === "failed" && <span className="text-xs text-amber-700">PDF 生成失败，请再试一次</span>}
         {copied === "done" && <span className="text-xs text-emerald-700">已复制（不含进价）</span>}
         {copied === "failed" && <span className="text-xs text-amber-700">浏览器不允许复制，请手动选择下面的文字</span>}
-        <span className="text-xs text-ink-500">各项明细在下面，可以单独改价。</span>
+        <span className="text-xs text-ink-500">这是要发给客人的报价单；要改价时展开下面的“各项明细”。</span>
       </footer>
       {copied === "failed" && <pre className="mx-4 mb-3 whitespace-pre-wrap rounded-lg bg-ink-50 p-3 text-xs">{text}</pre>}
     </article>

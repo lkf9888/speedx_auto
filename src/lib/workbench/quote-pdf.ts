@@ -30,8 +30,14 @@ function cell(text: string, align: "left" | "right" = "left", bold = false): HTM
   return el("td", { padding: "10px 8px", borderBottom: "1px solid #e5e7eb", textAlign: align, fontWeight: bold ? "700" : "400", verticalAlign: "top" }, text);
 }
 
+/** Several jobs on one estimate (the combined quote sheet): one line each and a grand total; null is "to be quoted". */
+export interface SheetPdf {
+  rows: Array<{ label: string; amount: number | null; note?: string }>;
+  total: number;
+}
+
 /** The page as DOM, with inline styles only (the site's theme colours don't reach it). */
-export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "/workbench/logo.png"): HTMLElement {
+export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "/workbench/logo.png", sheet?: SheetPdf): HTMLElement {
   const logo = document.createElement("img");
   logo.src = logoUrl;
   Object.assign(logo.style, { width: "64px", height: "64px", objectFit: "contain" });
@@ -58,7 +64,7 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
     meta("Estimate No.", quote.id),
     meta("Date", shopDate(now)),
     meta("Vehicle", quote.vehicle === "—" ? "" : toEnglish(quote.vehicle)),
-    meta("Service", `${toEnglish(quote.service)}${position}`),
+    meta("Service", sheet ? `${sheet.rows.length} jobs` : `${toEnglish(quote.service)}${position}`),
   ]);
 
   const tires = quote.kind === "tires";
@@ -70,7 +76,16 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
     el("th", { padding: "8px", textAlign: "right", width: "130px" }, unitShown ? (tires ? "Each, installed" : "Unit price") : ""),
     el("th", { padding: "8px", textAlign: "right", width: "110px" }, "Amount"),
   ]);
-  const rows = quote.options.map((o, i) =>
+  const sheetRows = sheet?.rows.map((r, i) =>
+    el("tr", { fontSize: "13px" }, undefined, [
+      cell(String(i + 1)),
+      cell(toEnglish(r.label) + (r.note ? ` (${toEnglish(r.note)})` : "")),
+      cell("1", "right"),
+      cell("", "right"),
+      cell(r.amount === null ? "To be quoted" : money(r.amount), "right", true),
+    ]),
+  );
+  const rows = sheetRows ?? quote.options.map((o, i) =>
     el("tr", { fontSize: "13px" }, undefined, [
       cell(String(i + 1)),
       cell(toEnglish([o.brand, o.label].filter(Boolean).join(" ")) + (quote.kind === "labor" ? " (parts & labour)" : "")),
@@ -81,8 +96,17 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
   );
   const table = el("table", { width: "100%", borderCollapse: "collapse" }, undefined, [el("thead", {}, undefined, [head]), el("tbody", {}, undefined, rows)]);
 
-  const several = quote.options.length > 1;
-  const summary = several
+  const several = !sheet && quote.options.length > 1;
+  const pending = sheet?.rows.some((r) => r.amount === null);
+  const summary = sheet
+    ? el("div", { marginTop: "12px" }, undefined, [
+        el("div", { display: "flex", justifyContent: "flex-end", gap: "24px", fontSize: "16px", fontWeight: "800" }, undefined, [
+          el("span", {}, pending ? "Total so far (before tax)" : "Total (before tax)"),
+          el("span", {}, money(sheet.total)),
+        ]),
+        ...(pending ? [el("div", { fontSize: "12px", color: "#4b5563", marginTop: "6px", textAlign: "right" }, "Items marked “To be quoted” will be priced once the parts are confirmed.")] : []),
+      ])
+    : several
     ? el("div", { fontSize: "13px", marginTop: "10px", color: "#374151" }, "These are alternative options; choose one.")
     : el("div", { display: "flex", justifyContent: "flex-end", gap: "24px", fontSize: "16px", fontWeight: "800", marginTop: "12px" }, undefined, [
         el("span", {}, "Total (before tax)"),
@@ -115,9 +139,9 @@ export function quotePdfName(quote: Pick<PricedQuote, "id">): string {
 }
 
 /** Draws the page and returns the PDF file. */
-export async function quotePdf(quote: PricedQuote, now = new Date()): Promise<File> {
+export async function quotePdf(quote: PricedQuote, now = new Date(), sheet?: SheetPdf): Promise<File> {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas-pro"), import("jspdf")]);
-  const page = buildQuotePage(quote, now);
+  const page = buildQuotePage(quote, now, undefined, sheet);
   const holder = el("div", { position: "fixed", left: "-10000px", top: "0" }, undefined, [page]);
   document.body.appendChild(holder);
   try {

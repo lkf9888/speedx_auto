@@ -26,8 +26,10 @@ export interface StaffQuoteOption {
   /** Core charge per unit, when WorldPac sends one. */
   core: number | null;
   stock: string;
-  /** Not in stock (WorldPac: not in a local warehouse): left off the quote card and the customer copy. */
+  /** Not offered: no stock, or (WorldPac) not local while another option is. Left off the card, the customer copy and the model. */
   outOfStock?: boolean;
+  /** Ordered in (no local stock for this job): when it arrives, e.g. "周一到". */
+  eta?: string;
   /** Customer total for this option: parts + labor (walk-in). */
   customerTotal: number;
   /** Same with the referral labor price. */
@@ -84,8 +86,39 @@ export const FRIEND_OTHER_MARKUP = 1.3;
  * number, but never more than the list price (a cheap part's cost + $100 can
  * be above it); null without a cost.
  */
-function friendWorldpacParts(unitCost: number | null, quantity: number, listTotal: number): number | null {
-  return unitCost === null ? null : money(Math.min(unitCost * quantity + FRIEND_WORLDPAC_ADD, listTotal));
+function friendWorldpacParts(unitCost: number | null, quantity: number, listTotal: number, partCount = 1): number | null {
+  return unitCost === null ? null : money(Math.min(unitCost * quantity + FRIEND_WORLDPAC_ADD * partCount, listTotal));
+}
+
+const WEEKDAYS: Record<string, string> = { monday: "周一", tuesday: "周二", wednesday: "周三", thursday: "周四", friday: "周五", saturday: "周六", sunday: "周日" };
+
+/** When a WorldPac part not in local stock arrives, from its availability ("Wednesday", "2-day"); null when it can't be had. */
+export function etaLabel(availability: string): string | null {
+  const a = availability.trim().toLowerCase().replace(/-?local$/, "");
+  if (!a || /not\s*avail|unavail|none|discontinued|no stock/.test(a)) return null;
+  if (/today/.test(a)) return "今天到";
+  if (/tomorrow|next\s*day/.test(a)) return "明天到";
+  const day = Object.keys(WEEKDAYS).find((d) => a.includes(d));
+  if (day) return `${WEEKDAYS[day]}到`;
+  const range = a.match(/(\d+)\s*(?:-|–|to)\s*(\d+)\s*(?:business\s*)?days?/);
+  if (range) return `约 ${range[1]}–${range[2]} 天到`;
+  const days = a.match(/(\d+)\s*-?\s*(?:business\s*)?days?/);
+  if (days) return `约 ${days[1]} 天到`;
+  return `要调货（${availability.slice(0, 30)}）`;
+}
+
+/**
+ * Kevin, 2026-11-14: local stock first. When an option of the job is in a
+ * local warehouse, only local ones are offered; when none is, the ones WorldPac
+ * can order in are offered with their arrival day; the rest never show.
+ */
+function applyStockRule(options: Array<StaffQuoteOption & { local: boolean; availability: string }>): StaffQuoteOption[] {
+  const anyLocal = options.some((o) => o.local);
+  return options.map(({ local, availability, ...o }) => {
+    if (local) return o;
+    const eta = anyLocal ? null : etaLabel(availability);
+    return eta ? { ...o, eta } : { ...o, outOfStock: true };
+  });
 }
 
 function finish(option: Omit<StaffQuoteOption, "profit" | "margin">): StaffQuoteOption {
@@ -114,11 +147,11 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
   const hours = job.laborHours;
   const walkIn = money(hours * WALK_IN_LABOR_RATE);
   const referral = money(hours * WALK_IN_LABOR_RATE * REFERRAL_LABOR_MULTIPLIER);
-  const options = job.partOptions.map((p) => {
+  const options = applyStockRule(job.partOptions.map((p) => {
     const cost = p.prices[field];
     const unitCost = typeof cost === "number" && cost > 0 ? cost : null;
     const listTotal = money(p.listPrice * p.quantity);
-    return finish({
+    const option = finish({
       label: p.description,
       brand: p.brand || p.series,
       partNumber: p.partNumber,
@@ -127,16 +160,15 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
       unitCost,
       core: typeof p.prices.corePrice === "number" && p.prices.corePrice > 0 ? p.prices.corePrice : null,
       stock: p.inStockLocally ? `本地有货（${p.qtyAvailable ?? "?"}）` : p.availability || "未知",
-      // Kevin, 2026-11-14: only parts in local stock go on the quote.
-      ...(p.inStockLocally ? {} : { outOfStock: true }),
       customerTotal: money(listTotal + walkIn),
       referralTotal: money(listTotal + referral),
-      friendTotal: unitCost === null ? null : money(friendWorldpacParts(unitCost, p.quantity, listTotal)! + referral),
+      friendTotal: unitCost === null ? null : money(friendWorldpacParts(unitCost, p.quantity, listTotal, p.partCount)! + referral),
       costTotal: unitCost === null ? null : money(unitCost * p.quantity),
       prices: p.prices,
       fields: p.fields,
     });
-  });
+    return { ...option, local: p.inStockLocally, availability: p.availability };
+  }));
   if (options.length === 0) {
     options.push(
       finish({
@@ -209,11 +241,11 @@ export function buildFlatQuote(
 /** Parts priced with no labor operation behind them: staff add the labor. */
 export function buildPartsQuote(vehicle: string, partName: string, position: string, parts: StaffPartOption[], id: string, env: NodeJS.ProcessEnv = process.env, now = new Date()): StaffQuote {
   const field = costField(env);
-  const options = parts.map((p) => {
+  const options = applyStockRule(parts.map((p) => {
     const cost = p.prices[field];
     const unitCost = typeof cost === "number" && cost > 0 ? cost : null;
     const listTotal = money(p.listPrice * p.quantity);
-    return finish({
+    const option = finish({
       label: p.description,
       brand: p.brand || p.series,
       partNumber: p.partNumber,
@@ -223,15 +255,15 @@ export function buildPartsQuote(vehicle: string, partName: string, position: str
       core: typeof p.prices.corePrice === "number" && p.prices.corePrice > 0 ? p.prices.corePrice : null,
       stock: p.inStockLocally ? `本地有货（${p.qtyAvailable ?? "?"}）` : p.availability || "未知",
       // Kevin, 2026-11-14: only parts in local stock go on the quote.
-      ...(p.inStockLocally ? {} : { outOfStock: true }),
       customerTotal: listTotal,
       referralTotal: listTotal,
-      friendTotal: friendWorldpacParts(unitCost, p.quantity, listTotal),
+      friendTotal: friendWorldpacParts(unitCost, p.quantity, listTotal, p.partCount),
       costTotal: unitCost === null ? null : money(unitCost * p.quantity),
       prices: p.prices,
       fields: p.fields,
     });
-  });
+    return { ...option, local: p.inStockLocally, availability: p.availability };
+  }));
   return withText({
     id,
     kind: "labor",
@@ -395,13 +427,13 @@ export function summarizeStaffQuote(quote: StaffQuote): string {
         `${i + 1}. ${[o.brand, o.label].filter(Boolean).join(" ")}${o.partNumber ? ` #${o.partNumber}` : ""} ×${o.quantity}: unit $${o.unitPrice}` +
         `${quote.kind === "tires" && o.prices.retail !== undefined ? ` (= tire $${o.prices.retail} + eco fee $${o.prices.eco} + mounting $${o.prices.mounting}, eco rounded in)` : ""}` +
         `${o.unitCost !== null ? `, cost $${o.unitCost}` : ""}${surchargeOf(quote, o) !== null ? `, surcharge +${Math.round(surchargeOf(quote, o)! * 100)}%` : ""}; customer $${o.customerTotal} (referral $${o.referralTotal}${o.friendTotal != null ? `, friend $${o.friendTotal}` : ""})` +
-        `${o.profit !== null ? `, profit $${o.profit}${o.margin !== null ? ` (${Math.round(o.margin * 100)}%)` : ""}` : ""}${o.stock ? `, ${o.stock}` : ""}`,
+        `${o.profit !== null ? `, profit $${o.profit}${o.margin !== null ? ` (${Math.round(o.margin * 100)}%)` : ""}` : ""}${o.eta ? `, not in local stock: ordered in, ${o.eta}` : o.stock ? `, ${o.stock}` : ""}`,
     )
     .join("\n");
   const stock = hidden
     ? shown.length
-      ? `${hidden} more option${hidden > 1 ? "s" : ""} not in stock ${quote.supplier === "worldpac" ? "locally " : ""}are left off the card; don't mention them.`
-      : `No option is in stock${quote.supplier === "worldpac" ? " at a local WorldPac warehouse" : ""}, so the card shows none. Tell staff; no other parts supplier is connected yet, so they can try the card's search links or call a supplier.`
+      ? `${hidden} more option${hidden > 1 ? "s are" : " is"} left off the card (not offered); don't mention them.${shown.some((o) => o.eta) ? " Nothing is in local stock, so the options shown are ordered in: say when they arrive." : ""}`
+      : `No option can be had${quote.supplier === "worldpac" ? " from WorldPac, local or ordered in" : ""}, so the card shows no price and the quote sheet shows this job as 待补价 (price to follow). Say so in one line; staff don't need to do anything else now.`
     : "";
   return [head, labor, options, stock, quote.notes.join(" "), quote.supplier ? (LINKS[quote.supplier] ?? "") : ""].filter(Boolean).join("\n");
 }

@@ -79,12 +79,14 @@ describe("only parts in local stock", () => {
     expect(q.options.map((o) => Boolean(o.outOfStock))).toEqual([false, false, true]);
     const summary = summarizeStaffQuote(q);
     expect(summary).not.toContain("F-3");
-    expect(summary).toContain("1 more option not in stock locally");
+    expect(summary).toContain("1 more option is left off the card (not offered)");
   });
 
   it("says so when nothing is in stock", () => {
-    const none = buildLaborQuote("Car", job("Brake Rotor R&R", "Front", [part("X-1", 120, 50, false)]), "W-N", env);
-    expect(summarizeStaffQuote(none)).toContain("No option is in stock at a local WorldPac warehouse");
+    const gone = { ...part("X-1", 120, 50, false), availability: "notAvailable" };
+    const none = buildLaborQuote("Car", job("Brake Rotor R&R", "Front", [gone]), "W-N", env);
+    expect(summarizeStaffQuote(none)).toContain("No option can be had from WorldPac, local or ordered in");
+    expect(summarizeStaffQuote(none)).toContain("待补价");
     render(<StaffQuoteCard quote={none} />);
     expect(screen.getByTestId("no-stock")).toHaveTextContent("WorldPac 本地仓库没有现货");
     expect(screen.queryByRole("table")).toBeNull();
@@ -117,7 +119,7 @@ describe("the combined quote sheet", () => {
     const writeText = vi.fn(async (text: string) => void text);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     render(<QuoteSheetSummary quotes={[front(), rear()]} tier="friend" />);
-    await userEvent.click(screen.getByRole("button", { name: "复制合并报价给客人" }));
+    await userEvent.click(screen.getByRole("button", { name: "复制报价给客人" }));
     const text = writeText.mock.calls[0][0];
     // Friend: front F-2 cost 70 + 100 = 170, capped at its $150 list, + $96 = 246; rear 80 + 100 = 180 (= list) + 86.4 = 266.4.
     expect(text).toContain("合计：$512.40");
@@ -198,7 +200,7 @@ describe("review fixes", () => {
     const writeText = vi.fn(async (text: string) => void text);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     render(<QuoteSheetSummary quotes={[front(), rear()]} tier="retail" />);
-    await userEvent.click(screen.getByRole("button", { name: "复制合并报价给客人" }));
+    await userEvent.click(screen.getByRole("button", { name: "复制报价给客人" }));
     expect(writeText.mock.calls[0][0]).not.toMatch(/#F-2|#R-1/);
   });
 

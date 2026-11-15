@@ -23,7 +23,7 @@ export function customerText(quote: Omit<StaffQuote, "customerText">): string {
       const name = [o.brand, o.label].filter(Boolean).join(" ");
       const each =
         quote.kind === "tires" ? `，每条 ${dollars(o.unitPrice)} × ${o.quantity}` : quote.kind === "labor" && o.quantity > 1 ? ` × ${o.quantity}` : "";
-      lines.push(`${i + 1}. ${name}${each}：${dollars(o.customerTotal)}`);
+      lines.push(`${i + 1}. ${name}${each}：${dollars(o.customerTotal)}${o.eta ? `（需调货，${o.eta}）` : ""}`);
     });
   }
   lines.push("以上为税前参考价，最终以到店检查为准。");

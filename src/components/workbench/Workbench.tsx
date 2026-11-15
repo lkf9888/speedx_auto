@@ -884,15 +884,33 @@ export function Workbench({ email }: { email: string }) {
                   {turn.priceChoice && (
                     <PriceChoiceCard current={active.priceTier} disabled={Boolean(activePending) || !currentId} onChoose={(tier) => void choosePriceTier(active.id, tier, true)} />
                   )}
-                  {distinctJobs(turn.quotes) > 1 && <QuoteSheetSummary quotes={turn.quotes} tier={active.priceTier ?? "retail"} />}
-                  {turn.quotes.map((quote) => (
-                    <StaffQuoteCard
-                      key={quote.id}
-                      quote={quote}
-                      tier={active.priceTier ?? "retail"}
-                      onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
-                    />
-                  ))}
+                  {distinctJobs(turn.quotes) > 1 ? (
+                    <>
+                      <QuoteSheetSummary quotes={turn.quotes} tier={active.priceTier ?? "retail"} />
+                      <details data-testid="quote-details" className="rounded-xl border border-[color:var(--wb-line)] bg-white/60 px-3 py-2">
+                        <summary className="cursor-pointer text-xs font-semibold text-[color:var(--wb-icon)]">各项明细（{turn.quotes.length} 张，改价时展开）</summary>
+                        <div className="mt-2 space-y-2">
+                          {turn.quotes.map((quote) => (
+                            <StaffQuoteCard
+                              key={quote.id}
+                              quote={quote}
+                              tier={active.priceTier ?? "retail"}
+                              onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
+                            />
+                          ))}
+                        </div>
+                      </details>
+                    </>
+                  ) : (
+                    turn.quotes.map((quote) => (
+                      <StaffQuoteCard
+                        key={quote.id}
+                        quote={quote}
+                        tier={active.priceTier ?? "retail"}
+                        onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
+                      />
+                    ))
+                  )}
                   {turn.drafts?.map((draft) => (
                     <AlldataDraftCard key={draft.id} draft={draft} onCreated={(created) => markCreated(active.id, draft.id, created)} />
                   ))}
