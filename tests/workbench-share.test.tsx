@@ -11,7 +11,7 @@ import { ConversationStore, newTurnId } from "@/lib/workbench/conversations";
 import { memoryKv } from "@/lib/workbench/kv";
 import { buildLaborQuote } from "@/lib/workbench/quote";
 import { handleShare, shareUrl, type ShareDeps } from "@/lib/workbench/shares-http";
-import { MAX_SHARES, SHARE_MS, ShareStore } from "@/lib/workbench/shares";
+import { MAX_SHARES, SHARE_MS, ShareStore, snapshot } from "@/lib/workbench/shares";
 
 // Kevin, 2026-11-14: a share button on each conversation; anyone with the link
 // can read it without signing in, for three days.
@@ -153,5 +153,48 @@ describe("SharePanel", () => {
     rerender(<SharePanel conversation={{ ...base, shares: [link] }} onClose={() => {}} onChanged={onChanged} />);
     await userEvent.click(screen.getByRole("button", { name: "取消分享" }));
     expect(fetchMock.mock.calls.at(-1)?.[0]).toBe("/api/workbench/conversations/cabc1234/share?token=abcdefghijklmnopqrstuv");
+  });
+});
+
+describe("share review fixes", () => {
+  it("drops a deleted conversation's links", async () => {
+    const { kv, conversations } = await seeded();
+    const shares = new ShareStore(kv);
+    const link = await shares.create((await conversations.get("cabc1234"))!, "kevin@x.com");
+    await conversations.setShares("cabc1234", "kevin@x.com", () => [link]);
+    await conversations.remove("cabc1234");
+    expect(await shares.get(link.token)).toBeNull();
+  });
+
+  it("sends only what the page shows", () => {
+    const base: Conversation = {
+      id: "c1",
+      title: "t",
+      vehicle: null,
+      createdBy: "a",
+      createdAt: 0,
+      updatedBy: "a",
+      updatedAt: 0,
+      turns: [
+        { ...turn("assistant", "暂时无法查询", "assistant"), localOnly: true },
+        { ...turn("assistant", "ok", "assistant"), memories: [{ id: "M-1", text: "secret note", replacesId: null }], drafts: [{ id: "D-1", note: "shop-only note", lines: [] } as never] },
+      ],
+      shares: [{ token: "t", createdBy: "a", createdAt: 0, expiresAt: 1 }],
+    };
+    const shown = snapshot(base);
+    expect(shown.turns).toHaveLength(1);
+    expect(JSON.stringify(shown)).not.toMatch(/secret note|shop-only note|暂时无法查询/);
+    expect(shown.shares).toBeUndefined();
+  });
+
+  it("refuses a cancelled link at once, even if KV still has it", async () => {
+    const kv = memoryKv();
+    const store = new ShareStore(kv);
+    const { conversations } = await seeded();
+    const link = await store.create((await conversations.get("cabc1234"))!, "kevin@x.com");
+    const value = kv.data.get(`workbench-share-v1:${link.token}`)!;
+    await store.revoke(link.token);
+    kv.data.set(`workbench-share-v1:${link.token}`, value);
+    expect(await store.get(link.token)).toBeNull();
   });
 });

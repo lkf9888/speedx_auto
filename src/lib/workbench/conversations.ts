@@ -8,6 +8,7 @@ import { randomBytes } from "node:crypto";
 import { cloudflareKv, type KvClient } from "./kv";
 import type { Conversation, ConversationSummary, PendingQuery, ShareLink, Turn, Vehicle } from "./conversation-types";
 import type { PriceTier } from "./price-tier";
+import { getShareStore, shareKey } from "./shares";
 import { finalCustomerText, readFinalTotals } from "./final-price";
 
 const PREFIX = "workbench-conv-v1:";
@@ -138,6 +139,7 @@ export class ConversationStore {
     for (const c of oldest) {
       map.delete(c.id);
       await this.kv.delete(PREFIX + c.id).catch(() => undefined);
+      await this.dropShares(c);
     }
   }
 
@@ -187,10 +189,21 @@ export class ConversationStore {
 
   async remove(id: string): Promise<void> {
     const map = await this.all();
-    if (!map.has(id)) throw new ConversationError("That conversation no longer exists.", "not_found");
+    const conversation = map.get(id);
+    if (!conversation) throw new ConversationError("That conversation no longer exists.", "not_found");
     await this.kv.delete(PREFIX + id);
     map.delete(id);
     this.pending.delete(id);
+    await this.dropShares(conversation);
+  }
+
+  /** A deleted conversation's share links stop working too (their cancel button went with it). */
+  private async dropShares(conversation: Conversation) {
+    const shares = getShareStore();
+    for (const link of conversation.shares ?? []) {
+      // The share store also refuses it at once (KV can serve a deleted value for a minute).
+      await (shares ? shares.revoke(link.token) : this.kv.delete(shareKey(link.token))).catch(() => undefined);
+    }
   }
 
   /** Record that a card was acted on (ALLDATA estimate created, memory note saved, final prices set). */

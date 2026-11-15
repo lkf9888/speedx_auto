@@ -13,6 +13,8 @@ export const SHARE_MS = SHARE_DAYS * 24 * 60 * 60 * 1000;
 /** Active links one conversation can have at once. */
 export const MAX_SHARES = 10;
 const PREFIX = "workbench-share-v1:";
+/** Where a link's snapshot is stored, so deleting a conversation can drop its links too. */
+export const shareKey = (token: string) => PREFIX + token;
 const TOKEN = /^[A-Za-z0-9_-]{22}$/;
 
 export interface SharedConversation {
@@ -35,14 +37,29 @@ export class ShareError extends Error {
 
 export const isShareToken = (token: unknown): token is string => typeof token === "string" && TOKEN.test(token);
 
-/** The conversation as the link shows it: as it is now, minus the list of links. */
-function snapshot(conversation: Conversation): Conversation {
+/**
+ * The conversation as the link shows it: what's on screen now. Error turns,
+ * memory suggestions and ALLDATA draft details (customer, VIN, shop notes)
+ * aren't shown, so they aren't sent either.
+ */
+export function snapshot(conversation: Conversation): Conversation {
   const copy = structuredClone(conversation);
   delete copy.shares;
+  copy.turns = copy.turns
+    .filter((t) => !t.localOnly)
+    .map((t) => {
+      const turn = { ...t };
+      delete turn.memories;
+      if (turn.drafts) turn.drafts = turn.drafts.map((d) => ({ id: d.id, created: d.created }) as typeof d);
+      return turn;
+    });
   return copy;
 }
 
 export class ShareStore {
+  /** Cancelled here: Cloudflare KV can serve a deleted value for up to a minute, so this server refuses them at once. */
+  private readonly revoked = new Set<string>();
+
   constructor(
     private readonly kv: KvClient,
     private readonly now: () => number = Date.now,
@@ -71,7 +88,7 @@ export class ShareStore {
 
   /** The shared snapshot, or null when the link is unknown, cancelled or past its date. */
   async get(token: string): Promise<SharedConversation | null> {
-    if (!isShareToken(token)) return null;
+    if (!isShareToken(token) || this.revoked.has(token)) return null;
     let raw: string | null;
     try {
       raw = await this.kv.get(PREFIX + token);
@@ -91,6 +108,7 @@ export class ShareStore {
   /** Stops the link working now. */
   async revoke(token: string): Promise<void> {
     if (!isShareToken(token)) return;
+    this.revoked.add(token);
     try {
       await this.kv.delete(PREFIX + token);
     } catch (error) {
