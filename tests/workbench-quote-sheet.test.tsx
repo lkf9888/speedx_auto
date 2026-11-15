@@ -177,3 +177,36 @@ describe("choosing the price", () => {
     expect((await store.get("cabc1234"))?.priceTier).toBe("friend");
   });
 });
+
+describe("review fixes", () => {
+  it("treats cards for the same job as alternatives, not extras", () => {
+    const engine = (label: string, id: string, list: number) => buildLaborQuote(`2019 Camry (${label})`, job("Brake Rotor R&R", "Front", [part(`${id}-P`, list, 60)]), id, env);
+    render(<QuoteSheetSummary quotes={[engine("2.5 L4", "W-E1", 150), engine("3.5 V6", "W-E2", 210), rear()]} tier="retail" />);
+    // Cheapest front ($150 + $120) + rear ($180 + $108), not both engines.
+    expect(screen.getByTestId("quote-sheet-total")).toHaveTextContent("$558.00");
+    expect(screen.getByRole("option", { name: /3\.5 V6/ })).toBeInTheDocument();
+  });
+
+  it("leaves part numbers out of the customer copy", async () => {
+    const writeText = vi.fn(async (text: string) => void text);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<QuoteSheetSummary quotes={[front(), rear()]} tier="retail" />);
+    await userEvent.click(screen.getByRole("button", { name: "复制合并报价给客人" }));
+    expect(writeText.mock.calls[0][0]).not.toMatch(/#F-2|#R-1/);
+  });
+
+  it("charges a friend the referral price where there's no friend price", () => {
+    expect(tierTotal({ customerTotal: 300, referralTotal: 276, friendTotal: null }, "friend")).toBe(276);
+  });
+
+  it("makes only the prices staff changed final", async () => {
+    const onSaveFinal = vi.fn(async (totals: Record<string, number> | null) => Boolean(totals));
+    render(<StaffQuoteCard quote={front()} onSaveFinal={onSaveFinal} />);
+    await userEvent.click(screen.getByRole("button", { name: "✎ 改价" }));
+    const input = screen.getByRole("spinbutton", { name: /F-1/ });
+    await userEvent.clear(input);
+    await userEvent.type(input, "300");
+    await userEvent.click(screen.getByRole("button", { name: "保存最终价" }));
+    expect(onSaveFinal).toHaveBeenCalledWith({ "0": 300 });
+  });
+});

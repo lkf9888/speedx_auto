@@ -22,7 +22,7 @@ import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./Conn
 import { HouseRulesPanel } from "./HouseRulesPanel";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
-import { PriceChoiceCard, QuoteSheetSummary } from "./QuoteSheetSummary";
+import { distinctJobs, PriceChoiceCard, QuoteSheetSummary } from "./QuoteSheetSummary";
 import { StaffQuoteCard } from "./StaffQuoteCard";
 import { WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
 
@@ -506,6 +506,7 @@ export function Workbench({ email }: { email: string }) {
         const [question, answer] = stored;
         return { ...c, ...withTier, vehicle: nextVehicle, turns: [...before, { ...question, attachments: mine.attachments }, answer] };
       }
+      if (!failure && !reply && priceChoice) reply = "按哪个价报？";
       if (!failure && !reply && quotes.length === 0 && drafts.length === 0 && memories.length === 0) failure = "empty";
       const answer: Turn = failure
         ? { id: `local-a-${Date.now()}`, role: "assistant", author: ASSISTANT, text: ERRORS[failure], quotes, drafts, memories, localOnly: true, at: Date.now() }
@@ -864,7 +865,7 @@ export function Workbench({ email }: { email: string }) {
                   {turn.priceChoice && (
                     <PriceChoiceCard current={active.priceTier} disabled={Boolean(activePending) || !currentId} onChoose={(tier) => void choosePriceTier(active.id, tier, true)} />
                   )}
-                  {turn.quotes.filter((q) => q.kind !== "team_quote").length > 1 && <QuoteSheetSummary quotes={turn.quotes} tier={active.priceTier ?? "retail"} />}
+                  {distinctJobs(turn.quotes) > 1 && <QuoteSheetSummary quotes={turn.quotes} tier={active.priceTier ?? "retail"} />}
                   {turn.quotes.map((quote) => (
                     <StaffQuoteCard
                       key={quote.id}

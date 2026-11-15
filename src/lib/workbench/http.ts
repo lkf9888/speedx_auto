@@ -247,8 +247,9 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
             ...(reply.drafts.length ? { drafts: reply.drafts } : {}),
             ...(reply.memories.length ? { memories: reply.memories } : {}),
             ...(reply.priceChoice ? { priceChoice: true } : {}),
-            ...(reply.error || (!reply.text && !reply.quotes.length) ? { localOnly: true } : {}),
+            ...(reply.error || (!reply.text && !reply.quotes.length && !reply.priceChoice) ? { localOnly: true } : {}),
           };
+          if (!answer.text && reply.priceChoice) answer.text = "按哪个价报？";
           if (!answer.text && !answer.quotes.length && !answer.drafts && !answer.memories) answer.text = REPLY_ERRORS.empty;
           try {
             if (reply.tier) await store.setPriceTier(conversationId, user.email, reply.tier);

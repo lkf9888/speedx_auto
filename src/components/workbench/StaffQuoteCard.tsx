@@ -123,7 +123,15 @@ export function StaffQuoteCard({
         setNotice("每个价格都要填一个数字");
         return;
       }
-      totals[String(i)] = Math.round(value * 100) / 100;
+      const cents = Math.round(value * 100) / 100;
+      // Only the prices staff changed become final, so the others still follow the conversation's price.
+      const before = stored.final?.totals[String(i)];
+      if (before !== undefined || cents !== Math.round(priced.options[i].customerTotal * 100) / 100) totals[String(i)] = cents;
+    }
+    if (Object.keys(totals).length === 0) {
+      setEditing(null);
+      setNotice("价格没有改动");
+      return;
     }
     void saveFinal(totals);
   }
@@ -194,7 +202,7 @@ export function StaffQuoteCard({
 
       {quote.options.length > 0 && visible.length === 0 && (
         <p data-testid="no-stock" className="px-4 py-3 text-amber-800">
-          {quote.supplier === "worldpac" ? "WorldPac 本地仓库没有现货，" : "没有现货，"}这张卡不列价格。可以用其他供货商查，或打电话问。
+          {quote.supplier === "worldpac" ? "WorldPac 本地仓库没有现货，" : "没有现货，"}这张卡不列价格。目前没有接其他零件供货商，可以打电话问别的供货商。
         </p>
       )}
 
@@ -266,7 +274,7 @@ export function StaffQuoteCard({
                       money(o.customerTotal)
                     )}
                     {o.originalTotal !== null && <div className="text-[11px] font-normal text-ink-400 line-through">{money(o.originalTotal)}</div>}
-                    {noFriendPrice(stored.options[i], tier) && <div className="text-[11px] font-normal text-ink-400">没有进价，按零售价</div>}
+                    {noFriendPrice(stored.options[i], tier) && <div className="text-[11px] font-normal text-ink-400">没有进价，按推荐价</div>}
                   </td>
                 </tr>
                 );
@@ -324,7 +332,7 @@ export function StaffQuoteCard({
                 发给客人（WhatsApp / 微信）
               </button>
             )}
-            {onSaveFinal && quote.options.length > 0 && (
+            {onSaveFinal && visible.length > 0 && (
               <button type="button" onClick={startEditing} className="rounded-full border border-amber-400 px-4 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50">
                 ✎ 改价
               </button>

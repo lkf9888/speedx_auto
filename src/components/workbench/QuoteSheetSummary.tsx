@@ -10,14 +10,34 @@ const money = (value: number) => usd.format(value);
 const cents = (value: number) => Math.round(value * 100) / 100;
 
 /** A quote at the chosen price with agreed prices applied, and the options in stock. */
-function inStock(quote: StaffQuote, tier: PriceTier) {
+function inStock(quote: StaffQuote, tier: PriceTier, labelled: boolean) {
   const priced = withFinalPrices(atTier(quote, tier));
-  return priced.options.flatMap((o, i) => (quote.options[i].outOfStock ? [] : [{ index: i, option: o }]));
+  return priced.options.flatMap((o, i) => (quote.options[i].outOfStock ? [] : [{ key: `${quote.id}:${i}`, quote, option: o, note: labelled ? quote.vehicle : "" }]));
 }
 
-const jobName = (q: StaffQuote) => `${q.service}${q.position ? ` · ${q.position}` : ""}`;
-const optionName = (o: { brand: string; label: string; partNumber: string }) =>
-  [o.brand, o.label].filter(Boolean).join(" ") + (o.partNumber ? ` #${o.partNumber}` : "");
+const jobName = (q: StaffQuote) => (q.kind === "tires" ? "新轮胎（含安装）" : `${q.service}${q.position ? ` · ${q.position}` : ""}`);
+/** Staff see the part number; the customer copy doesn't (it would let them shop the part elsewhere). */
+const optionName = (o: { brand: string; label: string; partNumber: string }, withNumber = true) =>
+  [o.brand, o.label].filter(Boolean).join(" ") + (withNumber && o.partNumber ? ` #${o.partNumber}` : "");
+
+/**
+ * The jobs in one reply. Cards for the same job are alternatives, not extras
+ * (one per engine when the engine isn't known, or new tires from two
+ * suppliers), so they share one row and only one of their options counts.
+ */
+function jobsOf(quotes: StaffQuote[], tier: PriceTier) {
+  const groups = new Map<string, StaffQuote[]>();
+  for (const quote of quotes) {
+    if (quote.kind === "team_quote") continue;
+    const key = quote.kind === "tires" ? "tires" : `${quote.service}|${quote.position}`;
+    groups.set(key, [...(groups.get(key) ?? []), quote]);
+  }
+  return [...groups.entries()].map(([key, group]) => ({
+    key,
+    name: jobName(group[0]),
+    options: group.flatMap((q) => inStock(q, tier, group.length > 1 && q.kind !== "tires")),
+  }));
+}
 
 /**
  * Every job quoted in one reply on one sheet (Kevin, 2026-11-14: front and
@@ -25,14 +45,14 @@ const optionName = (o: { brand: string; label: string; partNumber: string }) =>
  * the grand total at the conversation's price, with a customer copy.
  */
 export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier: PriceTier }) {
-  const jobs = quotes.filter((q) => q.kind !== "team_quote").map((q) => ({ quote: q, options: inStock(q, tier) }));
-  const [picked, setPicked] = useState<Record<string, number>>({});
+  const jobs = jobsOf(quotes, tier);
+  const [picked, setPicked] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
 
-  const lines = jobs.map(({ quote, options }) => {
-    const cheapest = options.reduce<(typeof options)[number] | null>((best, o) => (!best || o.option.customerTotal < best.option.customerTotal ? o : best), null);
-    const chosen = options.find((o) => o.index === picked[quote.id]) ?? cheapest;
-    return { quote, options, chosen };
+  const lines = jobs.map((job) => {
+    const cheapest = job.options.reduce<(typeof job.options)[number] | null>((best, o) => (!best || o.option.customerTotal < best.option.customerTotal ? o : best), null);
+    const chosen = job.options.find((o) => o.key === picked[job.key]) ?? cheapest;
+    return { ...job, chosen };
   });
   const priced = lines.filter((l) => l.chosen);
   const total = cents(priced.reduce((sum, l) => sum + l.chosen!.option.customerTotal, 0));
@@ -41,10 +61,10 @@ export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier
   const text = [
     "【SPEEDX AUTO 维修报价】",
     `车辆：${vehicle}`,
-    ...priced.map((l, i) => `${i + 1}. ${jobName(l.quote)}：${optionName(l.chosen!.option)}，$${l.chosen!.option.customerTotal.toFixed(2)}`),
+    ...priced.map((l, i) => `${i + 1}. ${l.name}：${optionName(l.chosen!.option, false)}，$${l.chosen!.option.customerTotal.toFixed(2)}`),
     `合计：$${total.toFixed(2)}`,
     "以上为税前参考价，最终以到店检查为准。",
-    `报价编号 ${priced.map((l) => l.quote.id).join(" / ")}`,
+    `报价编号 ${priced.map((l) => l.chosen!.quote.id).join(" / ")}`,
   ].join("\n");
 
   async function copy() {
@@ -68,22 +88,23 @@ export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier
         </p>
       </header>
       <ul className="divide-y divide-ink-100">
-        {lines.map(({ quote, options, chosen }) => (
-          <li key={quote.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
-            <span className="basis-full font-medium text-ink-900">{jobName(quote)}</span>
+        {lines.map(({ key, name, options, chosen }) => (
+          <li key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
+            <span className="basis-full font-medium text-ink-900">{name}</span>
             {options.length === 0 ? (
               <span className="text-amber-800">本地没有现货，未计入合计</span>
             ) : (
               <>
                 {options.length > 1 ? (
                   <select
-                    aria-label={`${jobName(quote)} 选哪个零件`}
-                    value={chosen?.index}
-                    onChange={(e) => setPicked((p) => ({ ...p, [quote.id]: Number(e.target.value) }))}
+                    aria-label={`${name} 选哪个零件`}
+                    value={chosen?.key}
+                    onChange={(e) => setPicked((p) => ({ ...p, [key]: e.target.value }))}
                     className="min-w-0 max-w-full flex-1 rounded-md border border-ink-200 bg-[#fff] px-2 py-1 text-xs text-[#111b21]"
                   >
                     {options.map((o) => (
-                      <option key={o.index} value={o.index}>
+                      <option key={o.key} value={o.key}>
+                        {o.note ? `${o.note} · ` : ""}
                         {optionName(o.option)} · {money(o.option.customerTotal)}
                       </option>
                     ))}
@@ -113,6 +134,11 @@ export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier
       {copied === "failed" && <pre className="mx-4 mb-3 whitespace-pre-wrap rounded-lg bg-ink-50 p-3 text-xs">{text}</pre>}
     </article>
   );
+}
+
+/** How many different jobs a reply quoted: the combined sheet shows only for two or more. */
+export function distinctJobs(quotes: StaffQuote[]): number {
+  return new Set(quotes.filter((q) => q.kind !== "team_quote").map((q) => (q.kind === "tires" ? "tires" : `${q.service}|${q.position}`))).size;
 }
 
 /** The assistant asks which price to quote: three buttons; the choice is saved and sent as the next message. */

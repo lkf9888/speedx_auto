@@ -19,14 +19,18 @@ export function isPriceTier(value: unknown): value is PriceTier {
   return typeof value === "string" && (PRICE_TIERS as readonly string[]).includes(value);
 }
 
-/** The option's total at this price; the friend price falls back to retail where there is none. */
+/**
+ * The option's total at this price. Without a friend price (no cost known,
+ * shop flat prices) the friend price falls back to the referral price, so a
+ * friend never pays the walk-in labor rate.
+ */
 export function tierTotal(option: Pick<StaffQuoteOption, "customerTotal" | "referralTotal" | "friendTotal">, tier: PriceTier): number {
   if (tier === "referral") return option.referralTotal;
-  if (tier === "friend") return option.friendTotal ?? option.customerTotal;
+  if (tier === "friend") return option.friendTotal ?? option.referralTotal;
   return option.customerTotal;
 }
 
-/** Whether the friend price had to fall back to retail for this option. */
+/** Whether the friend price had to fall back to the referral price for this option. */
 export function noFriendPrice(option: Pick<StaffQuoteOption, "friendTotal">, tier: PriceTier): boolean {
   return tier === "friend" && option.friendTotal == null;
 }

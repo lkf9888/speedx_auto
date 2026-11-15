@@ -94,7 +94,8 @@ describe("quote card", () => {
     // The margin follows what's typed, before saving.
     expect(screen.getByText("$584.00", { selector: ".line-through" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "保存最终价" }));
-    expect(onSaveFinal).toHaveBeenCalledWith({ "0": 520, "1": 648 });
+    // Only the changed price becomes final (Kevin, 2026-11-14: the rest follow the conversation price).
+    expect(onSaveFinal).toHaveBeenCalledWith({ "0": 520 });
     expect(await screen.findByText(/最终价已保存/)).toBeInTheDocument();
   });
 
