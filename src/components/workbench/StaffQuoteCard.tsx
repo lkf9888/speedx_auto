@@ -141,6 +141,8 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
   }
 
   const showCost = quote.kind === "labor" || quote.kind === "tires";
+  /** Friend price column: only when some option has one (quotes saved before it existed have none). */
+  const showFriend = showCost && quote.options.some((o) => o.friendTotal != null);
 
   return (
     <article data-testid="staff-quote" className="rounded-xl border border-ink-200 bg-white text-sm shadow-sm">
@@ -165,7 +167,7 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
         <p className="border-b border-ink-100 px-4 py-2 text-ink-700">
           工时 <b className="tabular-nums">{quote.labor.hours} h</b> × {money(quote.labor.rate)} ={" "}
           <b className="tabular-nums">{money(quote.labor.walkIn)}</b>
-          <span className="text-ink-500"> · 推荐价 {money(quote.labor.referral)}</span>
+          <span className="text-ink-500"> · 推荐价 / 朋友价 {money(quote.labor.referral)}</span>
         </p>
       )}
 
@@ -181,6 +183,11 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
                 {showCost && <th className="px-3 py-2 text-right font-medium">加价</th>}
                 <th className="px-3 py-2 text-right font-medium">{quote.kind === "labor" && quote.labor ? "客户总价（零件+工时）" : "客户总价"}</th>
                 {quote.kind === "labor" && <th className="px-3 py-2 text-right font-medium">推荐价</th>}
+                {showFriend && (
+                  <th className="px-3 py-2 text-right font-medium" title="WorldPac 零件 = 进价 + $100（每个零件号）；其他供货商 = 进价 × 1.3；工时 $96/h">
+                    朋友价
+                  </th>
+                )}
                 {showCost && <th className="px-3 py-2 text-right font-medium">毛利</th>}
                 {showCost && <th className="px-3 py-2 text-right font-medium">毛利率</th>}
                 <th className="px-3 py-2 font-medium">库存 / 类别</th>
@@ -239,6 +246,11 @@ export function StaffQuoteCard({ quote, onSaveFinal }: { quote: StaffQuote; onSa
                     {o.originalTotal !== null && <div className="text-[11px] font-normal text-ink-400 line-through">{money(o.originalTotal)}</div>}
                   </td>
                   {quote.kind === "labor" && <td className="px-3 py-2 text-right text-ink-600">{money(o.referralTotal)}</td>}
+                  {showFriend && (
+                    <td data-testid="friend-total" className="px-3 py-2 text-right text-ink-600">
+                      {money(o.friendTotal ?? null)}
+                    </td>
+                  )}
                   {showCost && <td className="px-3 py-2 text-right">{money(o.profit)}</td>}
                   {showCost && (
                     <td

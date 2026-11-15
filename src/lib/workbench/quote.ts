@@ -1,7 +1,8 @@
 /**
  * The staff quote: the same job the public assistant prices, with what the
- * public never sees — every part option, the shop's cost, margin, labor hours
- * and the referral price — plus a customer-ready text with no cost in it.
+ * public never sees — every part option, the shop's cost, margin, labor hours,
+ * the referral price and the friend price — plus a customer-ready text with
+ * no cost in it.
  */
 import { WALK_IN_LABOR_RATE, REFERRAL_LABOR_MULTIPLIER, type EstimateCard } from "@/lib/repair-chat/pricing";
 import type { StaffPartOption } from "@/lib/worldpac/catalog";
@@ -31,6 +32,13 @@ export interface StaffQuoteOption {
   customerTotal: number;
   /** Same with the referral labor price. */
   referralTotal: number;
+  /**
+   * Friend price (Kevin, 2026-11-14): WorldPac parts at cost + $100 per part
+   * number, other suppliers' parts at cost × 1.3, labor at the referral rate
+   * ($96/h). Null when the cost isn't known or there is no friend price
+   * (shop flat prices). Missing on quotes saved before it existed.
+   */
+  friendTotal?: number | null;
   costTotal: number | null;
   profit: number | null;
   /** Profit as a share of the customer total, 0–1. */
@@ -64,6 +72,20 @@ const money = (value: number) => Math.round(value * 100) / 100;
 
 export function costField(env: NodeJS.ProcessEnv = process.env): string {
   return env.WORKBENCH_COST_FIELD?.trim() || "unitPrice";
+}
+
+/** Friend price: added to each WorldPac part number's cost (not per unit). */
+export const FRIEND_WORLDPAC_ADD = 100;
+/** Friend price: other suppliers' parts at cost times this. */
+export const FRIEND_OTHER_MARKUP = 1.3;
+
+/**
+ * WorldPac parts at the friend price: cost × quantity + $100 for the part
+ * number, but never more than the list price (a cheap part's cost + $100 can
+ * be above it); null without a cost.
+ */
+function friendWorldpacParts(unitCost: number | null, quantity: number, listTotal: number): number | null {
+  return unitCost === null ? null : money(Math.min(unitCost * quantity + FRIEND_WORLDPAC_ADD, listTotal));
 }
 
 function finish(option: Omit<StaffQuoteOption, "profit" | "margin">): StaffQuoteOption {
@@ -107,6 +129,7 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
       stock: p.inStockLocally ? `本地有货（${p.qtyAvailable ?? "?"}）` : p.availability || "未知",
       customerTotal: money(listTotal + walkIn),
       referralTotal: money(listTotal + referral),
+      friendTotal: unitCost === null ? null : money(friendWorldpacParts(unitCost, p.quantity, listTotal)! + referral),
       costTotal: unitCost === null ? null : money(unitCost * p.quantity),
       prices: p.prices,
       fields: p.fields,
@@ -125,6 +148,7 @@ export function buildLaborQuote(vehicle: string, job: LaborJob, id: string, env:
         stock: "",
         customerTotal: walkIn,
         referralTotal: referral,
+        friendTotal: referral,
         costTotal: 0,
         prices: {},
         fields: {},
@@ -198,6 +222,7 @@ export function buildPartsQuote(vehicle: string, partName: string, position: str
       stock: p.inStockLocally ? `本地有货（${p.qtyAvailable ?? "?"}）` : p.availability || "未知",
       customerTotal: listTotal,
       referralTotal: listTotal,
+      friendTotal: friendWorldpacParts(unitCost, p.quantity, listTotal),
       costTotal: unitCost === null ? null : money(unitCost * p.quantity),
       prices: p.prices,
       fields: p.fields,
@@ -309,6 +334,8 @@ export function buildTireQuote(
       ...(o.outOfStock ? { outOfStock: true } : {}),
       customerTotal: perTire * count,
       referralTotal: perTire * count,
+      // Never above the normal installed price.
+      friendTotal: o.cost === null ? null : Math.min(Math.round(o.cost * FRIEND_OTHER_MARKUP + o.eco) + o.mounting, perTire) * count,
       // Eco fee is passed through, so it counts against profit like cost.
       costTotal: o.cost === null ? null : money((o.cost + o.eco) * count),
       prices: { retail: money(o.retail), eco: o.eco, mounting: o.mounting, ...(o.cost === null ? {} : { cost: money(o.cost) }) },
@@ -354,14 +381,14 @@ export function summarizeStaffQuote(quote: StaffQuote): string {
   const head = `Staff quote ${quote.id} shown as a card. Vehicle: ${quote.vehicle}. Service: ${quote.service}${quote.position ? ` (${quote.position})` : ""}.${source}`;
   if (quote.kind === "team_quote") return `${head}\nNo public price: ${quote.notes.join(" ")}`;
   const labor = quote.labor
-    ? `Labor: ${quote.labor.hours} h × $${quote.labor.rate} = $${quote.labor.walkIn} (referral $${quote.labor.referral}).`
+    ? `Labor: ${quote.labor.hours} h × $${quote.labor.rate} = $${quote.labor.walkIn} (referral and friend $${quote.labor.referral}).`
     : "";
   const options = quote.options
     .map(
       (o, i) =>
         `${i + 1}. ${[o.brand, o.label].filter(Boolean).join(" ")}${o.partNumber ? ` #${o.partNumber}` : ""} ×${o.quantity}: unit $${o.unitPrice}` +
         `${quote.kind === "tires" && o.prices.retail !== undefined ? ` (= tire $${o.prices.retail} + eco fee $${o.prices.eco} + mounting $${o.prices.mounting}, eco rounded in)` : ""}` +
-        `${o.unitCost !== null ? `, cost $${o.unitCost}` : ""}${surchargeOf(quote, o) !== null ? `, surcharge +${Math.round(surchargeOf(quote, o)! * 100)}%` : ""}; customer $${o.customerTotal} (referral $${o.referralTotal})` +
+        `${o.unitCost !== null ? `, cost $${o.unitCost}` : ""}${surchargeOf(quote, o) !== null ? `, surcharge +${Math.round(surchargeOf(quote, o)! * 100)}%` : ""}; customer $${o.customerTotal} (referral $${o.referralTotal}${o.friendTotal != null ? `, friend $${o.friendTotal}` : ""})` +
         `${o.profit !== null ? `, profit $${o.profit}${o.margin !== null ? ` (${Math.round(o.margin * 100)}%)` : ""}` : ""}${o.stock ? `, ${o.stock}` : ""}`,
     )
     .join("\n");

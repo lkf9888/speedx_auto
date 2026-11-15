@@ -46,6 +46,7 @@ export function priceOption(quote: Pick<StaffQuote, "kind">, option: StaffQuoteO
     ...option,
     customerTotal: cents(final),
     referralTotal: cents(final),
+    friendTotal: cents(final),
     // Tires are quoted per tire installed, so the per-tire price follows the agreed total.
     unitPrice: quote.kind === "tires" && option.quantity > 0 ? cents(final / option.quantity) : option.unitPrice,
     profit,

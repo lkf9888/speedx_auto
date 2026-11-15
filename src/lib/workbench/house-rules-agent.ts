@@ -4,7 +4,7 @@
  * rule changes on a card, and they take effect only when the owner confirms.
  */
 import type Anthropic from "@anthropic-ai/sdk";
-import { fallbackOptions, type MessagesClient } from "@/lib/repair-chat/agent";
+import { fallbackOptions, toPlainText, type MessagesClient } from "@/lib/repair-chat/agent";
 import { DISCOUNT_TARGETS, type HouseRule, type HouseRuleChange } from "@/lib/repair-chat/house-rules";
 import { WORKBENCH_MODEL } from "./assistant";
 
@@ -63,7 +63,7 @@ const TOOL: Anthropic.Beta.BetaTool = {
   },
 };
 
-const SYSTEM = `You help the owner of SPEEDX AUTO (an auto repair shop in Richmond, BC) adjust the estimate assistant on the shop's website: the AI that talks to customers on the repair page, prices jobs from the labor guide and parts catalog, and shows estimate cards. The owner talks to you in Chinese, in plain language. Reply in Simplified Chinese, short and clear.
+const SYSTEM = `You help the owner of SPEEDX AUTO (an auto repair shop in Richmond, BC) adjust the estimate assistant on the shop's website: the AI that talks to customers on the repair page, prices jobs from the labor guide and parts catalog, and shows estimate cards. The owner talks to you in Chinese, in plain language. Reply in Simplified Chinese, short and clear, as plain text: no bold, headings or other markdown; use "•" for a short list.
 
 You can't change anything yourself. When the owner wants something changed, call propose_rule_changes once with all the changes; the owner sees a card and presses confirm. Then tell them in one or two sentences what the card will do. If what they want is unclear (which service, how much, from when to when, which customer), ask first instead of guessing. For a question about the current rules, just answer.
 
@@ -74,6 +74,8 @@ There are two kinds of rules:
 Both kinds can run between dates (shop dates, inclusive; work out real dates from today) and can be for one customer only: put their phone number in customer_phone and nowhere else (never in the title, note, or labels). The phone number is matched in code and never shown to the website AI. A customer-only rule applies once that customer has given their phone number in the chat.
 
 These fixed rules can't be changed by any rule, and you should say so if asked: prices and totals only from the tools; never tell customers the hourly labor rate; never say where parts or tires come from or show cost prices; never ask the AI to collect or repeat contact details; safety warnings first; the shop doesn't do transmission repair, auto glass, wheel alignments, or exhaust and muffler repair. Changing those, or the posted prices themselves, needs a code change: tell the owner to ask the estimate-assistant session.
+
+Prices worked out from the shop's cost (for example a friend price: WorldPac parts at cost plus a fixed amount, other parts at cost × 1.3, labor at $96/h) can't be set here, because the website never sees costs. They live in the staff workbench: every workbench quote card has a 朋友价 (friend price) column, and when the owner or staff say in a workbench conversation that the customer is a friend (for example "客户是朋友"), the workbench AI quotes the friend price. Tell the owner that, briefly. If they also want a friend who uses the website to get a lower price there, offer a discount for that friend's phone number instead.
 
 Keep the list tidy: when a new rule replaces an old one, update or delete the old one in the same proposal. Mention when a rule has already ended (end date before today).`;
 
@@ -154,11 +156,12 @@ export async function askRulesAssistant(
     output_config: { effort: "medium" },
     ...fallbackOptions(WORKBENCH_MODEL),
   });
-  const text = response.content
-    .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("\n")
-    .trim();
+  const text = toPlainText(
+    response.content
+      .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
+      .map((block) => block.text)
+      .join("\n"),
+  );
   const use = response.content.find(
     (block): block is Anthropic.Beta.BetaToolUseBlock => block.type === "tool_use" && block.name === TOOL.name,
   );
