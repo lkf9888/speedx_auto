@@ -8,7 +8,7 @@ import { randomBytes } from "node:crypto";
 import { cloudflareKv, type KvClient } from "./kv";
 import type { Conversation, ConversationSummary, PendingQuery, ShareLink, Turn, Vehicle } from "./conversation-types";
 import type { FollowUpRecord } from "./followup";
-import type { PriceTier } from "./price-tier";
+import type { CustomPricing, PriceTier } from "./price-tier";
 import { getShareStore, shareKey } from "./shares";
 import { finalCustomerText, readFinalTotals } from "./final-price";
 import { mergeWestcan, type WestcanAnswer } from "./westcan";
@@ -183,9 +183,12 @@ export class ConversationStore {
     });
   }
 
-  async setPriceTier(id: string, by: string, tier: PriceTier): Promise<Conversation> {
+  async setPriceTier(id: string, by: string, tier: PriceTier, pricing?: CustomPricing): Promise<Conversation> {
     return this.change(id, by, (c) => {
       c.priceTier = tier;
+      // The sliders only matter for the custom price.
+      if (tier === "custom" && pricing) c.pricing = pricing;
+      else delete c.pricing;
     });
   }
 

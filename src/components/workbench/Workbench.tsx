@@ -15,7 +15,7 @@ import {
   type Turn as SharedTurn,
   WEBSITE_CUSTOMER,
 } from "@/lib/workbench/conversation-types";
-import { TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
+import { describePricing, TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
 import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
@@ -24,7 +24,7 @@ import { FollowUpPanel } from "./FollowUpPanel";
 import { SharePanel } from "./SharePanel";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
 import { AlldataDraftCard } from "./AlldataDraftCard";
-import { distinctJobs, PriceChoiceCard, QuoteSheetSummary } from "./QuoteSheetSummary";
+import { distinctJobs, PriceChoiceCard, QuoteSheetSummary, type PriceChoice } from "./QuoteSheetSummary";
 import { StaffQuoteCard } from "./StaffQuoteCard";
 import { bridgeErrorText, callAlldata, BridgeError } from "@/lib/workbench/alldata-bridge";
 import { WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
@@ -375,14 +375,20 @@ export function Workbench({ email }: { email: string }) {
   }
 
   /** Staff picked which price this conversation quotes: saved for everyone; from the choice card it also carries on the quote. */
-  async function choosePriceTier(conversationId: string, tier: PriceTier, carryOn: boolean) {
-    patchLocal(conversationId, (c) => ({ ...c, priceTier: tier }));
+  async function choosePriceTier(conversationId: string, choice: PriceChoice, carryOn: boolean) {
+    const pricing = choice.tier === "custom" ? choice.pricing : undefined;
+    patchLocal(conversationId, (c) => {
+      const next = { ...c, priceTier: choice.tier };
+      if (pricing) next.pricing = pricing;
+      else delete next.pricing;
+      return next;
+    });
     await fetch(`/api/workbench/conversations/${conversationId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ priceTier: tier }),
+      body: JSON.stringify({ priceTier: choice.tier, ...(pricing ? { pricing } : {}) }),
     }).catch(() => null);
-    if (carryOn) void send(`按${TIER_LABEL[tier]}报价`);
+    if (carryOn) void send(pricing ? `按${TIER_LABEL.custom}报价（${describePricing(pricing)}）` : `按${TIER_LABEL[choice.tier]}报价`);
   }
 
   /** Save a new title; an empty title goes back to the first question. */
@@ -950,11 +956,11 @@ export function Workbench({ email }: { email: string }) {
                     </div>
                   ))}
                   {turn.priceChoice && (
-                    <PriceChoiceCard current={active.priceTier} disabled={Boolean(activePending) || !currentId} onChoose={(tier) => void choosePriceTier(active.id, tier, true)} />
+                    <PriceChoiceCard current={active.priceTier} currentPricing={active.pricing} disabled={Boolean(activePending) || !currentId} onChoose={(choice) => void choosePriceTier(active.id, choice, true)} />
                   )}
                   {distinctJobs(turn.quotes) > 1 ? (
                     <>
-                      <QuoteSheetSummary quotes={turn.quotes} tier={active.priceTier ?? "retail"} />
+                      <QuoteSheetSummary quotes={turn.quotes} tier={active.priceTier ?? "retail"} custom={active.pricing} />
                       <details data-testid="quote-details" className="rounded-xl border border-[color:var(--wb-line)] bg-white/60 px-3 py-2">
                         <summary className="cursor-pointer text-xs font-semibold text-[color:var(--wb-icon)]">各项明细（{turn.quotes.length} 张，改价时展开）</summary>
                         <div className="mt-2 space-y-2">
@@ -963,6 +969,7 @@ export function Workbench({ email }: { email: string }) {
                               key={`${quote.id}-${quote.westcan?.checked ? "w" : ""}`}
                               quote={quote}
                               tier={active.priceTier ?? "retail"}
+                              custom={active.pricing}
                               onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
                               westcanError={westcanErrors[quote.id]}
                               onRetryWestcan={currentId ? () => retryWestcan(quote.id) : undefined}
@@ -977,6 +984,7 @@ export function Workbench({ email }: { email: string }) {
                         key={`${quote.id}-${quote.westcan?.checked ? "w" : ""}`}
                         quote={quote}
                         tier={active.priceTier ?? "retail"}
+                              custom={active.pricing}
                         onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
                         westcanError={westcanErrors[quote.id]}
                         onRetryWestcan={currentId ? () => retryWestcan(quote.id) : undefined}

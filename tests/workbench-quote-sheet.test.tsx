@@ -138,11 +138,13 @@ describe("choosing the price", () => {
     expect(priceTierNote("friend")).toContain("朋友价");
   });
 
-  it("shows three buttons and reports the pick", async () => {
+  it("shows three buttons and reports the pick only after confirm", async () => {
     const onChoose = vi.fn();
     render(<PriceChoiceCard onChoose={onChoose} />);
     await userEvent.click(screen.getByRole("button", { name: /^朋友价/ }));
-    expect(onChoose).toHaveBeenCalledWith("friend");
+    expect(onChoose).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId("price-confirm"));
+    expect(onChoose).toHaveBeenCalledWith({ tier: "friend" });
   });
 
   it("explains each price in the chat card and marks the one in use", () => {

@@ -4,7 +4,7 @@
  */
 import { staffUser, type StaffUser } from "./access";
 import { ConversationError, getConversationStore, type ConversationStore } from "./conversations";
-import { isPriceTier } from "./price-tier";
+import { isPriceTier, snapPricing } from "./price-tier";
 import type { WestcanAnswer } from "./westcan";
 
 export interface ConversationDeps {
@@ -80,8 +80,10 @@ export async function handleConversation(request: Request, id: string, deps: Con
         return json({ conversation });
       }
       if (isPriceTier(body.priceTier)) {
-        const conversation = await store.setPriceTier(id, user.email, body.priceTier);
-        deps.log({ action: "price_tier", email: user.email, id, tier: body.priceTier });
+        const pricing = snapPricing(body.pricing);
+        if (body.priceTier === "custom" && !pricing) return json({ error: "invalid" }, 400);
+        const conversation = await store.setPriceTier(id, user.email, body.priceTier, pricing ?? undefined);
+        deps.log({ action: "price_tier", email: user.email, id, tier: body.priceTier, ...(body.priceTier === "custom" && pricing ? { partsPct: pricing.partsPct, laborRate: pricing.laborRate } : {}) });
         return json({ conversation });
       }
       if (typeof body.archived === "boolean") {

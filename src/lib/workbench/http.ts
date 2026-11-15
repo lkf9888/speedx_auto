@@ -222,6 +222,7 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
             vehicleKey: request_.vehicleKey,
             attachments: request_.attachments.length ? attachmentBlocks(request_.attachments) : undefined,
             priceTier: stored?.priceTier,
+            pricing: stored?.pricing,
           },
           send,
           () => `W-${randomBytes(4).toString("hex").toUpperCase()}`,

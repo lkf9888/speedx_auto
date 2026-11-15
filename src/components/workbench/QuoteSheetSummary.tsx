@@ -2,7 +2,20 @@
 
 import { useState } from "react";
 import { withFinalPrices } from "@/lib/workbench/final-price";
-import { atTier, TIER_HINT, TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
+import {
+  atTier,
+  describePricing,
+  LABOR_MAX,
+  LABOR_MIN,
+  LABOR_STEP,
+  PARTS_STEP,
+  PRESET_PRICING,
+  QUICK_TIERS,
+  TIER_HINT,
+  TIER_LABEL,
+  type CustomPricing,
+  type PriceTier,
+} from "@/lib/workbench/price-tier";
 import type { StaffQuote } from "@/lib/workbench/quote";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
@@ -10,8 +23,8 @@ const money = (value: number) => usd.format(value);
 const cents = (value: number) => Math.round(value * 100) / 100;
 
 /** A quote at the chosen price with agreed prices applied, and the options in stock. */
-function inStock(quote: StaffQuote, tier: PriceTier, labelled: boolean) {
-  const priced = withFinalPrices(atTier(quote, tier));
+function inStock(quote: StaffQuote, tier: PriceTier, custom: CustomPricing | null | undefined, labelled: boolean) {
+  const priced = withFinalPrices(atTier(quote, tier, custom));
   return priced.options.flatMap((o, i) => (quote.options[i].outOfStock ? [] : [{ key: `${quote.id}:${i}`, quote, option: o, note: labelled ? quote.vehicle : "" }]));
 }
 
@@ -25,7 +38,7 @@ const optionName = (o: { brand: string; label: string; partNumber: string }, wit
  * (one per engine when the engine isn't known, or new tires from two
  * suppliers), so they share one row and only one of their options counts.
  */
-function jobsOf(quotes: StaffQuote[], tier: PriceTier) {
+function jobsOf(quotes: StaffQuote[], tier: PriceTier, custom: CustomPricing | null | undefined) {
   const groups = new Map<string, StaffQuote[]>();
   for (const quote of quotes) {
     if (quote.kind === "team_quote") continue;
@@ -35,7 +48,7 @@ function jobsOf(quotes: StaffQuote[], tier: PriceTier) {
   return [...groups.entries()].map(([key, group]) => ({
     key,
     name: jobName(group[0]),
-    options: group.flatMap((q) => inStock(q, tier, group.length > 1 && q.kind !== "tires")),
+    options: group.flatMap((q) => inStock(q, tier, custom, group.length > 1 && q.kind !== "tires")),
   }));
 }
 
@@ -44,8 +57,8 @@ function jobsOf(quotes: StaffQuote[], tier: PriceTier) {
  * rear rotors as one quote): one option per job, cheapest in stock first, and
  * the grand total at the conversation's price, with a customer copy.
  */
-export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier: PriceTier }) {
-  const jobs = jobsOf(quotes, tier);
+export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote[]; tier: PriceTier; custom?: CustomPricing | null }) {
+  const jobs = jobsOf(quotes, tier, custom);
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
 
@@ -107,7 +120,7 @@ export function QuoteSheetSummary({ quotes, tier }: { quotes: StaffQuote[]; tier
     <article data-testid="quote-sheet" className="rounded-xl border-2 border-brand-200 bg-white text-sm shadow-sm">
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-ink-100 px-4 py-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">报价单 · 按{TIER_LABEL[tier]}{pending.length ? ` · ${pending.length} 项待补价` : ""}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">报价单 · 按{TIER_LABEL[tier]}{tier === "custom" && custom ? `（${describePricing(custom)}）` : ""}{pending.length ? ` · ${pending.length} 项待补价` : ""}</p>
           <p className="text-xs text-ink-500">{vehicle}</p>
         </div>
         <p className="text-lg font-semibold tabular-nums text-ink-900" data-testid="quote-sheet-total">
@@ -178,26 +191,120 @@ export function distinctJobs(quotes: StaffQuote[]): number {
   return new Set(quotes.filter((q) => q.kind !== "team_quote").map((q) => (q.kind === "tires" ? "tires" : `${q.service}|${q.position}`))).size;
 }
 
-/** The assistant asks which price to quote, in the chat: one button per price with its rule; the choice is saved and sent as the next message. */
-export function PriceChoiceCard({ current, onChoose, disabled }: { current?: PriceTier; onChoose: (tier: PriceTier) => void; disabled?: boolean }) {
-  const tiers: PriceTier[] = ["retail", "referral", "friend"];
+/** What a choice sends: a quick price by name, or the two slider positions. */
+export type PriceChoice = { tier: Exclude<PriceTier, "custom"> } | { tier: "custom"; pricing: CustomPricing };
+
+interface Draft extends CustomPricing {
+  /** The quick button the sliders still sit on; null once a slider has been moved. */
+  preset: Exclude<PriceTier, "custom"> | null;
+}
+
+function startingDraft(current?: PriceTier, pricing?: CustomPricing | null): Draft {
+  if (current === "custom" && pricing) return { ...pricing, preset: null };
+  if (current === "retail" || current === "referral" || current === "friend") return { ...PRESET_PRICING[current], preset: current };
+  return { ...PRESET_PRICING.retail, preset: "retail" };
+}
+
+/**
+ * The assistant asks which price to quote (Kevin, 2026-11-15): three quick
+ * buttons that just move two sliders (parts: cost to suggested retail in 5%
+ * steps; labor: $60 to $120 in $5 steps), and nothing goes on to the assistant
+ * until staff press confirm.
+ */
+export function PriceChoiceCard({
+  current,
+  currentPricing,
+  onChoose,
+  disabled,
+}: {
+  current?: PriceTier;
+  currentPricing?: CustomPricing | null;
+  onChoose: (choice: PriceChoice) => void;
+  disabled?: boolean;
+}) {
+  const [draft, setDraft] = useState<Draft>(() => startingDraft(current, currentPricing));
+  const friend = draft.preset === "friend";
   return (
     <div data-testid="price-choice" className="ml-auto w-full max-w-xl rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-[#111b21]">
-      <p className="text-xs font-semibold text-sky-900">按哪个价报？{current ? `（现在按${TIER_LABEL[current]}，点别的可以换）` : ""}</p>
+      <p className="text-xs font-semibold text-sky-900">按哪个价报？{current ? `（现在按${TIER_LABEL[current]}${current === "custom" && currentPricing ? `：${describePricing(currentPricing)}` : ""}，可以重新选）` : ""}</p>
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
-        {tiers.map((tier) => (
-          <button
-            key={tier}
-            type="button"
+        {QUICK_TIERS.map((tier) => {
+          const quick = tier as Exclude<PriceTier, "custom">;
+          return (
+            <button
+              key={tier}
+              type="button"
+              disabled={disabled}
+              aria-pressed={draft.preset === tier}
+              onClick={() => setDraft({ ...PRESET_PRICING[quick], preset: quick })}
+              className={`rounded-lg px-3 py-2 text-left disabled:opacity-50 ${draft.preset === tier ? "bg-sky-700 text-white" : "border border-sky-300 bg-white text-sky-900 hover:bg-sky-100"}`}
+            >
+              <span className="block text-sm font-semibold">{TIER_LABEL[tier]}</span>
+              <span className={`mt-0.5 block text-[11px] leading-4 ${draft.preset === tier ? "text-sky-100" : "text-sky-800/80"}`}>{TIER_HINT[tier]}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-3 space-y-3">
+        <label className="block">
+          <span className="flex items-baseline justify-between text-xs font-semibold text-sky-900">
+            <span>零件加价</span>
+            <span data-testid="parts-value" className="tabular-nums">
+              {friend ? "进价 + $100/零件号" : `${draft.partsPct}%`}
+            </span>
+          </span>
+          <input
+            data-testid="parts-slider"
+            type="range"
+            min={0}
+            max={100}
+            step={PARTS_STEP}
+            value={draft.partsPct}
             disabled={disabled}
-            aria-pressed={current === tier}
-            onClick={() => onChoose(tier)}
-            className={`rounded-lg px-3 py-2 text-left disabled:opacity-50 ${current === tier ? "bg-sky-700 text-white" : "border border-sky-300 bg-white text-sky-900 hover:bg-sky-100"}`}
-          >
-            <span className="block text-sm font-semibold">{TIER_LABEL[tier]}</span>
-            <span className={`mt-0.5 block text-[11px] leading-4 ${current === tier ? "text-sky-100" : "text-sky-800/80"}`}>{TIER_HINT[tier]}</span>
-          </button>
-        ))}
+            aria-label="零件加价"
+            onChange={(e) => setDraft({ ...draft, partsPct: Number(e.target.value), preset: null })}
+            className="mt-1 w-full accent-sky-700"
+          />
+          <span className="flex justify-between text-[11px] text-sky-800/80">
+            <span>0% 进价</span>
+            <span>100% 建议零售价</span>
+          </span>
+        </label>
+        <label className="block">
+          <span className="flex items-baseline justify-between text-xs font-semibold text-sky-900">
+            <span>工时</span>
+            <span data-testid="labor-value" className="tabular-nums">
+              ${draft.laborRate}/h
+            </span>
+          </span>
+          <input
+            data-testid="labor-slider"
+            type="range"
+            min={LABOR_MIN}
+            max={LABOR_MAX}
+            step={LABOR_STEP}
+            value={draft.laborRate}
+            disabled={disabled}
+            aria-label="工时单价"
+            onChange={(e) => setDraft({ ...draft, laborRate: Number(e.target.value), preset: null })}
+            className="mt-1 w-full accent-sky-700"
+          />
+          <span className="flex justify-between text-[11px] text-sky-800/80">
+            <span>${LABOR_MIN}</span>
+            <span>${LABOR_MAX}</span>
+          </span>
+        </label>
+      </div>
+      <div className="mt-3 flex justify-end">
+        <button
+          type="button"
+          data-testid="price-confirm"
+          disabled={disabled}
+          onClick={() => onChoose(draft.preset ? { tier: draft.preset } : { tier: "custom", pricing: { partsPct: draft.partsPct, laborRate: draft.laborRate } })}
+          className="rounded-lg bg-sky-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-800 disabled:opacity-50"
+        >
+          确认
+        </button>
       </div>
     </div>
   );

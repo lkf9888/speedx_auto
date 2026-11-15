@@ -54,6 +54,8 @@ export interface ChatRequest {
   attachments?: Anthropic.Beta.BetaContentBlockParam[];
   /** The workbench conversation's chosen price (retail / referral / friend); only the staff workbench sets this. */
   priceTier?: string;
+  /** Slider positions when priceTier is "custom"; only the staff workbench sets this. */
+  pricing?: { partsPct: number; laborRate: number };
 }
 
 export interface ChatResult<E = ChatEvent> {

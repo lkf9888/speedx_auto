@@ -7,7 +7,7 @@ import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import type { AlldataDraft } from "./alldata-draft";
 import type { MemoryProposal } from "./assistant";
 import type { FollowUpRecord } from "./followup";
-import type { PriceTier } from "./price-tier";
+import type { CustomPricing, PriceTier } from "./price-tier";
 import type { StaffQuote } from "./quote";
 
 export interface SentFile {
@@ -57,6 +57,8 @@ export interface Conversation {
   website?: WebsiteVisitor;
   /** Which price this conversation quotes; unset until staff choose. */
   priceTier?: PriceTier;
+  /** The slider positions behind priceTier "custom" (parts % between cost and suggested retail, labor $/h). */
+  pricing?: CustomPricing;
   /** Read-only links to this conversation that work without signing in. */
   shares?: ShareLink[];
   /** Follow-up offers sent to (or logged for) a website customer. */

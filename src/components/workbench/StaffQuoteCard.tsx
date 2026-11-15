@@ -4,7 +4,7 @@ import { useState } from "react";
 import { optionLinks, type ProductLink } from "@/lib/workbench/links";
 import { finalCustomerText, priceOption, withFinalPrices } from "@/lib/workbench/final-price";
 import { staffName } from "@/lib/workbench/conversation-types";
-import { atTier, noFriendPrice, TIER_LABEL, tierLabor, tierMarkup, type PriceTier } from "@/lib/workbench/price-tier";
+import { atTier, describePricing, noFriendPrice, TIER_LABEL, tierLabor, tierMarkup, type CustomPricing, type PriceTier } from "@/lib/workbench/price-tier";
 import type { StaffQuote, StaffQuoteOption } from "@/lib/workbench/quote";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
@@ -50,8 +50,13 @@ function ProductLinks({ links }: { links: ProductLink[] }) {
 type Totals = Record<string, number> | null;
 
 /** Markup in dollars on a row as shown (its total may be a final price). */
-function rowMarkup(quote: StaffQuote, row: StaffQuoteOption, tier: PriceTier): number | null {
-  return tierMarkup(quote, { ...row, referralTotal: row.customerTotal, friendTotal: row.customerTotal }, tier);
+function rowMarkup(quote: StaffQuote, row: StaffQuoteOption, tier: PriceTier, custom?: CustomPricing | null): number | null {
+  // The row is already at the chosen price, so its customer total is the total for every tier.
+  if (tier === "custom" && quote.kind === "labor") {
+    if (row.unitCost === null || row.costTotal === null) return null;
+    return Math.round((row.customerTotal - (tierLabor(quote, "custom", custom) ?? 0) - row.costTotal) * 100) / 100;
+  }
+  return tierMarkup(quote, { ...row, referralTotal: row.customerTotal, friendTotal: row.customerTotal }, tier === "custom" ? "retail" : tier, null);
 }
 
 /**
@@ -95,6 +100,7 @@ export function StaffQuoteCard({
   quote: stored,
   onSaveFinal,
   tier = "retail",
+  custom,
   westcanError,
   onRetryWestcan,
 }: {
@@ -105,9 +111,11 @@ export function StaffQuoteCard({
   onRetryWestcan?: () => void;
   /** The conversation's price; the card shows only that one. */
   tier?: PriceTier;
+  /** The slider positions when tier is "custom". */
+  custom?: CustomPricing | null;
 }) {
   // Every total at the chosen price; agreed (final) prices still win.
-  const quote = atTier(stored, tier);
+  const quote = atTier(stored, tier, custom);
   const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
   const [raw, setRaw] = useState(false);
   /** Options left out of the customer text (unticked); out-of-stock ones start unticked so they aren't copied by accident. */
@@ -203,7 +211,7 @@ export function StaffQuoteCard({
   }
 
   const showCost = quote.kind === "labor" || quote.kind === "tires";
-  const labor = tierLabor(quote, tier);
+  const labor = tierLabor(stored, tier, custom);
 
   return (
     <article data-testid="staff-quote" className="rounded-xl border border-ink-200 bg-white text-sm shadow-sm">
@@ -217,7 +225,7 @@ export function StaffQuoteCard({
           <p className="text-xs text-ink-500">{quote.vehicle}</p>
           {showCost && (
             <p data-testid="quote-tier" className="mt-1 inline-block rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800">
-              按{TIER_LABEL[tier]}
+              按{TIER_LABEL[tier]}{tier === "custom" && custom ? `（${describePricing(custom)}）` : ""}
             </p>
           )}
           {quote.final && (
@@ -261,7 +269,7 @@ export function StaffQuoteCard({
             <tbody>
               {rows.map((o, i) => {
                 if (quote.options[i].outOfStock) return null;
-                const markup = rowMarkup(quote, o, tier);
+                const markup = rowMarkup(quote, o, tier, custom);
                 const partsSell = quote.kind === "labor" ? Math.round((o.customerTotal - (labor ?? 0)) * 100) / 100 : o.unitPrice;
                 return (
                 <tr key={`${o.label}-${i}`} className="border-t border-ink-100 align-top">

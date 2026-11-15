@@ -37,7 +37,7 @@ import { MAX_NOTE_LENGTH } from "./memory";
 import { laborShortfall, MIN_LABOR_HOURS, minimumLaborNote } from "@/lib/repair-chat/pricing";
 import { customerText } from "./customer-text";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
-import { isPriceTier, TIER_LABEL, type PriceTier } from "./price-tier";
+import { describePricing, isPriceTier, snapPricing, TIER_LABEL, type CustomPricing, type PriceTier } from "./price-tier";
 import { buildFlatQuote, buildLaborQuote, buildPartsQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
 
 export const WORKBENCH_MODEL = process.env.WORKBENCH_MODEL || "claude-sonnet-5-5";
@@ -588,13 +588,13 @@ export async function runWorkbenchTool(
   if (name === "find_fleet_car") return findFleetCar(tato, input);
   if (name === "ask_price_tier") {
     return {
-      content: JSON.stringify({ status: "shown", note: "Staff see three price buttons. Ask in one short line which price to quote, quote nothing yet, and stop." }),
+      content: JSON.stringify({ status: "shown", note: "Staff see three quick price buttons plus a parts slider and a labor slider, and confirm. Ask in one short line which price to quote, quote nothing yet, and stop." }),
       isError: false,
       events: [{ type: "price_choice" }],
     };
   }
   if (name === "set_price_tier") {
-    if (!isPriceTier(input.tier)) return { content: JSON.stringify({ error: "tier must be retail, referral or friend" }), isError: true, events: [] };
+    if (!isPriceTier(input.tier) || input.tier === "custom") return { content: JSON.stringify({ error: "tier must be retail, referral or friend" }), isError: true, events: [] };
     return { content: JSON.stringify({ status: "set", tier: input.tier }), isError: false, events: [{ type: "price_tier", tier: input.tier }] };
   }
   if (name === "find_brand_tires") return findBrandTires(dt, input, knownVehicleKey, newEstimateId);
@@ -697,7 +697,12 @@ export async function runWorkbenchTool(
 }
 
 /** What the assistant is told about the conversation's price each turn. */
-export function priceTierNote(tier: PriceTier | undefined): string {
+export function priceTierNote(tier: PriceTier | undefined, pricing?: CustomPricing | null): string {
+  if (tier === "custom") {
+    return pricing
+      ? `Price for this conversation: ${TIER_LABEL.custom} (${describePricing(pricing)}: parts ${pricing.partsPct}% of the way from cost to suggested retail, labor $${pricing.laborRate}/h). The summary lists retail, referral and friend totals only; the card shows the custom totals, so point staff to the card and don't state a dollar total of your own.`
+      : "No price chosen for this conversation yet: call ask_price_tier before the first quote.";
+  }
   return tier
     ? `Price for this conversation: ${TIER_LABEL[tier]} (${tier}). Quote that price's totals.`
     : "No price chosen for this conversation yet: call ask_price_tier before the first quote.";
@@ -711,7 +716,7 @@ export const WORKBENCH_PROFILE: ChatProfile<WorkbenchEvent> = {
   turnContext: (request, _earlier, vehicle) =>
     [
       `Today at the shop (Vancouver time): ${shopToday(new Date())}.`,
-      priceTierNote(isPriceTier(request.priceTier) ? request.priceTier : undefined),
+      priceTierNote(isPriceTier(request.priceTier) ? request.priceTier : undefined, snapPricing(request.pricing)),
       vehicle ? `Vehicle already confirmed in this conversation: ${vehicle.label} (vehicle_key: ${vehicle.key}). Reuse it unless staff switch vehicles.` : "",
     ]
       .filter(Boolean)
