@@ -75,13 +75,56 @@ describe("public estimates for each configuration", () => {
     expect(JSON.parse(out.content).status).toBe("need_details");
   });
 
-  it("still asks when there are too many options to show", async () => {
-    const out = await runTool(engineCatalog(["1.5 L4", "1.8 L4", "2.0 L4", "2.4 L4"]), "get_estimate", { vehicle_key: encodeVehicleKey(vehicle()), service_id: 9, position: null }, () => "E-1", "en");
+  it("still asks when there are too many combinations to show", async () => {
+    const out = await runTool(engineCatalog(["1.5 L4", "1.8 L4", "2.0 L4", "2.4 L4", "2.5 L4", "3.0 V6", "3.5 V6"]), "get_estimate", { vehicle_key: encodeVehicleKey(vehicle()), service_id: 9, position: null }, () => "E-1", "en");
     expect(cards(out.events)).toEqual([]);
     expect(JSON.parse(out.content).status).toBe("need_details");
   });
 
   it("tells the assistant how to present the per-configuration cards", () => {
     expect(SYSTEM_PROMPT).toMatch(/one card per/);
+  });
+});
+
+/** A car whose labor needs both the engine and the body style; only the engine changes the hours. */
+function engineAndBodyCatalog(): CatalogApi {
+  const engines = ["1.8 L4", "2.0 L4 Si"];
+  const bodies = ["Coupe", "Sedan"];
+  return {
+    async get() {
+      throw new Error("unused");
+    },
+    async post<T>(path: string, data: unknown) {
+      const d = data as Record<string, unknown>;
+      const refined = (d.refinedVehAttrIDs as Array<{ name?: string; value?: number }> | undefined) ?? [];
+      const engine = refined.find((a) => a.name === "EngineBase");
+      const body = refined.find((a) => a.name === "BodyType");
+      const attrs = [
+        { attrName: "EngineBase", attrDesc: "Engine", vehAttrs: engines.map((value, i) => ({ isEnabled: true, value: { key: 10 + i, value } })) },
+        { attrName: "BodyType", attrDesc: "Body", vehAttrs: bodies.map((value, i) => ({ isEnabled: true, value: { key: 20 + i, value } })) },
+      ];
+      if (path === "vehicle/refine") return { recommendedVehAttrs: attrs } as T;
+      if (path === "labor-ops-list") {
+        if (!engine || !body) return { vehAttrOptions: attrs.map((a) => ({ ...a, vehAttrs: a.vehAttrs.map((v) => ({ value: { value: v.value.value } })) })) } as T;
+        return { laborOperations: [{ applicationID: 1, assetName: "wp", position: { description: "" } }] } as T;
+      }
+      if (path === "labor-ops-details") return { laborOperation: { estimateTimeHour: engine?.value === 11 ? 1.6 : 1.2, laborCategoryName: "CV Boot R&R", applications: [] } } as T;
+      throw new Error(path);
+    },
+  };
+}
+
+describe("two unknown details at once", () => {
+  it("prices every combination and shows one card per distinct price instead of asking (2010 Civic CV boot)", async () => {
+    const out = await runTool(engineAndBodyCatalog(), "get_estimate", { vehicle_key: encodeVehicleKey(vehicle()), service_id: 9, position: null }, () => "E-1", "en");
+    const body = JSON.parse(out.content);
+    expect(body.status).toBe("ok");
+    expect(cards(out.events)).toHaveLength(2);
+    expect(body.note).toContain("Don't ask for details first");
+  });
+
+  it("the prompt stops promising later retries and repeated detail questions", () => {
+    expect(SYSTEM_PROMPT).toContain("don't promise to try again later");
+    expect(SYSTEM_PROMPT).toContain("don't ask a second and third time");
   });
 });

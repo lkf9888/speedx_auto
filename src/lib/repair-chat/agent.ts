@@ -300,15 +300,15 @@ export async function runChat<E extends { type: string } = ChatEvent>(
       const toolInput = (use.input ?? {}) as Record<string, unknown>;
       emit(profile.statusEvent(use.name, toolInput));
       try {
-        const outcome = await profile.runTool(
-          api,
-          use.name,
-          (use.input ?? {}) as Record<string, unknown>,
-          newEstimateId,
-          cardLocale,
-          knownVehicleKey,
-          (detail) => emit(profile.statusEvent(use.name, toolInput, detail)),
-        );
+        const run = () =>
+          profile.runTool(api, use.name, toolInput, newEstimateId, cardLocale, knownVehicleKey, (detail) => emit(profile.statusEvent(use.name, toolInput, detail)));
+        // A catalog hiccup gets one more try right away (2026-11-16: a customer was told "try again in a few minutes" and lost five minutes).
+        const outcome = await run().catch(async (error: unknown) => {
+          if (!(error instanceof WorldpacError)) throw error;
+          console.warn("repair-chat worldpac error, trying once more", error.kind);
+          await new Promise((resolve) => setTimeout(resolve, 700));
+          return run();
+        });
         outcome.events.forEach(emit);
         onTool?.(use.name, use.input, outcome.content);
         // Only after a tool that priced something (a card), not after a vehicle lookup or a memory note.
