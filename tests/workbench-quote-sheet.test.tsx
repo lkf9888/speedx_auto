@@ -97,7 +97,7 @@ describe("the quote card", () => {
   it("shows one price, cost and markup in dollars, and no stock, margin or extra price columns", () => {
     render(<StaffQuoteCard quote={front()} tier="referral" />);
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual(["选项", "数量", "采购价", "零件卖价", "安装工时价", "加价", "推荐价（零件+工时）"]);
+    expect(headers).toEqual(["选项", "数量", "采购价", "零件卖价", "安装工时价", "加价", "原价+8折人工（零件+工时）"]);
     expect(screen.queryByText(/F-3/)).toBeNull();
     expect(screen.getAllByTestId("surcharge").map((c) => c.textContent)).toEqual(["+$110.00", "+$80.00"]);
     expect(screen.getByTestId("labor-line")).toHaveTextContent("1 h × $96.00 = $96.00");
@@ -135,13 +135,13 @@ describe("choosing the price", () => {
     expect((await runWorkbenchTool(api, "set_price_tier", { tier: "friend" }, () => "W-1", null)).events).toEqual([{ type: "price_tier", tier: "friend" }]);
     expect((await runWorkbenchTool(api, "set_price_tier", { tier: "vip" }, () => "W-1", null)).isError).toBe(true);
     expect(priceTierNote(undefined)).toMatch(/call ask_price_tier before the first quote/);
-    expect(priceTierNote("friend")).toContain("朋友价");
+    expect(priceTierNote("friend")).toContain("基础价+8折人工");
   });
 
   it("shows three buttons and reports the pick only after confirm", async () => {
     const onChoose = vi.fn();
     render(<PriceChoiceCard onChoose={onChoose} />);
-    await userEvent.click(screen.getByRole("button", { name: /^朋友价/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^基础价\+8折人工/ }));
     expect(onChoose).not.toHaveBeenCalled();
     await userEvent.click(screen.getByTestId("price-confirm"));
     expect(onChoose).toHaveBeenCalledWith({ tier: "friend" });
@@ -149,9 +149,9 @@ describe("choosing the price", () => {
 
   it("explains each price in the chat card and marks the one in use", () => {
     render(<PriceChoiceCard current="referral" onChoose={() => {}} />);
-    expect(screen.getByRole("button", { name: /^推荐价/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /^朋友价/ })).toHaveTextContent("WorldPac 零件进价 + $100");
-    expect(screen.getByText(/现在按推荐价/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^原价\+8折人工/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^基础价\+8折人工/ })).toHaveTextContent("WorldPac 零件进价 + $100");
+    expect(screen.getByText(/现在按原价\+8折人工/)).toBeInTheDocument();
   });
 
   it("is saved on the conversation from the page or from the chat, and sent to the model", async () => {
@@ -184,7 +184,7 @@ describe("choosing the price", () => {
       },
     );
     await response.text();
-    expect(seen[0]).toContain("Price for this conversation: 推荐价");
+    expect(seen[0]).toContain("Price for this conversation: 原价+8折人工");
     expect((await store.get("cabc1234"))?.priceTier).toBe("friend");
   });
 });

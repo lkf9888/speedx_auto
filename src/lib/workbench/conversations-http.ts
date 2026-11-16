@@ -83,7 +83,7 @@ export async function handleConversation(request: Request, id: string, deps: Con
         const pricing = snapPricing(body.pricing);
         if (body.priceTier === "custom" && !pricing) return json({ error: "invalid" }, 400);
         const conversation = await store.setPriceTier(id, user.email, body.priceTier, pricing ?? undefined);
-        deps.log({ action: "price_tier", email: user.email, id, tier: body.priceTier, ...(body.priceTier === "custom" && pricing ? { partsPct: pricing.partsPct, laborRate: pricing.laborRate } : {}) });
+        deps.log({ action: "price_tier", email: user.email, id, tier: body.priceTier, ...(pricing ? { partsPct: pricing.partsPct, laborRate: pricing.laborRate, laborExtraPct: pricing.laborExtraPct ?? 0 } : {}) });
         return json({ conversation });
       }
       if (typeof body.archived === "boolean") {

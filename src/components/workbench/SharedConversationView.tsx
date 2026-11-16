@@ -1,7 +1,7 @@
 "use client";
 
 import { ASSISTANT, staffName, WEBSITE_CUSTOMER, type Turn } from "@/lib/workbench/conversation-types";
-import { describePricing, TIER_LABEL } from "@/lib/workbench/price-tier";
+import { priceLabel } from "@/lib/workbench/price-tier";
 import type { SharedConversation } from "@/lib/workbench/shares";
 import { distinctJobs, QuoteSheetSummary } from "./QuoteSheetSummary";
 import { StaffQuoteCard } from "./StaffQuoteCard";
@@ -43,7 +43,7 @@ export function SharedConversationView({ shared }: { shared: SharedConversation 
           <h1 className="mt-0.5 text-base font-semibold text-[color:var(--wb-text)]">{c.title || "维修报价"}</h1>
           <p className="text-xs text-[color:var(--wb-muted)]">
             {c.vehicle ? `车辆：${c.vehicle.label} · ` : ""}
-            {c.priceTier ? `按${TIER_LABEL[c.priceTier]}${c.priceTier === "custom" && c.pricing ? `（${describePricing(c.pricing)}）` : ""} · ` : ""}
+            {c.priceTier ? `按${priceLabel(c.priceTier, c.pricing)} · ` : ""}
             {staffName(shared.createdBy)} 分享于 {when(shared.createdAt)}，链接 {when(shared.expiresAt)} 到期
           </p>
         </header>

@@ -73,7 +73,7 @@ describe("friend price on staff quotes", () => {
   it("tells the model the friend total, and the prompt says when to use it", () => {
     const quote = buildLaborQuote("Car", job([part("PAD-1", 250, 80)]), "W-6", env);
     expect(summarizeStaffQuote(quote)).toContain("friend $276");
-    expect(WORKBENCH_PROMPT).toContain("朋友价 (friend: WorldPac parts at cost + $100 per part number, not per unit and never above the list price");
+    expect(WORKBENCH_PROMPT).toContain("基础价+8折人工 (friend: WorldPac parts at cost + $100 per part number, not per unit and never above the list price");
     expect(WORKBENCH_PROMPT).toMatch(/客户是朋友.*set_price_tier/);
   });
 });
@@ -81,8 +81,8 @@ describe("friend price on staff quotes", () => {
 describe("the staff quote card", () => {
   it("shows the friend price when the conversation quotes it", () => {
     render(<StaffQuoteCard quote={buildLaborQuote("Car", job([part("PAD-1", 250, 80)]), "W-7", env)} tier="friend" />);
-    expect(screen.getByTestId("quote-tier")).toHaveTextContent("按朋友价");
-    expect(screen.getByRole("columnheader", { name: "朋友价（零件+工时）" })).toBeInTheDocument();
+    expect(screen.getByTestId("quote-tier")).toHaveTextContent("按基础价+8折人工");
+    expect(screen.getByRole("columnheader", { name: "基础价+8折人工（零件+工时）" })).toBeInTheDocument();
     expect(screen.getByText("$276.00")).toBeInTheDocument();
   });
 });

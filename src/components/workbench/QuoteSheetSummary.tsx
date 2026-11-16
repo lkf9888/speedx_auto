@@ -6,6 +6,11 @@ import {
   tierLabor,
   atTier,
   describePricing,
+  EXTRA_MAX,
+  EXTRA_STEP,
+  extraPctOf,
+  laborWithExtra,
+  priceLabel,
   LABOR_MAX,
   LABOR_MIN,
   LABOR_STEP,
@@ -78,8 +83,9 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
     const labor = l.chosen?.quote.labor;
     if (!l.chosen || !labor || l.chosen.option.originalTotal != null) return null;
     const charged = tierLabor(l.chosen.quote, tier, custom) ?? labor.walkIn;
-    const discount = cents(labor.walkIn - charged);
-    return discount > 0.004 && l.chosen.option.customerTotal >= charged ? { hours: labor.hours, list: labor.walkIn, charged, discount, pct: Math.round((discount / labor.walkIn) * 100) } : null;
+    const { hours, list } = laborWithExtra(labor, custom);
+    const discount = cents(list - charged);
+    return discount > 0.004 && l.chosen.option.customerTotal >= charged ? { hours, list, charged, discount, pct: Math.round((discount / list) * 100) } : null;
   };
   const discountTotal = cents(lines.reduce((sum, l) => sum + (laborOf(l)?.discount ?? 0), 0));
   const priced = lines.filter((l) => l.chosen);
@@ -120,7 +126,7 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
   const [image, setImage] = useState<"idle" | "making" | "failed">("idle");
   const sheetFor = () => ({
     rows: lines.map((l) => ({
-      labor: l.chosen?.quote.labor && l.chosen.option.originalTotal == null ? { hours: l.chosen.quote.labor.hours, list: l.chosen.quote.labor.walkIn, charged: tierLabor(l.chosen.quote, tier, custom) ?? l.chosen.quote.labor.walkIn } : null,
+      labor: l.chosen?.quote.labor && l.chosen.option.originalTotal == null ? { ...laborWithExtra(l.chosen.quote.labor, custom), charged: tierLabor(l.chosen.quote, tier, custom) ?? l.chosen.quote.labor.walkIn } : null,
       label: `${l.name}${l.chosen ? ` – ${[l.chosen.option.brand, l.chosen.option.label].filter(Boolean).join(" ")}${l.chosen.option.source === "used" ? " (used part, warranty as stated by the seller)" : ""}` : ""}`,
       amount: l.chosen ? l.chosen.option.customerTotal : null,
       ...(l.chosen?.option.eta ? { note: "special order" } : {}),
@@ -273,17 +279,26 @@ export function distinctJobs(quotes: StaffQuote[]): number {
 }
 
 /** What a choice sends: a quick price by name, or the two slider positions. */
-export type PriceChoice = { tier: Exclude<PriceTier, "custom"> } | { tier: "custom"; pricing: CustomPricing };
+export type PriceChoice = { tier: Exclude<PriceTier, "custom">; pricing?: CustomPricing } | { tier: "custom"; pricing: CustomPricing };
 
 interface Draft extends CustomPricing {
+  laborExtraPct: number;
   /** The quick button the sliders still sit on; null once a slider has been moved. */
   preset: Exclude<PriceTier, "custom"> | null;
 }
 
 function startingDraft(current?: PriceTier, pricing?: CustomPricing | null): Draft {
-  if (current === "custom" && pricing) return { ...pricing, preset: null };
-  if (current === "retail" || current === "referral" || current === "friend") return { ...PRESET_PRICING[current], preset: current };
-  return { ...PRESET_PRICING.retail, preset: "retail" };
+  const laborExtraPct = extraPctOf(pricing);
+  if (current === "custom" && pricing) return { ...pricing, laborExtraPct, preset: null };
+  if (current === "retail" || current === "referral" || current === "friend" || current === "cost") return { ...PRESET_PRICING[current], laborExtraPct, preset: current };
+  return { ...PRESET_PRICING.retail, laborExtraPct, preset: "retail" };
+}
+
+/** What a draft sends: a quick price by name (with the extra hours, if any), or the slider positions. */
+function choiceOf(draft: Draft): PriceChoice {
+  const extra = draft.laborExtraPct > 0 ? { laborExtraPct: draft.laborExtraPct } : {};
+  if (draft.preset) return { tier: draft.preset, ...(draft.laborExtraPct > 0 ? { pricing: { ...PRESET_PRICING[draft.preset], ...extra } } : {}) };
+  return { tier: "custom", pricing: { partsPct: draft.partsPct, laborRate: draft.laborRate, ...extra } };
 }
 
 /**
@@ -311,7 +326,7 @@ export function PriceChoiceCard({
   const [draft, setDraft] = useState<Draft>(() => startingDraft(current, currentPricing));
   // A price saved elsewhere (a reload, a colleague, the assistant) moves the sliders with it:
   // the draft is rebuilt during render when the saved price changes.
-  const saved = `${current ?? ""}|${currentPricing?.partsPct ?? ""}|${currentPricing?.laborRate ?? ""}`;
+  const saved = `${current ?? ""}|${currentPricing?.partsPct ?? ""}|${currentPricing?.laborRate ?? ""}|${extraPctOf(currentPricing)}`;
   const [seen, setSeen] = useState(saved);
   if (seen !== saved) {
     setSeen(saved);
@@ -320,13 +335,13 @@ export function PriceChoiceCard({
   const live = Boolean(current) && Boolean(onAdjust);
   const change = (next: Draft) => {
     setDraft(next);
-    if (live) onAdjust?.(next.preset ? { tier: next.preset } : { tier: "custom", pricing: { partsPct: next.partsPct, laborRate: next.laborRate } });
+    if (live) onAdjust?.(choiceOf(next));
   };
   const friend = draft.preset === "friend";
   return (
     <div data-testid="price-choice" className="ml-auto w-full max-w-xl rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-[#111b21]">
-      <p className="text-xs font-semibold text-sky-900">按哪个价报？{current ? `（现在按${TIER_LABEL[current]}${current === "custom" && currentPricing ? `：${describePricing(currentPricing)}` : ""}，可以重新选）` : ""}</p>
-      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+      <p className="text-xs font-semibold text-sky-900">按哪个价报？{current ? `（现在按${priceLabel(current, currentPricing)}，可以重新选）` : ""}</p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {QUICK_TIERS.map((tier) => {
           const quick = tier as Exclude<PriceTier, "custom">;
           return (
@@ -335,7 +350,7 @@ export function PriceChoiceCard({
               type="button"
               disabled={disabled}
               aria-pressed={draft.preset === tier}
-              onClick={() => change({ ...PRESET_PRICING[quick], preset: quick })}
+              onClick={() => change({ ...PRESET_PRICING[quick], laborExtraPct: draft.laborExtraPct, preset: quick })}
               className={`rounded-lg px-3 py-2 text-left disabled:opacity-50 ${draft.preset === tier ? "bg-sky-700 text-white" : "border border-sky-300 bg-white text-sky-900 hover:bg-sky-100"}`}
             >
               <span className="block text-sm font-semibold">{TIER_LABEL[tier]}</span>
@@ -393,6 +408,30 @@ export function PriceChoiceCard({
             <span>${LABOR_MAX}</span>
           </span>
         </label>
+        <label className="block">
+          <span className="flex items-baseline justify-between text-xs font-semibold text-sky-900">
+            <span>工时加时（在建议工时上加）</span>
+            <span data-testid="extra-value" className="tabular-nums">
+              {draft.laborExtraPct > 0 ? `+${draft.laborExtraPct}%` : "不加时"}
+            </span>
+          </span>
+          <input
+            data-testid="extra-slider"
+            type="range"
+            min={0}
+            max={EXTRA_MAX}
+            step={EXTRA_STEP}
+            value={draft.laborExtraPct}
+            disabled={disabled}
+            aria-label="工时加时"
+            onChange={(e) => change({ ...draft, laborExtraPct: Number(e.target.value) })}
+            className="mt-1 w-full accent-sky-700"
+          />
+          <span className="flex justify-between text-[11px] text-sky-800/80">
+            <span>0% 建议工时</span>
+            <span>+{EXTRA_MAX}%</span>
+          </span>
+        </label>
       </div>
       <div className="mt-3 flex items-center justify-end gap-3">
         {live && <span data-testid="price-live" className="text-[11px] text-sky-800/80">已确认：调整滑块，下面的报价会自动按新价格更新</span>}
@@ -400,7 +439,7 @@ export function PriceChoiceCard({
           type="button"
           data-testid="price-confirm"
           disabled={disabled}
-          onClick={() => onChoose(draft.preset ? { tier: draft.preset } : { tier: "custom", pricing: { partsPct: draft.partsPct, laborRate: draft.laborRate } })}
+          onClick={() => onChoose(choiceOf(draft))}
           className="rounded-lg bg-sky-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-800 disabled:opacity-50"
         >
           {live ? "按此价重新报价" : "确认"}

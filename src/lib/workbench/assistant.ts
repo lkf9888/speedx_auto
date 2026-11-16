@@ -38,7 +38,7 @@ import { MAX_NOTE_LENGTH } from "./memory";
 import { laborShortfall, MIN_LABOR_HOURS, minimumLaborNote } from "@/lib/repair-chat/pricing";
 import { customerText } from "./customer-text";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
-import { describePricing, isPriceTier, snapPricing, TIER_LABEL, type CustomPricing, type PriceTier } from "./price-tier";
+import { describePricing, extraPctOf, isPriceTier, snapPricing, TIER_LABEL, type CustomPricing, type PriceTier } from "./price-tier";
 import { buildFlatQuote, buildLaborQuote, buildPartsQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
 
 export const WORKBENCH_MODEL = process.env.WORKBENCH_MODEL || "claude-sonnet-5-5";
@@ -77,7 +77,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - Don't say what a part includes beyond what the tool lists. A "strut assembly" may be a bare strut or a loaded (quick) strut with the spring and mount: unless the tool says so, tell staff to check the contents by part number before choosing the labor, since a bare strut needs the spring moved over.
 - The cards show where each price came from (WorldPac, DT Tire Hub, the partner list, shop flat prices) and link buttons; the tool summary says which. Don't tell staff a supplier wasn't checked or that there are no links when the card has them.
 - If staff ask for text to send a customer, write it with customer prices only, never cost or margin (the card's "copy for customer" button does the same). Put any note for staff first; then a line "—— 发给客人 ——" and the customer text, with nothing after it, so staff can copy everything below that line.
-- Which price to quote (owner's rule): each conversation quotes one price, which staff choose: 零售价 (retail: the customer total), 推荐价 (referral: labor at $96/h) or 朋友价 (friend: WorldPac parts at cost + $100 per part number, not per unit and never above the list price, other suppliers' parts and tires at cost × 1.3 with eco fee and mounting, labor at $96/h). The per-turn note says which one is chosen. If none is chosen yet, before your first pricing tool call (get_estimate, quote_extra_part, get_flat_price, find_tires, find_brand_tires, find_parts) call ask_price_tier and stop there: write one short line asking which price, and quote nothing until staff choose. When staff name a price in words ("按朋友价", "客户是朋友", "零售价", "推荐价"), call set_price_tier with it, then go on. Once chosen, give only that price's totals (the tool results list them as customer / referral / friend), say which price it is, and don't list the other prices unless staff ask. Where an option has no friend total (no cost known, or a shop flat price), its friend price is the referral price; say so. In text for the customer, give the chosen totals without explaining how they were worked out, never cost or markup.
+- Which price to quote (owner's rule): each conversation quotes one price, which staff choose: 原价 (retail: the customer total), 原价+8折人工 (referral: labor at $96/h), 基础价+8折人工 (friend: WorldPac parts at cost + $100 per part number, not per unit and never above the list price, other suppliers' parts and tires at cost × 1.3 with eco fee and mounting, labor at $96/h) or 成本价+8折人工 (cost: every part at its purchase cost with no markup, labor at $96/h; the card shows its totals, so point staff to the card). Staff can also add extra labor hours (0-100% on top of the guide's) with a slider; the per-turn note says when they did, and the card shows the totals. The per-turn note says which one is chosen. If none is chosen yet, before your first pricing tool call (get_estimate, quote_extra_part, get_flat_price, find_tires, find_brand_tires, find_parts) call ask_price_tier and stop there: write one short line asking which price, and quote nothing until staff choose. When staff name a price in words ("按朋友价", "客户是朋友", "原价", "成本价"), call set_price_tier with it, then go on. Once chosen, give only that price's totals (the tool results list them as customer / referral / friend), say which price it is, and don't list the other prices unless staff ask. Where an option has no friend total (no cost known, or a shop flat price), its friend price is the referral price; say so. In text for the customer, give the chosen totals without explaining how they were worked out, never cost or markup.
 - When staff ask for several jobs together (front and rear rotors, pads and rotors, an oil change with brakes), quote each job with its own tool call in the same reply: the page puts them on one quote sheet with one option per job and the grand total, and the customer copy and PDF come from that sheet. A job with no price shows as 待补价 and the rest can still go to the customer. Left and right parts sold as different part numbers (common on European cars) are already one "left + right set" option on brake rotor, pad and shoe jobs and on both_sides jobs: never add the sides up yourself.
 
 # Always leave one question (owner's rule, 2026-11-16)
@@ -249,11 +249,11 @@ const ASK_PRICE_TIER: Anthropic.Beta.BetaTool = {
 
 const SET_PRICE_TIER: Anthropic.Beta.BetaTool = {
   name: "set_price_tier",
-  description: "Record the price staff named for this conversation (retail 零售价, referral 推荐价, friend 朋友价). Every quote card in the conversation then shows that price.",
+  description: "Record the price staff named for this conversation (retail 原价, referral 原价+8折人工, friend 基础价+8折人工, cost 成本价+8折人工). Every quote card in the conversation then shows that price.",
   strict: true,
   input_schema: {
     type: "object",
-    properties: { tier: { type: "string", enum: ["retail", "referral", "friend"] } },
+    properties: { tier: { type: "string", enum: ["retail", "referral", "friend", "cost"] } },
     required: ["tier"],
     additionalProperties: false,
   },
@@ -845,8 +845,11 @@ export function priceTierNote(tier: PriceTier | undefined, pricing?: CustomPrici
       ? `Price for this conversation: ${TIER_LABEL.custom} (${describePricing(pricing)}: parts ${pricing.partsPct}% of the way from cost to suggested retail, labor $${pricing.laborRate}/h). The summary lists retail, referral and friend totals only; the card shows the custom totals, so point staff to the card and don't state a dollar total of your own.`
       : "No price chosen for this conversation yet: call ask_price_tier before the first quote.";
   }
+  const extra = extraPctOf(pricing);
+  const extraNote = extra > 0 ? ` Staff added ${extra}% extra labor hours on top of the guide's: the summary's labor hours and totals don't include them, so point staff to the card and don't state a dollar total of your own.` : "";
+  if (tier === "cost") return `Price for this conversation: ${TIER_LABEL.cost} (cost): parts at purchase cost with no markup, labor at $96/h. The summary doesn't list it; the card shows the totals, so point staff to the card and don't state a dollar total of your own.${extraNote}`;
   return tier
-    ? `Price for this conversation: ${TIER_LABEL[tier]} (${tier}). Quote that price's totals.`
+    ? `Price for this conversation: ${TIER_LABEL[tier]} (${tier}). Quote that price's totals.${extraNote}`
     : "No price chosen for this conversation yet: call ask_price_tier before the first quote.";
 }
 

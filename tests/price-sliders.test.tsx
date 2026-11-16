@@ -97,7 +97,7 @@ describe("choice card with sliders", () => {
     render(<PriceChoiceCard onChoose={onChoose} />);
     expect(screen.getByTestId("parts-value")).toHaveTextContent("100%");
     expect(screen.getByTestId("labor-value")).toHaveTextContent("$120/h");
-    await userEvent.click(screen.getByRole("button", { name: /^推荐价/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^原价\+8折人工/ }));
     expect(screen.getByTestId("labor-value")).toHaveTextContent("$96/h");
     await userEvent.click(screen.getByTestId("price-confirm"));
     expect(onChoose).toHaveBeenCalledWith({ tier: "referral" });
@@ -109,14 +109,14 @@ describe("choice card with sliders", () => {
     fireEvent.change(screen.getByTestId("parts-slider"), { target: { value: "55" } });
     fireEvent.change(screen.getByTestId("labor-slider"), { target: { value: "90" } });
     expect(onChoose).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /^零售价/ })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /^原价 / })).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(screen.getByTestId("price-confirm"));
     expect(onChoose).toHaveBeenCalledWith({ tier: "custom", pricing: { partsPct: 55, laborRate: 90 } });
   });
 
   it("friend price keeps its own rule and shows it instead of a percentage", async () => {
     render(<PriceChoiceCard onChoose={() => {}} />);
-    await userEvent.click(screen.getByRole("button", { name: /^朋友价/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^基础价\+8折人工/ }));
     expect(screen.getByTestId("parts-value")).toHaveTextContent("进价 + $100/零件号");
   });
 
@@ -178,7 +178,7 @@ describe("live sliders after confirm", () => {
     expect(onAdjust).toHaveBeenLastCalledWith({ tier: "custom", pricing: { partsPct: 100, laborRate: 97 } });
     fireEvent.change(screen.getByTestId("parts-slider"), { target: { value: "40" } });
     expect(onAdjust).toHaveBeenLastCalledWith({ tier: "custom", pricing: { partsPct: 40, laborRate: 97 } });
-    fireEvent.click(screen.getByRole("button", { name: "朋友价 WorldPac 零件进价 + $100（每个零件号），其他供货商进价 ×1.3，工时 $96/h" }));
+    fireEvent.click(screen.getByRole("button", { name: "基础价+8折人工 WorldPac 零件进价 + $100（每个零件号），其他供货商进价 ×1.3，工时 8 折（$96/h）" }));
     expect(onAdjust).toHaveBeenLastCalledWith({ tier: "friend" });
     expect(onChoose).not.toHaveBeenCalled();
     expect(screen.getByTestId("price-live")).toBeInTheDocument();

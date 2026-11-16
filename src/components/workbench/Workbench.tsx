@@ -15,7 +15,7 @@ import {
   type Turn as SharedTurn,
   WEBSITE_CUSTOMER,
 } from "@/lib/workbench/conversation-types";
-import { describePricing, TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
+import { describePricing, priceLabel, TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
 import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
@@ -239,7 +239,7 @@ export function Workbench({ email }: { email: string }) {
     const waiting = unsavedPrice.current.get(id);
     if (waiting) {
       conversation = { ...conversation, priceTier: waiting.choice.tier };
-      if (waiting.choice.tier === "custom") conversation.pricing = waiting.choice.pricing;
+      if (waiting.choice.pricing) conversation.pricing = waiting.choice.pricing;
       else delete conversation.pricing;
     }
     setLoaded((all) => {
@@ -395,7 +395,7 @@ export function Workbench({ email }: { email: string }) {
 
   /** Staff picked which price this conversation quotes: saved for everyone; from the choice card it also carries on the quote. */
   async function choosePriceTier(conversationId: string, choice: PriceChoice, carryOn: boolean) {
-    const pricing = choice.tier === "custom" ? choice.pricing : undefined;
+    const pricing = choice.pricing;
     patchLocal(conversationId, (c) => {
       const next = { ...c, priceTier: choice.tier };
       if (pricing) next.pricing = pricing;
@@ -407,14 +407,14 @@ export function Workbench({ email }: { email: string }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ priceTier: choice.tier, ...(pricing ? { pricing } : {}) }),
     }).catch(() => null);
-    if (carryOn) void send(pricing ? `按${TIER_LABEL.custom}报价（${describePricing(pricing)}）` : `按${TIER_LABEL[choice.tier]}报价`);
+    if (carryOn) void send(`按${choice.tier === "custom" && pricing ? `${TIER_LABEL.custom}（${describePricing(pricing)}）` : priceLabel(choice.tier, pricing)}报价`);
   }
 
   /** Sliders moved after a price was chosen: the quotes re-price at once, saved a moment after the last move, and the assistant isn't asked again. */
   const adjustTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const saveChain = useRef(new Map<string, Promise<unknown>>());
   function adjustPriceTier(conversationId: string, choice: PriceChoice) {
-    const pricing = choice.tier === "custom" ? choice.pricing : undefined;
+    const pricing = choice.pricing;
     patchLocal(conversationId, (c) => {
       const next = { ...c, priceTier: choice.tier };
       if (pricing) next.pricing = pricing;

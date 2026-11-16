@@ -5,51 +5,70 @@
  */
 import type { StaffQuote, StaffQuoteOption } from "./quote";
 
-export type PriceTier = "retail" | "referral" | "friend" | "custom";
-export const PRICE_TIERS: readonly PriceTier[] = ["retail", "referral", "friend", "custom"];
-/** The three quick-pick buttons; "custom" is whatever the sliders say. */
-export const QUICK_TIERS: readonly PriceTier[] = ["retail", "referral", "friend"];
+export type PriceTier = "retail" | "referral" | "friend" | "cost" | "custom";
+export const PRICE_TIERS: readonly PriceTier[] = ["retail", "referral", "friend", "cost", "custom"];
+/** The quick-pick buttons; "custom" is whatever the sliders say. */
+export const QUICK_TIERS: readonly PriceTier[] = ["retail", "referral", "friend", "cost"];
 
-export const TIER_LABEL: Record<PriceTier, string> = { retail: "零售价", referral: "推荐价", friend: "朋友价", custom: "自定义价" };
+// Kevin, 2026-11-16: renamed. "8折人工" = the referral labor rate, $96/h (80% of $120).
+export const TIER_LABEL: Record<PriceTier, string> = { retail: "原价", referral: "原价+8折人工", friend: "基础价+8折人工", cost: "成本价+8折人工", custom: "自定义价" };
 export const TIER_HINT: Record<PriceTier, string> = {
   retail: "零件按 WorldPac 建议零售价（其他供货商进价 ×1.3），工时 $120/h",
-  referral: "零件同零售价，工时 $96/h",
-  friend: "WorldPac 零件进价 + $100（每个零件号），其他供货商进价 ×1.3，工时 $96/h",
+  referral: "零件同原价，工时 8 折（$96/h）",
+  friend: "WorldPac 零件进价 + $100（每个零件号），其他供货商进价 ×1.3，工时 8 折（$96/h）",
+  cost: "零件按采购进价，不加价，工时 8 折（$96/h）",
   custom: "零件和工时按滑轨",
 };
 
 /**
  * Sliders (Kevin, 2026-11-15). Parts: 0% = cost, 100% = suggested retail
  * (other suppliers: cost x 1.3), one step = 5% of that spread. Labor: $60 to
- * $120 an hour in $1 steps. The quick buttons are three positions on them.
+ * $120 an hour in $1 steps. The quick buttons are positions on them.
+ * Extra hours (Kevin, 2026-11-16): the guide's labor hours plus 0-100% in 10%
+ * steps, on top of whichever price is chosen.
  */
 export interface CustomPricing {
   partsPct: number;
   laborRate: number;
+  /** Extra labor hours on top of the guide's, in percent (0-100, steps of 10). Absent = 0. */
+  laborExtraPct?: number;
 }
 export const PARTS_STEP = 5;
 export const LABOR_MIN = 60;
 export const LABOR_MAX = 120;
 export const LABOR_STEP = 1;
+export const EXTRA_MAX = 100;
+export const EXTRA_STEP = 10;
 /** Slider positions the quick buttons stand for; friend parts are cost + $100 per part number, not a percentage. */
-export const PRESET_PRICING: Record<"retail" | "referral" | "friend", CustomPricing> = {
+export const PRESET_PRICING: Record<"retail" | "referral" | "friend" | "cost", CustomPricing> = {
   retail: { partsPct: 100, laborRate: 120 },
   referral: { partsPct: 100, laborRate: 96 },
   friend: { partsPct: 0, laborRate: 96 },
+  cost: { partsPct: 0, laborRate: 96 },
 };
+
+const snapExtra = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? Math.min(EXTRA_MAX, Math.max(0, Math.round(value / EXTRA_STEP) * EXTRA_STEP)) : 0);
+export const extraPctOf = (pricing?: CustomPricing | null): number => snapExtra(pricing?.laborExtraPct);
 
 /** Slider values from anywhere (a request body, saved data) snapped onto the grid; null when they aren't numbers. */
 export function snapPricing(raw: unknown): CustomPricing | null {
   if (!raw || typeof raw !== "object") return null;
-  const { partsPct, laborRate } = raw as Record<string, unknown>;
+  const { partsPct, laborRate, laborExtraPct } = raw as Record<string, unknown>;
   if (typeof partsPct !== "number" || typeof laborRate !== "number" || !Number.isFinite(partsPct) || !Number.isFinite(laborRate)) return null;
   const parts = Math.min(100, Math.max(0, Math.round(partsPct / PARTS_STEP) * PARTS_STEP));
   // Whole dollars, not the slider grid: the friend and referral buttons stand for $96, which sits between two steps.
   const labor = Math.min(LABOR_MAX, Math.max(LABOR_MIN, Math.round(laborRate)));
-  return { partsPct: parts, laborRate: labor };
+  const extra = snapExtra(laborExtraPct);
+  return { partsPct: parts, laborRate: labor, ...(extra > 0 ? { laborExtraPct: extra } : {}) };
 }
 
-export const describePricing = (p: CustomPricing) => `零件 ${p.partsPct}% · 工时 $${p.laborRate}/h`;
+export const describePricing = (p: CustomPricing) => `零件 ${p.partsPct}% · 工时 $${p.laborRate}/h${extraPctOf(p) > 0 ? ` · 加时 ${extraPctOf(p)}%` : ""}`;
+
+/** The price's name for the header and the chat line, with the extra hours when there are any. */
+export function priceLabel(tier: PriceTier, pricing?: CustomPricing | null): string {
+  if (tier === "custom") return pricing ? `${TIER_LABEL.custom}：${describePricing(pricing)}` : TIER_LABEL.custom;
+  return extraPctOf(pricing) > 0 ? `${TIER_LABEL[tier]}，工时加时 ${extraPctOf(pricing)}%` : TIER_LABEL[tier];
+}
 
 export function isPriceTier(value: unknown): value is PriceTier {
   return typeof value === "string" && (PRICE_TIERS as readonly string[]).includes(value);
@@ -58,7 +77,8 @@ export function isPriceTier(value: unknown): value is PriceTier {
 /**
  * The option's total at this price. Without a friend price (no cost known,
  * shop flat prices) the friend price falls back to the referral price, so a
- * friend never pays the walk-in labor rate.
+ * friend never pays the walk-in labor rate. (The cost price is worked out by
+ * `totalAt`, from the slider arithmetic.)
  */
 export function tierTotal(option: Pick<StaffQuoteOption, "customerTotal" | "referralTotal" | "friendTotal">, tier: PriceTier): number {
   if (tier === "referral") return option.referralTotal;
@@ -67,6 +87,33 @@ export function tierTotal(option: Pick<StaffQuoteOption, "customerTotal" | "refe
 }
 
 const money = (value: number) => Math.round(value * 100) / 100;
+
+/** The slider positions a price is worked out from: the custom sliders, or the cost price's fixed ones. Null for the stored prices. */
+function sliderPricing(tier: PriceTier, custom?: CustomPricing | null): CustomPricing | null {
+  if (tier === "custom") return custom ?? null;
+  if (tier === "cost") return PRESET_PRICING.cost;
+  return null;
+}
+
+/** Labor before any extra hours. */
+function baseLabor(quote: Pick<StaffQuote, "labor">, tier: PriceTier, custom?: CustomPricing | null): number | null {
+  if (!quote.labor) return null;
+  const sliders = sliderPricing(tier, custom);
+  if (sliders) return money(quote.labor.hours * sliders.laborRate);
+  return tier === "retail" || tier === "custom" ? quote.labor.walkIn : quote.labor.referral;
+}
+
+/** The extra hours at this price, in dollars (0 when none, or the quote has no labor). */
+function extraLabor(quote: Pick<StaffQuote, "labor">, tier: PriceTier, custom?: CustomPricing | null): number {
+  const base = baseLabor(quote, tier, custom);
+  return base === null ? 0 : money((base * extraPctOf(custom)) / 100);
+}
+
+/** The labor hours and their list value ($120/h) once the extra hours are in. */
+export function laborWithExtra(labor: { hours: number; walkIn: number }, custom?: CustomPricing | null): { hours: number; list: number } {
+  const factor = 1 + extraPctOf(custom) / 100;
+  return { hours: money(labor.hours * factor), list: money(labor.walkIn * factor) };
+}
 
 /** The option's total at the sliders' positions; options without a cost keep the retail parts price. */
 export function customTotal(quote: Pick<StaffQuote, "kind" | "labor">, option: StaffQuoteOption, pricing: CustomPricing): number {
@@ -78,11 +125,18 @@ export function customTotal(quote: Pick<StaffQuote, "kind" | "labor">, option: S
     const retail = Math.max(option.unitPrice - eco - mounting, option.unitCost);
     return money((option.unitCost + (retail - option.unitCost) * share + eco + mounting) * option.quantity);
   }
-  const hours = quote.labor?.hours ?? 0;
+  const hours = (quote.labor?.hours ?? 0) * (1 + extraPctOf(pricing) / 100);
   const list = option.unitPrice * option.quantity;
   const low = option.costTotal === null ? list : Math.min(option.costTotal, list);
   const high = option.costTotal === null ? list : Math.max(option.costTotal, list);
   return money(low + (high - low) * share + hours * pricing.laborRate);
+}
+
+/** The option's total at the chosen price, extra hours included. */
+export function totalAt(quote: Pick<StaffQuote, "kind" | "labor">, option: StaffQuoteOption, tier: PriceTier, custom?: CustomPricing | null): number {
+  const sliders = sliderPricing(tier, custom);
+  if (sliders) return customTotal(quote, option, { ...sliders, laborExtraPct: custom?.laborExtraPct });
+  return money(tierTotal(option, tier) + extraLabor(quote, tier, custom));
 }
 
 /** Whether the friend price had to fall back to the referral price for this option. */
@@ -92,9 +146,8 @@ export function noFriendPrice(option: Pick<StaffQuoteOption, "friendTotal">, tie
 
 /** The labor in each option's total at this price, or null when the quote has none. */
 export function tierLabor(quote: Pick<StaffQuote, "labor">, tier: PriceTier, custom?: CustomPricing | null): number | null {
-  if (!quote.labor) return null;
-  if (tier === "custom" && custom) return money(quote.labor.hours * custom.laborRate);
-  return tier === "retail" || tier === "custom" ? quote.labor.walkIn : quote.labor.referral;
+  const base = baseLabor(quote, tier, custom);
+  return base === null ? null : money(base + extraLabor(quote, tier, custom));
 }
 
 const cents = money;
@@ -106,7 +159,7 @@ const cents = money;
  */
 export function tierMarkup(quote: Pick<StaffQuote, "kind" | "labor">, option: StaffQuoteOption, tier: PriceTier, custom?: CustomPricing | null): number | null {
   if (option.unitCost === null || option.costTotal === null) return null;
-  const total = tier === "custom" && custom ? customTotal(quote, option, custom) : tierTotal(option, tier);
+  const total = totalAt(quote, option, tier, custom);
   if (quote.kind === "tires") {
     const eco = option.prices.eco ?? 0;
     const mounting = option.prices.mounting ?? 0;
@@ -118,11 +171,13 @@ export function tierMarkup(quote: Pick<StaffQuote, "kind" | "labor">, option: St
 
 /** The quote with every total at this price, for the customer copy. */
 export function atTier<Q extends Omit<StaffQuote, "customerText">>(quote: Q, tier: PriceTier, custom?: CustomPricing | null): Q {
-  if (tier === "retail" || (tier === "custom" && !custom)) return quote;
+  const sliders = sliderPricing(tier, custom);
+  if (tier === "custom" && !sliders) return quote;
+  if (tier === "retail" && extraPctOf(custom) === 0) return quote;
   return {
     ...quote,
     options: quote.options.map((o) => {
-      const total = tier === "custom" && custom ? customTotal(quote, o, custom) : tierTotal(o, tier);
+      const total = totalAt(quote, o, tier, custom);
       return { ...o, customerTotal: total, unitPrice: quote.kind === "tires" && o.quantity > 0 ? cents(total / o.quantity) : o.unitPrice };
     }),
   };

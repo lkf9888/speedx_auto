@@ -5,7 +5,7 @@ import { bridgeErrorText, callAlldata, CART_URLS, type CartAddResult, type CartS
 import { optionLinks, orderLine, type ProductLink } from "@/lib/workbench/links";
 import { finalCustomerText, priceOption, withFinalPrices } from "@/lib/workbench/final-price";
 import { staffName } from "@/lib/workbench/conversation-types";
-import { atTier, describePricing, noFriendPrice, TIER_LABEL, tierLabor, tierMarkup, type CustomPricing, type PriceTier } from "@/lib/workbench/price-tier";
+import { atTier, describePricing, extraPctOf, laborWithExtra, noFriendPrice, TIER_LABEL, tierLabor, tierMarkup, type CustomPricing, type PriceTier } from "@/lib/workbench/price-tier";
 import { supplierLabel, type StaffQuote, type StaffQuoteOption } from "@/lib/workbench/quote";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
@@ -228,11 +228,11 @@ type Totals = Record<string, number> | null;
 /** Markup in dollars on a row as shown (its total may be a final price). */
 function rowMarkup(quote: StaffQuote, row: StaffQuoteOption, tier: PriceTier, custom?: CustomPricing | null): number | null {
   // The row is already at the chosen price, so its customer total is the total for every tier.
-  if (tier === "custom" && quote.kind === "labor") {
+  if (quote.kind === "labor") {
     if (row.unitCost === null || row.costTotal === null) return null;
-    return Math.round((row.customerTotal - (tierLabor(quote, "custom", custom) ?? 0) - row.costTotal) * 100) / 100;
+    return Math.round((row.customerTotal - (tierLabor(quote, tier, custom) ?? 0) - row.costTotal) * 100) / 100;
   }
-  return tierMarkup(quote, { ...row, referralTotal: row.customerTotal, friendTotal: row.customerTotal }, tier === "custom" ? "retail" : tier, null);
+  return tierMarkup(quote, { ...row, referralTotal: row.customerTotal, friendTotal: row.customerTotal }, tier === "custom" || tier === "cost" ? "retail" : tier, null);
 }
 
 /**
@@ -362,7 +362,7 @@ export function StaffQuoteCard({
 
   /** Labor at the list rate, and what this price charges, for the estimate's discount line. */
   // An agreed final price replaces the total, so the labor split no longer applies.
-  const pdfLabor = stored.labor && chosen.every((o) => o.originalTotal == null) ? { hours: stored.labor.hours, list: stored.labor.walkIn, charged: tierLabor(stored, tier, custom) ?? stored.labor.walkIn } : null;
+  const pdfLabor = stored.labor && chosen.every((o) => o.originalTotal == null) ? { ...laborWithExtra(stored.labor, custom), charged: tierLabor(stored, tier, custom) ?? stored.labor.walkIn } : null;
 
   async function makeImage() {
     setImage("making");
@@ -420,7 +420,7 @@ export function StaffQuoteCard({
           <p className="text-xs text-ink-500">{quote.vehicle}</p>
           {showCost && (
             <p data-testid="quote-tier" className="mt-1 inline-block rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800">
-              按{TIER_LABEL[tier]}{tier === "custom" && custom ? `（${describePricing(custom)}）` : ""}
+              按{TIER_LABEL[tier]}{tier === "custom" && custom ? `（${describePricing(custom)}）` : extraPctOf(custom) > 0 ? `（工时加时 ${extraPctOf(custom)}%）` : ""}
             </p>
           )}
           {quote.final && (
@@ -551,7 +551,7 @@ export function StaffQuoteCard({
                       money(o.customerTotal)
                     )}
                     {o.originalTotal !== null && <div className="text-[11px] font-normal text-ink-400 line-through">{money(o.originalTotal)}</div>}
-                    {noFriendPrice(stored.options[i], tier) && <div className="text-[11px] font-normal text-ink-400">没有进价，按推荐价</div>}
+                    {noFriendPrice(stored.options[i], tier) && <div className="text-[11px] font-normal text-ink-400">没有进价，按「原价+8折人工」</div>}
                   </td>
                 </tr>
                 );

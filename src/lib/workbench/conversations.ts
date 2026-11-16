@@ -207,8 +207,8 @@ export class ConversationStore {
   async setPriceTier(id: string, by: string, tier: PriceTier, pricing?: CustomPricing): Promise<Conversation> {
     return this.change(id, by, (c) => {
       c.priceTier = tier;
-      // The sliders only matter for the custom price.
-      if (tier === "custom" && pricing) c.pricing = pricing;
+      // The sliders matter for the custom price; the quick prices keep only the extra labor hours.
+      if (pricing && (tier === "custom" || (pricing.laborExtraPct ?? 0) > 0)) c.pricing = pricing;
       else delete c.pricing;
     });
   }
