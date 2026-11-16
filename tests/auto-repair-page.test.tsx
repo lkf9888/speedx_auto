@@ -108,6 +108,11 @@ describe("auto repair hub page", () => {
     expect(screen.getByRole("region", { name: dict.repairChat.title })).toBe(chat[0]);
     expect(screen.getAllByText(dict.repairChat.demo.label)).toHaveLength(1);
     expect(hero?.contains(screen.getByText(dict.repairChat.demo.label))).toBe(false);
+    // The caption types itself out in a browser; a screen-reader copy always holds the full text.
+    const readable = [...view.container.querySelectorAll(".sr-only")].map((el) => el.textContent);
+    expect(readable).toContain(dict.repairChat.demo.caption);
+    // The phone number sits beside the hook on a phone and as a card on larger screens.
+    expect(view.container.querySelectorAll("[data-hero-phone]")).toHaveLength(2);
   });
 
   it.each(locales)("publishes the same FAQs in %s markup and visible text", async (locale, dict) => {

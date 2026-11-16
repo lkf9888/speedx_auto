@@ -16,11 +16,11 @@ const quoteDate = (iso: string) =>
 function Row({ label, value, strong = false }: { label: React.ReactNode; value?: string; strong?: boolean }) {
   return (
     <div className="flex items-baseline gap-2">
-      <dt className={strong ? "whitespace-nowrap font-bold text-ink-900" : undefined}>{label}</dt>
+      <dt className={strong ? "min-w-0 font-bold text-ink-900" : undefined}>{label}</dt>
       {value ? (
         <>
-          <span aria-hidden className="paper-leader" />
-          <dd className="paper-ink whitespace-nowrap font-bold">{value}</dd>
+          <span aria-hidden className={strong ? "paper-leader max-[419px]:hidden" : "paper-leader"} />
+          <dd className="paper-ink ml-auto shrink-0 whitespace-nowrap font-bold">{value}</dd>
         </>
       ) : null}
     </div>
@@ -119,7 +119,7 @@ export function QuoteSheet({
                 strong
                 label={
                   <>
-                    {e.total} <span className="text-xs font-normal text-ink-500">({e.beforeTax})</span>
+                    {e.total} <span className="whitespace-nowrap text-xs font-normal text-ink-500">({e.beforeTax})</span>
                   </>
                 }
                 value={span(shown.totalLow, shown.totalHigh)}

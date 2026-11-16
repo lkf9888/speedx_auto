@@ -90,11 +90,30 @@ export default async function AutoRepairPage({
               {copy.eyebrow}
             </span>
             {chatEnabled && copy.hook && (
-              <div data-hero-hook aria-hidden className="mt-1 text-[2.3rem] font-extrabold leading-[1.05] tracking-tight text-ink-900 sm:mt-5 sm:text-6xl sm:leading-[1.04] lg:text-[4rem]">
-                {copy.hook.lead}
-                <br />
-                <span className="bg-gradient-to-r from-brand-500 to-brand-700 bg-clip-text text-transparent">{copy.hook.accent}</span>
-                <span className="ml-1.5 inline-block text-brand-600 motion-safe:animate-bounce lg:-rotate-90">↓</span>
+              <div className="mt-1 flex items-stretch justify-between gap-2.5 sm:mt-5 sm:block">
+                <div data-hero-hook aria-hidden className="min-w-0 text-[1.6rem] font-extrabold leading-[1.1] tracking-tight text-ink-900 sm:text-6xl sm:leading-[1.04] lg:text-[4rem]">
+                  {copy.hook.lead}
+                  <br />
+                  <span className="bg-gradient-to-r from-brand-500 to-brand-700 bg-clip-text text-transparent">{copy.hook.accent}</span>
+                  <span className="ml-1.5 hidden text-brand-600 motion-safe:animate-bounce sm:inline-block lg:-rotate-90">↓</span>
+                </div>
+                <TrackedContactLink
+                  href={telLink}
+                  method="phone"
+                  intent="auto_repair"
+                  locale={locale}
+                  placement="hero"
+                  pagePath={pagePath}
+                  data-hero-phone
+                  aria-label={`${dict.cta.callNow}: ${company.phoneDisplay}`}
+                  className="flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl bg-[#00a884] px-3 py-1.5 text-center text-white shadow-md shadow-[#00a884]/30 active:bg-[#008069] sm:hidden"
+                >
+                  <span className="flex items-center gap-1 text-[0.7rem] font-semibold leading-tight text-white/90">
+                    <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3a12 12 0 0 0 3.5.6c.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.5.1.4 0 .8-.3 1.1l-2.2 2.2z" /></svg>
+                    {dict.cta.callNow}
+                  </span>
+                  <span className="whitespace-nowrap text-[0.7rem] font-extrabold leading-tight tracking-tight tabular-nums">{company.phoneDisplay}</span>
+                </TrackedContactLink>
               </div>
             )}
             <h1 className={!chatEnabled
@@ -117,7 +136,7 @@ export default async function AutoRepairPage({
                 placement="hero"
                 pagePath={pagePath}
                 data-hero-phone
-                className="mt-4 flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-ink-200 active:bg-ink-50 sm:mt-7 sm:inline-flex sm:gap-4 sm:py-4 sm:pr-8 sm:hover:ring-brand-300"
+                className="hidden items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-ink-200 active:bg-ink-50 sm:mt-7 sm:inline-flex sm:gap-4 sm:py-4 sm:pr-8 sm:hover:ring-brand-300"
               >
                 <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white sm:h-12 sm:w-12">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3a12 12 0 0 0 3.5.6c.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.5.1.4 0 .8-.3 1.1l-2.2 2.2z" /></svg>

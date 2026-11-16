@@ -662,7 +662,7 @@ export function RepairChat({
           </div>
 
           {/* min-h: the opening state is ~20% taller than its content; kept afterwards so it doesn't jump when the starter chips go away */}
-          <div ref={logRef} className="wa-chat-bg max-h-[32rem] min-h-[16.5rem] space-y-2 overflow-y-auto px-3 py-4 sm:px-5" aria-live="polite">
+          <div ref={logRef} className={`wa-chat-bg max-h-[32rem] ${hero ? "min-h-[22rem] sm:min-h-[16.5rem]" : "min-h-[16.5rem]"} space-y-2 overflow-y-auto px-3 py-4 sm:px-5`} aria-live="polite">
             {turns.map((turn, index) => (
               <div key={index} data-turn={index} className={turn.role === "user" ? "flex justify-end" : ""}>
                 {turn.role === "user" ? (
@@ -899,11 +899,57 @@ function ChatShell({ hero, children }: { hero: boolean; children: ReactNode }) {
   );
 }
 
+/** Types `text` out once the element scrolls into view; reduced-motion visitors and the server render get the full text at once. */
+function TypedText({ text, className }: { text: string; className?: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [shown, setShown] = useState(text.length);
+  const [typing, setTyping] = useState(false);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === "undefined" || typeof window.matchMedia !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        observer.disconnect();
+        let count = 0;
+        setShown(0);
+        setTyping(true);
+        timer = setInterval(() => {
+          count += 2;
+          setShown(Math.min(count, text.length));
+          if (count >= text.length) {
+            clearInterval(timer);
+            setTyping(false);
+          }
+        }, 22);
+      },
+      { threshold: 0.6 },
+    );
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (timer) clearInterval(timer);
+    };
+  }, [text]);
+
+  return (
+    <p ref={ref} className={className}>
+      <span className="sr-only">{text}</span>
+      <span aria-hidden>
+        {text.slice(0, shown)}
+        {typing && <span className="typed-caret" />}
+      </span>
+    </p>
+  );
+}
+
 function SampleEstimate({ copy, className }: { copy: ChatCopy; className?: string }) {
   return (
     <div className={className}>
-      <p className="text-sm font-semibold text-ink-900">{copy.demo.label}</p>
-      <p className="mt-1 text-sm text-ink-500">{copy.demo.caption}</p>
+      <p className="text-shimmer text-base font-extrabold sm:text-lg">{copy.demo.label}</p>
+      <TypedText text={copy.demo.caption} className="mt-1 min-h-10 text-sm text-ink-500" />
       <QuoteSheet card={DEMO_ESTIMATE} copy={copy} sample />
     </div>
   );
