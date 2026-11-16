@@ -56,7 +56,11 @@ describe("parseBody", () => {
   it("accepts no contact details yet, but rejects malformed ones", () => {
     expect(parseBody({ ...validBody, lead: undefined })).toEqual({ ...validBody, lead: null, photos: [] });
     expect(parseBody({ ...validBody, lead: null })).toEqual({ ...validBody, lead: null, photos: [] });
-    expect(parseBody({ ...validBody, lead: { name: "", phone: "7789170710" } })).toBeNull();
+    // The name is optional on the website forms; staff see a placeholder.
+    expect(parseBody({ ...validBody, lead: { name: "", phone: "7789170710" } })?.lead).toEqual({ name: "未留姓名", phone: "7789170710" });
+    expect(parseBody({ ...validBody, lead: { phone: "7789170710" } })?.lead).toEqual({ name: "未留姓名", phone: "7789170710" });
+    expect(parseBody({ ...validBody, lead: { name: "K" } })).toBeNull();
+    expect(parseLead({ name: "", phone: "7789170710" })).toBeNull();
     expect(parseBody({ ...validBody, lead: { name: "K", phone: "917-0710" } })).toBeNull();
     expect(parseLead({ name: "  Kevin   Liu ", phone: "+1 (778) 917-0710" })).toEqual({ name: "Kevin Liu", phone: "+1 (778) 917-0710" });
     expect(parseLead({ name: "<script>", phone: "7789170710" })).toBeNull();

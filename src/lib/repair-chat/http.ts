@@ -70,7 +70,7 @@ export function parseBody(raw: unknown): ChatRequestBody | null {
   if (!raw || typeof raw !== "object") return null;
   const body = raw as Record<string, unknown>;
   if (typeof body.locale !== "string" || !(locales as readonly string[]).includes(body.locale)) return null;
-  const lead = body.lead == null ? null : parseLead(body.lead);
+  const lead = body.lead == null ? null : parseLead(body.lead, { nameOptional: true });
   if (body.lead != null && !lead) return null;
   if (typeof body.message !== "string") return null;
   const attached = parseAttachments(body.photos);
@@ -270,7 +270,7 @@ export async function handleLead(
   } catch {
     raw = null;
   }
-  const lead = parseLead(raw?.lead);
+  const lead = parseLead(raw?.lead, { nameOptional: true });
   const locale = typeof raw?.locale === "string" && (locales as readonly string[]).includes(raw.locale) ? raw.locale : null;
   if (!lead || !locale) return Response.json({ error: "invalid" }, { status: 400 });
   if (isEvalRequest(request)) return Response.json({ ok: true, sessionId: null, pending: null });
@@ -577,7 +577,7 @@ export async function handleBooking(
   } catch {
     raw = null;
   }
-  const lead = parseLead(raw?.lead);
+  const lead = parseLead(raw?.lead, { nameOptional: true });
   const locale = typeof raw?.locale === "string" && (locales as readonly string[]).includes(raw.locale) ? raw.locale : null;
   const date = typeof raw?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.date) ? raw.date : null;
   const time = typeof raw?.time === "string" && (SLOT_TIMES as readonly string[]).includes(raw.time) ? raw.time : null;

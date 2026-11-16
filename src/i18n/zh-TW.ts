@@ -162,12 +162,15 @@ export const zhTW: Dictionary = {
   repairChat: {
     gate: {
       title: "您的報價已經準備好了",
-      intro: "留下姓名和電話即可查看報價。我們僅用於就本次估價與您聯絡。",
-      name: "姓名",
+      intro: "留個電話就能在這裡看到報價，店裡還會把準確價格和到貨時間傳給您，不會打擾您。",
+      name: "姓名（選填）",
+      whatsappPrompt: "不想留電話？",
+      whatsappButton: "直接用 WhatsApp 聯絡我們",
+      whatsappIntro: "您好 SPEEDX，我在你們網站上用線上估價，想直接在這裡聊。",
       phone: "電話",
       submit: "查看報價",
       appointmentTitle: "店裡怎麼聯絡您？",
-      appointmentIntro: "留下姓名和電話，店裡好跟您確認預約時間。",
+      appointmentIntro: "留下電話，店裡好跟您確認預約時間。",
       appointmentSubmit: "送出預約",
       consent: "繼續即表示您同意 SPEEDX AUTO 就本次估價與您聯絡。您的聯絡方式不會提供給人工智慧服務。",
       invalidName: "請輸入您的姓名。",
@@ -246,6 +249,7 @@ export const zhTW: Dictionary = {
       teamQuote: "這項需要由店裡單獨報價。請透過 WhatsApp 或電話聯絡我們，我們會盡快回覆價格。",
     },
     whatsappIntro: "您好 SPEEDX，我是{name}，我在網上得到一個參考報價",
+    whatsappIntroNoName: "您好 SPEEDX，我在網上得到一個參考報價",
     errors: {
       busy: "目前請求太多，請幾分鐘後再試，或直接透過 WhatsApp 聯絡我們。",
       unavailable: "估價助手暫時無法使用，請透過 WhatsApp 或電話聯絡我們。",

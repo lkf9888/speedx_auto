@@ -2,15 +2,16 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { emitRepairLead } = vi.hoisted(() => ({ emitRepairLead: vi.fn() }));
-vi.mock("@/lib/analytics", async (original) => ({ ...(await original<typeof import("@/lib/analytics")>()), emitRepairLead }));
+const { emitRepairLead, emitRepairGateShown } = vi.hoisted(() => ({ emitRepairLead: vi.fn(), emitRepairGateShown: vi.fn() }));
+vi.mock("@/lib/analytics", async (original) => ({ ...(await original<typeof import("@/lib/analytics")>()), emitRepairLead, emitRepairGateShown }));
 
 import { RepairChat } from "@/components/RepairChat";
 import { WebsiteVisitorBar } from "@/components/workbench/WebsiteCards";
 import { en } from "@/i18n/en";
 import { zhCN } from "@/i18n/zh-CN";
 import { handleLead } from "@/lib/repair-chat/http";
-import { contactLines, parseLead, type LeadEvent } from "@/lib/repair-chat/lead";
+import { contactLines, NO_NAME, parseLead, type LeadEvent } from "@/lib/repair-chat/lead";
+import { firstName } from "@/lib/workbench/followup";
 import { composeFollowUpEmail, type OutgoingEmail } from "@/lib/repair-chat/followup";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 import { SessionStore } from "@/lib/repair-chat/session";
@@ -185,5 +186,42 @@ describe("the workbench", () => {
     rerender(<WebsiteVisitorBar visitor={{ name: "", phone: "", locale: "en" }} />);
     expect(screen.getByText("客人没有留联系方式，无法回访")).toBeInTheDocument();
     expect(screen.queryByTestId("callback-badge")).not.toBeInTheDocument();
+  });
+});
+
+// Kevin, 2026-11-16: half of the customers who reached an estimate left at the form.
+// The name is optional, the form says what the number is for, and there is a WhatsApp way out.
+describe("the lighter estimate form", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("needs only a phone number, offers WhatsApp with the car and question filled in, and is counted", async () => {
+    emitRepairGateShown.mockClear();
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/repair-lead") return Response.json({ ok: true, sessionId: SESSION, pending: { text: "About $291.", estimates: [] } });
+      return ndjson([{ type: "session", id: SESSION }, { type: "lead_required" }, { type: "done" }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
+    await userEvent.type(screen.getByLabelText(en.repairChat.placeholder), "front pads on my 2015 Civic{Enter}");
+    const gate = await screen.findByTestId("lead-gate");
+    expect(emitRepairGateShown).toHaveBeenCalledWith("en", "estimate");
+    expect(gate).toHaveTextContent(en.repairChat.gate.intro);
+    const link = within(gate).getByRole("link", { name: en.repairChat.gate.whatsappButton });
+    const text = decodeURIComponent((link.getAttribute("href") ?? "").split("?text=")[1]);
+    expect(link.getAttribute("href")).toContain("wa.me/");
+    expect(text).toContain(en.repairChat.gate.whatsappIntro);
+    expect(text).toContain("front pads on my 2015 Civic");
+
+    await userEvent.type(within(gate).getByLabelText(en.repairChat.gate.phone), "604-555-0182");
+    await userEvent.click(within(gate).getByRole("button", { name: en.repairChat.gate.submit }));
+    expect(await screen.findByText("About $291.")).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(([url]) => url === "/api/repair-lead") as unknown as [string, RequestInit];
+    expect(JSON.parse(call[1].body as string).lead).toEqual({ name: "", phone: "604-555-0182" });
+  });
+
+  it("stores a placeholder for the name and never greets the customer with it", async () => {
+    expect(parseLead({ phone: "604-555-0182" }, { nameOptional: true })).toEqual({ name: NO_NAME, phone: "604-555-0182" });
+    expect(firstName(NO_NAME)).toBe("");
+    expect(firstName("Amy Lin")).toBe("Amy");
   });
 });

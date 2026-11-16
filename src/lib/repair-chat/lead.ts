@@ -18,14 +18,20 @@ export interface Lead {
   email?: string;
 }
 
+/** Stored in place of the name when a website visitor leaves only a phone number (Kevin, 2026-11-16). */
+export const NO_NAME = "未留姓名";
+
 const EMAIL = /^[^\s@<>]{1,64}@[^\s@<>]+\.[^\s@<>]{2,}$/;
 const WECHAT = /^[A-Za-z0-9_+.-]{1,40}$/;
 
-export function parseLead(raw: unknown): Lead | null {
+export function parseLead(raw: unknown, options: { nameOptional?: boolean } = {}): Lead | null {
   if (!raw || typeof raw !== "object") return null;
   const { name, phone, wechat, email } = raw as Record<string, unknown>;
-  if (typeof name !== "string" || typeof phone !== "string") return null;
-  const cleanName = name.replace(/\s+/g, " ").trim();
+  if (typeof phone !== "string") return null;
+  if (name !== undefined && name !== null && typeof name !== "string") return null;
+  const typed = (typeof name === "string" ? name : "").replace(/\s+/g, " ").trim();
+  // The name may be left out where the form says so; staff then see NO_NAME.
+  const cleanName = typed || (options.nameOptional ? NO_NAME : "");
   if (cleanName.length < 1 || cleanName.length > 60 || /[<>{}\\]/.test(cleanName)) return null;
   const cleanPhone = phone.trim();
   if (cleanPhone.length > 25 || !/^\+?[\d\s().-]+$/.test(cleanPhone)) return null;

@@ -118,6 +118,22 @@ export function emitHostingLead(locale: Locale, destination: string | null = HOS
  * answered OK. Unlike a button click this is a real lead, so it is the
  * conversion the repair search campaigns optimize for.
  */
+/**
+ * The "estimate ready, leave a number" form was shown (Kevin, 2026-11-16).
+ * Compared with the estimate_lead conversions and the WhatsApp clicks next to
+ * it, this shows how many visitors the form loses.
+ */
+export function emitRepairGateShown(locale: Locale, reason: "estimate" | "appointment"): void {
+  if (typeof window === "undefined") return;
+  const parameters = { intent: "auto_repair", locale, gate_reason: reason };
+  if (window.gtag) {
+    window.gtag("event", "repair_gate_shown", parameters);
+  } else {
+    window.dataLayer ??= [];
+    window.dataLayer.push({ event: "repair_gate_shown", ...parameters });
+  }
+}
+
 export function emitRepairLead(kind: RepairLeadKind, locale: Locale): void {
   if (typeof window === "undefined") return;
 

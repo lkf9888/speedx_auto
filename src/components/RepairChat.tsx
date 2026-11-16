@@ -6,7 +6,7 @@ import { estimateRanges, type EstimateCard } from "@/lib/repair-chat/pricing";
 import { prepareAttachment, type PreparedAttachment } from "@/lib/workbench/prepare-attachment";
 import { company, telLink, whatsappLink } from "@/lib/company";
 import type { Locale } from "@/lib/site-routes";
-import { emitRepairLead } from "@/lib/analytics";
+import { emitRepairGateShown, emitRepairLead } from "@/lib/analytics";
 import { RepairBooking } from "./RepairBooking";
 import { QuoteSheet } from "./QuoteSheet";
 import { TrackedContactLink } from "./TrackedContactLink";
@@ -82,7 +82,7 @@ function phoneDigits(phone: string): number {
 
 function whatsappHref(copy: ChatCopy, card: EstimateCard, name: string): string {
   const lines = [
-    `${fill(copy.whatsappIntro, name)} (${card.id}):`,
+    `${name ? fill(copy.whatsappIntro, name) : copy.whatsappIntroNoName} (${card.id}):`,
     `${card.vehicle} — ${card.service}${card.position ? ` (${card.position})` : ""}`,
     card.kind === "team_quote"
       ? copy.estimate.teamQuoteTitle
@@ -167,9 +167,16 @@ function LeadGate({
   copy,
   onStart,
   reason = "estimate",
+  whatsappText,
+  locale,
+  pagePath,
 }: {
   copy: ChatCopy;
   onStart: (lead: Lead) => Promise<boolean>;
+  /** Pre-filled WhatsApp message for the "rather not leave a number" way out; none hides it. */
+  whatsappText?: string;
+  locale?: Locale;
+  pagePath?: string;
   /** Why we're asking: to show a ready estimate, to pass an appointment request on, or to call the customer back. */
   reason?: "estimate" | "appointment" | "callback";
 }) {
@@ -184,8 +191,8 @@ function LeadGate({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    // The name is optional (Kevin, 2026-11-16): a phone number is enough.
     const cleanName = name.trim();
-    if (!cleanName) return setError(copy.gate.invalidName);
     const digits = phoneDigits(phone);
     if (digits < 10 || digits > 15 || !/^\+?[\d\s().-]+$/.test(phone.trim())) {
       return setError(copy.gate.invalidPhone);
@@ -263,6 +270,24 @@ function LeadGate({
       {error && (
         <p role="alert" className="text-sm text-amber-800">
           {error}
+        </p>
+      )}
+      {whatsappText && locale && (
+        <p data-testid="gate-whatsapp" className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-600">
+          <span>{copy.gate.whatsappPrompt}</span>
+          <TrackedContactLink
+            href={`${whatsappLink}?text=${encodeURIComponent(whatsappText)}`}
+            method="whatsapp"
+            intent="auto_repair"
+            locale={locale}
+            placement="chat"
+            pagePath={pagePath ?? ""}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-[#008069] underline underline-offset-2 hover:text-[#00a884]"
+          >
+            {copy.gate.whatsappButton}
+          </TrackedContactLink>
         </p>
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -410,6 +435,17 @@ export function RepairChat({
     appendReply(copy.callback.thanks, [], true);
     return true;
   }
+
+  /** The WhatsApp message offered on the "estimate ready" form: the car and what the customer asked, so the shop can pick it up there. */
+  function gateWhatsapp(): string {
+    const asked = [...turns].reverse().find((t) => t.role === "user" && t.text.trim())?.text.trim().slice(0, 300);
+    return [copy.gate.whatsappIntro, vehicle?.label, asked].filter(Boolean).join("\n");
+  }
+
+  // Once per time the form appears, so the shown count lines up with the leads and WhatsApp clicks.
+  useEffect(() => {
+    if (awaitingLead === "estimate" || awaitingLead === "appointment") emitRepairGateShown(locale, awaitingLead);
+  }, [awaitingLead, locale]);
 
   /** Name and phone given on the "estimate ready" form: release the held reply. */
   async function unlock(next: Lead): Promise<boolean> {
@@ -710,7 +746,7 @@ export function RepairChat({
             )}
             {awaitingLead && (
               <div data-testid="lead-gate" className="rounded-xl bg-white p-4 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
-                <LeadGate copy={copy} onStart={unlock} reason={awaitingLead || "estimate"} />
+                <LeadGate copy={copy} onStart={unlock} reason={awaitingLead || "estimate"} whatsappText={gateWhatsapp()} locale={locale} pagePath={pagePath} />
               </div>
             )}
             {!lead && !awaitingLead && !capped && callbackOpen && (

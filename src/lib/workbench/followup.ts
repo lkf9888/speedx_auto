@@ -5,6 +5,7 @@
  * mailbox, or a text message they send themselves from Google Messages.
  * Types and pure rendering only, safe for the browser preview.
  */
+import { NO_NAME } from "@/lib/repair-chat/lead";
 import { withoutDiscount } from "@/lib/repair-chat/house-rules";
 import { estimateRanges, type EstimateCard } from "@/lib/repair-chat/pricing";
 
@@ -116,6 +117,7 @@ const escapeHtml = (text: string) =>
 
 /** A display name from the customer's name: "Lin" → "Lin", used in greetings. */
 export function firstName(name: string): string {
+  if (name.startsWith(NO_NAME)) return "";
   return name.trim().split(/\s+/)[0]?.slice(0, 30) ?? "";
 }
 

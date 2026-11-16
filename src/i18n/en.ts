@@ -161,12 +161,15 @@ export const en = {
   repairChat: {
     gate: {
       title: "Your estimate is ready",
-      intro: "Enter your name and phone number to see it. We use them only to follow up on your estimate.",
-      name: "Name",
+      intro: "Leave a phone number and we'll show it here, and the shop can send you the exact price and when the parts arrive. No spam.",
+      name: "Name (optional)",
+      whatsappPrompt: "Rather not leave a number?",
+      whatsappButton: "Message us on WhatsApp instead",
+      whatsappIntro: "Hi SPEEDX, I'm using the online estimate on your website and would rather chat here.",
       phone: "Phone",
       submit: "See my estimate",
       appointmentTitle: "Where can the shop reach you?",
-      appointmentIntro: "Leave your name and phone so the shop can confirm your appointment time.",
+      appointmentIntro: "Leave your phone number so the shop can confirm your appointment time.",
       appointmentSubmit: "Send my request",
       consent: "By continuing, you agree SPEEDX AUTO may contact you about this estimate. Your contact details are not shared with the AI service.",
       invalidName: "Please enter your name.",
@@ -177,7 +180,7 @@ export const en = {
       invalidWechat: "Please check your WeChat ID (letters, numbers, - and _ only).",
       invalidEmail: "Please check your email address.",
       callbackTitle: "Have a mechanic call you",
-      callbackIntro: "Leave your name and phone and the shop will call you back as soon as it can.",
+      callbackIntro: "Leave your phone number and the shop will call you back as soon as it can.",
       callbackSubmit: "Call me back",
     },
     callback: {
@@ -245,6 +248,7 @@ export const en = {
       teamQuote: "This job needs a price from our team. Message us on WhatsApp or call, and we'll get back to you with a quote.",
     },
     whatsappIntro: "Hi SPEEDX, this is {name}. I got an online estimate",
+    whatsappIntroNoName: "Hi SPEEDX, I got an online estimate",
     errors: {
       busy: "Too many requests right now. Please try again in a few minutes, or message us on WhatsApp.",
       unavailable: "The estimator is unavailable right now. Please message us on WhatsApp or call.",
