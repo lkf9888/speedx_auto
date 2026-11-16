@@ -125,6 +125,18 @@ describe("two unknown details at once", () => {
 
   it("the prompt stops promising later retries and repeated detail questions", () => {
     expect(SYSTEM_PROMPT).toContain("don't promise to try again later");
+    expect(SYSTEM_PROMPT).not.toContain("Call the tool again yourself");
     expect(SYSTEM_PROMPT).toContain("don't ask a second and third time");
+  });
+});
+
+describe("combination fixes from review", () => {
+  it("a price shared by several combinations says which details it covers", async () => {
+    const out = await runTool(engineAndBodyCatalog(), "get_estimate", { vehicle_key: encodeVehicleKey(vehicle()), service_id: 9, position: null }, () => "E-1", "en");
+    const labels = cards(out.events).map((c) => c.vehicle);
+    // Hours differ by engine only, so each card covers both bodies and names only its engine.
+    expect(labels.every((l) => !/Coupe|Sedan/.test(l))).toBe(true);
+    expect(labels.some((l) => l.includes("1.8"))).toBe(true);
+    expect(labels.some((l) => l.includes("2.0"))).toBe(true);
   });
 });
