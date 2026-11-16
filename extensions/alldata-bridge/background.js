@@ -27,6 +27,11 @@ class BridgeError extends Error {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || !sender.url || !ALLOWED_PAGES.some((page) => page.test(sender.url))) return false;
   const op = OPS[message && message.op];
+  // Adding to a cart is only ever asked by the real workbench, not by a localhost dev page.
+  if (op === OPS.cartAdd && !/^https:\/\/repair\.speedxrental\.com\//.test(sender.url)) {
+    sendResponse({ ok: false, error: { code: "bad_request", message: "not allowed from this page" } });
+    return false;
+  }
   if (!op) {
     sendResponse({ ok: false, error: { code: "bad_request", message: "unknown operation" } });
     return false;
@@ -539,17 +544,21 @@ async function nexpartAddToCart(args) {
   const check = document.getElementById("StockCheckButtonTop");
   if (!check) return { status: "page_changed" };
   check.click();
-  // The row for this part shows up with its price once the stock check has answered.
+  // The row for this part shows up with its price once the stock check has answered. Only a row that shows
+  // exactly this part number counts (Nexpart may answer with a replacement part number: then nothing is added).
   const needle = part.toLowerCase();
-  const shown = await waitFor(() => {
-    const text = document.body.innerText.toLowerCase();
-    return text.includes(needle) && /your price/i.test(document.body.innerText) ? text : null;
-  }, 15000);
+  const rowFor = () =>
+    [...document.querySelectorAll("*")].find((el) => el.children.length === 0 && el.offsetParent && (el.innerText || "").trim().toLowerCase() === needle && !/^(INPUT|TEXTAREA)$/.test(el.tagName));
+  const shown = await waitFor(() => (rowFor() && /your price/i.test(document.body.innerText) ? rowFor() : null), 15000);
   if (!shown) {
     const message = /not found|invalid|no match|not available|could not/i.exec(document.body.innerText);
     return { status: "not_found", note: message ? message[0] : "" };
   }
   await sleep(500);
+  // Exactly one row is ticked "Add to Order", and it asks for our quantity.
+  const ticked = [...document.querySelectorAll('input[type="checkbox"]')].filter((el) => el.checked && el.offsetParent);
+  const rowQty = qtyInput.value.trim();
+  if (ticked.length !== 1 || rowQty !== String(qty)) return { status: "page_changed", note: "the ticked rows or the quantity are not what was asked" };
   const add = [...document.querySelectorAll(".addToCartBtn__stock")].find((el) => el.offsetParent);
   if (!add) return { status: "page_changed" };
   add.click();
@@ -570,16 +579,22 @@ function cartAdd(args) {
 /** Adds one part to the seller's Nexpart cart. Never places an order. */
 async function cartAddNow(args) {
   const origin = NEXPART_SELLERS[args.supplier];
-  const part = text(args.partNumber, 40);
+  // The raw value is checked, not a shortened copy: a long text must not turn into a different part number.
+  const part = typeof args.partNumber === "string" ? args.partNumber.trim() : "";
   const qty = positiveInt(args.qty);
   if (!origin || !/^[A-Za-z0-9][A-Za-z0-9 ._\/-]{1,39}$/.test(part) || !qty || qty > 20) throw new BridgeError("bad_request", "bad cart request");
   const tab = await chrome.tabs.create({ url: `${origin}/ts2orderparts.php`, active: false });
   try {
-    await waitForLoad(tab.id);
-    const [run] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world: "MAIN", func: nexpartAddToCart, args: [{ partNumber: part, qty }] });
-    const result = run && run.result;
-    if (!result) throw new BridgeError("westcan_error", "no answer from the Nexpart page");
-    return result;
+    try {
+      await waitForLoad(tab.id);
+      const [run] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world: "MAIN", func: nexpartAddToCart, args: [{ partNumber: part, qty }] });
+      const result = run && run.result;
+      if (!result) throw new Error("no answer from the Nexpart page");
+      return result;
+    } catch (error) {
+      // Whatever went wrong here is about Nexpart, not ALLDATA.
+      throw new BridgeError("nexpart_error", String((error && error.message) || "").slice(0, 160));
+    }
   } finally {
     try {
       await chrome.tabs.remove(tab.id);

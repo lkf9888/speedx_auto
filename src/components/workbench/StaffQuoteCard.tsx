@@ -83,7 +83,8 @@ function AddToCart({ option }: { option: StaffQuoteOption }) {
   const [step, setStep] = useState<"idle" | "confirm" | "adding" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
   const supplier: CartSupplier | null = option.source === "westcan" ? "westcan" : option.source === "lordco" ? "lordco" : null;
-  if (!supplier || !option.partNumber || option.outOfStock) return null;
+  // A left + right set carries two part numbers: one cart line can't be made from it.
+  if (!supplier || !option.partNumber || option.outOfStock || /\+/.test(option.partNumber)) return null;
   const name = supplier === "westcan" ? "Westcan" : "Lordco";
   const total = option.unitCost === null ? null : Math.round(option.unitCost * option.quantity * 100) / 100;
 
@@ -99,7 +100,9 @@ function AddToCart({ option }: { option: StaffQuoteOption }) {
         setStep("error");
       }
     } catch (error) {
-      setMessage(bridgeErrorText(error));
+      // An extension older than 1.2.0 doesn't know this request.
+      const old = error instanceof Error && error.name === "BridgeError" && /unknown operation/i.test(error.message);
+      setMessage(old ? "这台电脑的 SPEEDX 扩展版本太旧，请更新到 1.2.0（见扩展的 README），再试。" : bridgeErrorText(error));
       setStep("error");
     }
   }
@@ -139,6 +142,10 @@ function AddToCart({ option }: { option: StaffQuoteOption }) {
       {step === "error" && (
         <p role="alert" className="text-[11px] text-amber-800">
           {message}{" "}
+          <a href={CART_URLS[supplier]} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
+            先打开 {name} 购物车看一眼 ↗
+          </a>{" "}
+          （确认没加上再重试，免得加两遍）{" "}
           <button type="button" className="underline" onClick={() => setStep("confirm")}>
             再试一次
           </button>

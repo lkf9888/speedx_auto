@@ -72,12 +72,29 @@ describe("add to cart", () => {
     expect(await screen.findByRole("link", { name: /打开 Lordco 购物车/ })).toHaveAttribute("href", "https://1000027.nexpart.com/cart.php");
   });
 
+  it("doesn't offer the button for a left + right set", () => {
+    const q = withWestcanOption("westcan");
+    render(<StaffQuoteCard quote={{ ...q, options: [{ ...q.options[0], partNumber: "L-1 + R-2", quantity: 1 }] }} tier="retail" />);
+    expect(screen.queryByTestId("add-to-cart")).not.toBeInTheDocument();
+  });
+
   it("says plainly when nothing was added", async () => {
     setImpl(async () => ({ status: "not_found" }));
     render(<StaffQuoteCard quote={withWestcanOption("westcan")} tier="retail" />);
     await userEvent.click(screen.getByRole("button", { name: "加进 Westcan 购物车" }));
     await userEvent.click(screen.getByTestId("cart-confirm"));
     expect(await screen.findByRole("alert")).toHaveTextContent("搜不到这个零件号，没有加进购物车");
+    expect(screen.getByRole("link", { name: /先打开 Westcan 购物车看一眼/ })).toBeInTheDocument();
+  });
+
+  it("says when the extension is too old to know the request", async () => {
+    const { BridgeError } = await import("@/lib/workbench/alldata-bridge");
+    const failure = new BridgeError("bad_request", "unknown operation");
+    setImpl(() => new Promise((_, reject) => setTimeout(() => reject(failure), 0)));
+    render(<StaffQuoteCard quote={withWestcanOption("westcan")} tier="retail" />);
+    await userEvent.click(screen.getByRole("button", { name: "加进 Westcan 购物车" }));
+    await userEvent.click(screen.getByTestId("cart-confirm"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("扩展版本太旧");
   });
 
   it("says when the extension isn't there", async () => {
