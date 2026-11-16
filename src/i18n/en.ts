@@ -200,7 +200,7 @@ export const en = {
     eyebrow: "Instant estimate",
     title: "Describe the problem, get a ballpark price",
     intro: "Tell the assistant your vehicle and what it is doing. It suggests likely causes and gives a ballpark estimate for parts and repair.",
-    placeholder: "e.g. 2019 Camry LE, grinding noise when braking",
+    placeholder: "e.g. 2019 Camry, brakes",
     send: "Send",
     photo: {
       add: "Add a photo",
