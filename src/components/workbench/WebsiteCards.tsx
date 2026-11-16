@@ -65,7 +65,11 @@ export function WebsiteEstimateCard({ card }: { card: EstimateCard }) {
       <p className="text-xs font-semibold text-[color:var(--wb-muted)]">客人看到的报价卡 · {card.id}</p>
       <p className="mt-1 font-medium text-[color:var(--wb-text)]">{[card.service, card.position].filter(Boolean).join(" · ")}</p>
       {card.vehicle && card.vehicle !== "—" && <p className="text-xs text-[color:var(--wb-muted)]">{card.vehicle}</p>}
-      <p className="mt-1 text-base font-semibold text-[#008069]">{range(totalLow, totalHigh)}</p>
+      {card.kind === "team_quote" ? (
+        <p data-testid="website-team-quote" className="mt-1 text-base font-semibold text-amber-800">没有线上价，要店里人工报价</p>
+      ) : (
+        <p className="mt-1 text-base font-semibold text-[#008069]">{range(totalLow, totalHigh)}</p>
+      )}
       {card.discount && (
         <p data-testid="website-estimate-discount" className="text-xs font-semibold text-amber-800">
           已减“{card.discount.label}” −{range(Math.round(card.discount.low), Math.round(card.discount.high))}（调教对外助手里设的折扣）

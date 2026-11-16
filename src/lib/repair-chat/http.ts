@@ -426,6 +426,8 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
       const pendingNotices: Array<Promise<void>> = [];
       // Without name and phone, estimates (and the reply quoting them) stay on the server.
       const held: EstimateCard[] = [];
+      // Cards for jobs with no online price: sent once the turn is over, so they travel with the priced cards if those are held back.
+      const teamCards: EstimateCard[] = [];
       const shown: EstimateCard[] = [];
       let vehicle: { key: string; label: string } | undefined;
       let appointmentHeld = false;
@@ -462,6 +464,13 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
         if (event.type === "estimate") {
           sessions.recordEstimate(session.id, event.estimate);
           shown.push(event.estimate);
+          // A job with no online price has nothing to hold back behind the contact form: its card goes out with the reply
+          // (below), which invites contact details instead, so the team can send the price.
+          if (event.estimate.kind === "team_quote") {
+            if (session.lead) pendingNotices.push(notify(estimateLeadEvent(session.lead, request_.locale, event.estimate)));
+            teamCards.push(event.estimate);
+            return;
+          }
           if (!session.lead) {
             held.push(event.estimate);
             return;
@@ -499,11 +508,17 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
         if (evaluation) await sessions.finish(session.id, "idle"); // drop the throwaway session's timer
         if (capped) send({ type: "capped" });
         if (held.length > 0 || appointmentHeld) {
+          // The team cards wait with the rest and arrive with it once the visitor has left contact details.
+          const reason = held.length > 0 ? "estimate" : "appointment";
+          held.push(...teamCards);
           sessions.holdReply(session.id, { text: result.text, estimates: held });
-          send({ type: "lead_required", reason: held.length > 0 ? "estimate" : "appointment" });
+          send({ type: "lead_required", reason });
         } else {
-          // Offered only when this reply really didn't price anything.
-          if (askForContact && shown.length === 0) {
+          for (const card of teamCards) controller.enqueue(encoder.encode(`${JSON.stringify({ type: "estimate", estimate: forCustomer(card) })}\n`));
+          // Offered only when this reply really didn't price anything. A new team-quote card always brings the form back
+          // (the visitor may have closed it or reset the chat), without a second offer for follow-up messages.
+          const onlyTeamQuotes = shown.length > 0 && shown.every((card) => card.kind === "team_quote");
+          if ((askForContact && shown.length === 0) || (onlyTeamQuotes && !session.lead)) {
             sessions.markContactOffered(session.id);
             send({ type: "contact_offer" });
           }

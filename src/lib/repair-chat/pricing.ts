@@ -343,6 +343,7 @@ export function summarizeEstimateForModel(card: EstimateCard): string {
       `Card ${card.id} shown to the customer: "${card.service}" for ${card.vehicle} has no online price and needs a quote from the team.`,
       `Reason (internal): ${card.partsNote}`,
       "Tell the customer briefly that the team will confirm the price by WhatsApp or phone (buttons on the card). Do not give or guess any price for this job.",
+      "The page also shows a box under your reply where the customer can leave a phone number, WhatsApp or email: invite them to do that so the team can reach them. For body, collision or paint damage, ask for photos of the damage here in the chat. Do not ask which panels or other detail questions.",
     ].join("\n");
   }
   if (card.kind === "tires") {

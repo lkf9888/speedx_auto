@@ -615,7 +615,7 @@ export function RepairChat({
     else {
       appendReply(reply, estimates);
       // The assistant just invited a phone or email: open the form under its reply.
-      if (offerContact && estimates.length === 0 && !lead) setCallbackOpen(true);
+      if (offerContact && estimates.every((card) => card.kind === "team_quote") && !lead) setCallbackOpen(true);
     }
     setPending(false);
     setStatus(null);

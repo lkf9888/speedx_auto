@@ -262,3 +262,23 @@ describe("the typing line", () => {
     expect(SYSTEM_PROMPT).toContain("Think one step past the answer");
   });
 });
+
+// Kevin, 2026-11-16 (shared conversation review): the assistant answered "原价、转介绍价、朋友价" after the prices were
+// renamed and a fourth was added, and the staff view showed a team-quote card as "$0".
+describe("review of shared conversations", () => {
+  it("tells the model the four price names and not to explain them", async () => {
+    const { WORKBENCH_TOOLS, runWorkbenchTool } = await import("@/lib/workbench/assistant");
+    const ask = WORKBENCH_TOOLS.find((t) => t.name === "ask_price_tier")!;
+    expect((ask as { description: string }).description).toContain("成本价+8折人工");
+    const result = await runWorkbenchTool({} as never, "ask_price_tier", {}, () => "W-1", null);
+    expect(result.content).toContain("four quick price buttons");
+    expect(result.content).toContain("never 转介绍价 or 朋友价");
+  });
+
+  it("the staff view of a team-quote card says it needs a quote, not $0", async () => {
+    const { WebsiteEstimateCard } = await import("@/components/workbench/WebsiteCards");
+    render(<WebsiteEstimateCard card={{ id: "E-TEAM", kind: "team_quote", service: "Paint scratch repair", position: "", vehicle: "2019 Subaru Outback", partOptions: [], totalLow: 0, totalHigh: 0, partsLow: 0, partsHigh: 0, laborHours: 0, laborRate: 0, laborWalkIn: 0, laborReferral: 0, referralTotalLow: 0, referralTotalHigh: 0, laborNote: "", partsNote: "" } as never} />);
+    expect(screen.getByTestId("website-team-quote")).toHaveTextContent("没有线上价，要店里人工报价");
+    expect(screen.queryByText("$0")).not.toBeInTheDocument();
+  });
+});

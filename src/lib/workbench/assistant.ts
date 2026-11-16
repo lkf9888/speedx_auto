@@ -242,7 +242,7 @@ const PROPOSE_MEMORY: Anthropic.Beta.BetaTool = {
 const ASK_PRICE_TIER: Anthropic.Beta.BetaTool = {
   name: "ask_price_tier",
   description:
-    "Ask staff which price this conversation should quote (retail, referral or friend). Shows them three buttons; their choice comes back as their next message. Use it before the first quote when no price is chosen yet.",
+    "Ask staff which price this conversation should quote. Shows them four buttons: 原价 (retail), 原价+8折人工 (referral), 基础价+8折人工 (friend), 成本价+8折人工 (cost); their choice comes back as their next message. Use it before the first quote when no price is chosen yet.",
   strict: true,
   input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
 };
@@ -692,7 +692,7 @@ export async function runWorkbenchTool(
   if (name === "find_fleet_car") return findFleetCar(tato, input);
   if (name === "ask_price_tier") {
     return {
-      content: JSON.stringify({ status: "shown", note: "Staff see three quick price buttons plus a parts slider and a labor slider, and confirm. Ask in one short line which price to quote, quote nothing yet, and stop." }),
+      content: JSON.stringify({ status: "shown", note: "Staff see four quick price buttons (原价, 原价+8折人工, 基础价+8折人工, 成本价+8折人工) plus a parts slider, a labor slider and an extra-hours slider, and confirm. Ask in one short line which price to quote, quote nothing yet, and stop. Do not explain the prices: the buttons already say what each one is. If you name a price, use exactly these four names, never 转介绍价 or 朋友价." }),
       isError: false,
       events: [{ type: "price_choice" }],
     };

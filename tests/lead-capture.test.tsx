@@ -314,3 +314,89 @@ describe("review fixes for the contact invitation", () => {
     expect(parse({ email: "amy@example.com" }, { nameOptional: true, phoneOptional: true })).toMatchObject({ phone: "", email: "amy@example.com" });
   });
 });
+
+// Kevin, 2026-11-16 (shared conversation review): a job with no online price (paint scratches) showed the visitor a contact
+// gate "to see your estimate" and staff a "$0" card. Now the card shows at once and the reply invites contact details.
+describe("a job that needs the team's quote", () => {
+  const catalog = { get: async () => ({}), post: async () => ({}) } as never;
+  function make(requests: string[]) {
+    const replies = [
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "request_team_quote", input: { service: "Paint scratch repair", vehicle_description: "2019 Subaru Outback" } }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "The team will confirm the price. Please send photos and leave a phone number or email below." }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "Thanks." }] },
+    ];
+    const client = { beta: { messages: { create: async (params: unknown) => (requests.push(JSON.stringify(params)), replies.shift() as never) } } };
+    return { configured: () => true, limiter: new RateLimiter(), notify: async () => {}, sessions: new SessionStore(async () => {}), catalog: () => catalog, client: () => client as never, houseRules: async () => [] };
+  }
+  const chat = async (deps: ReturnType<typeof make>, message: string, sessionId: string | null) => {
+    const { handleChat } = await import("@/lib/repair-chat/http");
+    const text = await (await handleChat(new Request("https://speedxrental.com/api/repair-chat", { method: "POST", headers: { "Content-Type": "application/json", origin: "https://speedxrental.com" }, body: JSON.stringify({ locale: "en", history: [], message, vehicleKey: null, lead: null, sessionId }) }), deps as never)).text();
+    const events = text.trim().split("\n").map((l) => JSON.parse(l));
+    return { events, sessionId: events.find((e) => e.type === "session")?.id ?? sessionId };
+  };
+
+  it("shows the card without the gate, invites contact once, and tells the model to ask for photos and contact", async () => {
+    const requests: string[] = [];
+    const deps = make(requests);
+    const first = await chat(deps, "paint scratches on my 2019 Subaru Outback", null);
+    const types = first.events.map((e) => e.type);
+    expect(types).not.toContain("lead_required");
+    expect(first.events.find((e) => e.type === "estimate")?.estimate).toMatchObject({ kind: "team_quote" });
+    expect(types.indexOf("contact_offer")).toBeGreaterThan(-1);
+    expect(types.indexOf("contact_offer")).toBeLessThan(types.indexOf("message"));
+    expect(requests.join()).toContain("leave a phone number, WhatsApp or email");
+    expect(requests.join()).toContain("Do not ask which panels");
+    const second = await chat(deps, "just the door", first.sessionId);
+    expect(second.events.some((e) => e.type === "contact_offer")).toBe(false);
+  });
+
+  // Codex review: a reply with a priced card and a team card, in either order, keeps both behind the gate until contact
+  // details arrive; and a new team card always brings the form back, even after the first offer.
+  const mixed = (order: Array<"team" | "priced">) => {
+    const team = { type: "tool_use", id: "t1", name: "request_team_quote", input: { service: "Paint scratch repair", vehicle_description: "2019 Subaru Outback" } };
+    const priced = { type: "tool_use", id: "t2", name: "get_shop_service_price", input: { service: "inspection" } };
+    const replies = [
+      { stop_reason: "tool_use", content: order.map((o) => (o === "team" ? team : priced)) },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "Done." }] },
+    ];
+    const client = { beta: { messages: { create: async () => replies.shift() as never } } };
+    return { configured: () => true, limiter: new RateLimiter(), notify: async () => {}, sessions: new SessionStore(async () => {}), catalog: () => catalog, client: () => client as never, houseRules: async () => [] };
+  };
+
+  it.each([["team first", ["team", "priced"]], ["priced first", ["priced", "team"]]] as const)("a priced and a team card together are held together (%s)", async (_label, order) => {
+    const deps = mixed([...order]);
+    const out = await chat(deps as never, "inspection and paint scratches", null);
+    const types = out.events.map((e) => e.type);
+    expect(types).toContain("lead_required");
+    expect(types).not.toContain("estimate");
+    expect(types).not.toContain("message");
+    expect(types).not.toContain("contact_offer");
+  });
+
+  it("a second team card brings the form back after the first offer", async () => {
+    const requests: string[] = [];
+    const sessions = new SessionStore(async () => {});
+    const deps = { ...make(requests), sessions };
+    const first = await chat(deps, "paint scratches on my 2019 Subaru Outback", null);
+    expect(first.events.some((e) => e.type === "contact_offer")).toBe(true);
+    // The visitor closed the form and started over in the same session; the model asks for another team quote.
+    const again = { ...make(requests), sessions };
+    const second = await chat(again, "and a dent on the bumper", first.sessionId);
+    expect(second.events.some((e) => e.type === "contact_offer")).toBe(true);
+  });
+});
+
+describe("the page for a job that needs the team's quote", () => {
+  it("shows the card and the reply, with the contact form open under them", async () => {
+    const team = { id: "E-TEAM", kind: "team_quote", service: "Paint scratch repair", position: "", vehicle: "2019 Subaru Outback", partOptions: [], totalLow: 0, totalHigh: 0, partsLow: 0, partsHigh: 0, laborHours: 0, laborRate: 0, laborWalkIn: 0, laborReferral: 0, referralTotalLow: 0, referralTotalHigh: 0, laborNote: "", partsNote: "" };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/repair-booking") return Response.json({ days: [] });
+      return ndjson([{ type: "session", id: SESSION }, { type: "estimate", estimate: team }, { type: "contact_offer" }, { type: "message", text: "The team will confirm the price. Leave a phone number or email below." }, { type: "done" }]);
+    }));
+    render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
+    await userEvent.type(screen.getByLabelText(en.repairChat.placeholder), "paint scratches 2019 Subaru Outback{Enter}");
+    expect(await screen.findByTestId("callback-form")).toBeInTheDocument();
+    expect(screen.getByText(/The team will confirm the price/)).toBeInTheDocument();
+    expect(screen.queryByTestId("lead-gate")).not.toBeInTheDocument();
+  });
+});
