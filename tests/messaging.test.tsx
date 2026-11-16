@@ -304,7 +304,7 @@ describe("the workbench", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "确认发送" }));
     await waitFor(() => expect(onSent).toHaveBeenCalled());
-    expect(JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ text: "Hi Amy" });
+    expect(JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toMatchObject({ text: "Hi Amy", requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
     vi.unstubAllGlobals();
   });
 
@@ -335,5 +335,98 @@ describe("the workbench", () => {
     ]);
     expect(history[2].text).toContain("不是对你的提问");
     expect(history[3].text).toContain("客人通过 WhatsApp 回复");
+  });
+});
+
+// Codex's review of the first version, each one reproduced and fixed.
+describe("review fixes", () => {
+  it("a retry with the same request id never sends twice", async () => {
+    const { store, deps, calls } = setup();
+    const id = await lead(store);
+    const first = await sendToCustomer(deps, id, "k@x", "Hello", "req-0000001");
+    const again = await sendToCustomer(deps, id, "k@x", "Hello", "req-0000001");
+    expect(again.id).toBe(first.id);
+    expect(calls).toHaveLength(1);
+    expect((await store.get(id))!.turns.filter((t) => t.text === "Hello")).toHaveLength(1);
+  });
+
+  it("a message whose answer was lost stays written down as sending, and a retry doesn't resend it", async () => {
+    let calls = 0;
+    const fetchImpl: typeof fetch = async () => {
+      calls += 1;
+      throw new Error("socket closed");
+    };
+    const { store, deps } = setup({ fetchImpl });
+    const id = await lead(store);
+    await expect(sendToCustomer(deps, id, "k@x", "Hello", "req-0000002")).rejects.toMatchObject({ kind: "failed" });
+    expect(calls).toBe(1);
+    expect((await store.get(id))!.turns.at(-1)!.delivery?.status).toBe("failed");
+  });
+
+  it("STOP is kept for the number, so a new conversation can't undo it", async () => {
+    const { store, deps } = setup();
+    const id = await lead(store);
+    await receiveFromCustomer(deps, "whatsapp", { id: "wamid.s", from: CUSTOMER, at: NOW, text: "STOP" });
+    expect(await store.isOptedOut(CUSTOMER)).toBe(true);
+    const fresh = await lead(store, "cwfresh", "(604) 555-0182");
+    await expect(sendToCustomer(deps, fresh, "k@x", "hi")).rejects.toMatchObject({ kind: "opted_out" });
+    await expect(sendToCustomer(deps, id, "k@x", "hi")).rejects.toMatchObject({ kind: "opted_out" });
+  });
+
+  it("two reports of one failure start one SMS only", async () => {
+    const { store, deps, calls } = setup();
+    const id = await lead(store);
+    await sendToCustomer(deps, id, "k@x", "Your car is ready");
+    const report = { id: "wamid.1", status: "failed" as const, code: 131026, reason: "undeliverable" };
+    await Promise.all([applyStatus(deps, report), applyStatus(deps, report)]);
+    await applyStatus(deps, report);
+    expect(calls.filter((x) => x.url.includes("twilio"))).toHaveLength(1);
+    expect((await store.get(id))!.turns.at(-1)!.delivery?.resentAsSms).toBe(true);
+  });
+
+  it("the same inbound message arriving twice at once is stored once", async () => {
+    const { store, deps } = setup();
+    const id = await lead(store);
+    const message = { id: "SMdup", from: CUSTOMER, at: NOW, text: "yes" };
+    await Promise.all([receiveFromCustomer(deps, "sms", message), receiveFromCustomer(deps, "sms", message)]);
+    expect((await store.get(id))!.turns.filter((t) => t.text === "yes")).toHaveLength(1);
+  });
+
+  it("an older message arriving late doesn't close the 24-hour window", async () => {
+    const { store, deps } = setup();
+    const id = await lead(store);
+    await receiveFromCustomer(deps, "whatsapp", { id: "w2", from: CUSTOMER, at: NOW - 1000, text: "newer" });
+    await receiveFromCustomer(deps, "whatsapp", { id: "w1", from: CUSTOMER, at: NOW - 30 * 3600_000, text: "older" });
+    expect((await store.get(id))!.messaging?.lastWhatsAppInboundAt).toBe(NOW - 1000);
+  });
+
+  it("a conversation made for a new number has an id that isn't the number", async () => {
+    const { store, deps } = setup();
+    await receiveFromCustomer(deps, "sms", { id: "SM5", from: "+16045558888", at: NOW, text: "hi" });
+    const c = await store.findByPhone((p) => samePhone(p, "+16045558888"));
+    expect(c!.id).toMatch(/^wa[a-f0-9]{30}$/);
+    expect(c!.id).not.toContain("6045558888");
+  });
+
+  it("refuses to cut a first message the template can't hold, and over-long texts", async () => {
+    const { store, deps } = setup();
+    const id = await lead(store);
+    await expect(sendToCustomer(deps, id, "k@x", "x".repeat(950))).rejects.toMatchObject({ kind: "template_too_long" });
+    await expect(sendToCustomer(deps, id, "k@x", "😀".repeat(501))).rejects.toMatchObject({ kind: "too_long" });
+  });
+
+  it("answers a webhook with 500 when saving fails, so the provider tries again", async () => {
+    const { store } = setup();
+    const env = { WHATSAPP_TOKEN: "tok", WHATSAPP_PHONE_NUMBER_ID: "1", WHATSAPP_APP_SECRET: "secret", WHATSAPP_VERIFY_TOKEN: "v" } as unknown as NodeJS.ProcessEnv;
+    const raw = JSON.stringify({ entry: [{ changes: [{ value: { messages: [{ id: "w9", from: "16045550182", type: "text", text: { body: "STOP" } }] } }] }] });
+    vi.spyOn(store, "findByMessageId").mockRejectedValue(new Error("kv down"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await handleWhatsAppWebhook(
+      new Request("https://x/api/whatsapp/webhook", { method: "POST", body: raw, headers: { "x-hub-signature-256": `sha256=${createHmac("sha256", "secret").update(raw).digest("hex")}` } }),
+      { user: async () => null, store: () => store, env: () => env, log: () => undefined },
+    );
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(spy.mock.calls)).not.toContain("6045550182");
+    spy.mockRestore();
   });
 });

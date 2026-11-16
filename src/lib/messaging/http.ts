@@ -50,8 +50,9 @@ export async function handleWhatsAppWebhook(request: Request, deps: MessagingHtt
     const handled = await handleWhatsAppEvents(depsFor(store, env), JSON.parse(raw));
     deps.log({ action: "whatsapp_webhook", handled });
   } catch (error) {
-    // Never the body or numbers; Meta would retry a failure for hours, so answer 200 after logging.
+    // Never the body or numbers. A failure is answered with 500 so Meta sends it again (repeats are recognised).
     console.error("whatsapp webhook failed", error instanceof Error ? error.message.slice(0, 160) : "unknown");
+    return new Response(null, { status: 500 });
   }
   return new Response(null, { status: 200 });
 }
@@ -79,6 +80,7 @@ export async function handleSmsWebhook(request: Request, deps: MessagingHttpDeps
     deps.log({ action: "sms_webhook" });
   } catch (error) {
     console.error("sms webhook failed", error instanceof Error ? error.message.slice(0, 160) : "unknown");
+    return new Response(null, { status: 500 });
   }
   return new Response(TWIML, { status: 200, headers: { "Content-Type": "text/xml" } });
 }
@@ -89,10 +91,10 @@ export async function handleSend(request: Request, conversationId: string, deps:
   if (!user) return json({ error: "unauthorized" }, 401);
   const store = deps.store();
   if (!store) return json({ error: "not_configured", message: "对话存储没配置。" }, 503);
-  const body = (await request.json().catch(() => null)) as { text?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { text?: unknown; requestId?: unknown } | null;
   if (!body || typeof body.text !== "string") return json({ error: "invalid" }, 400);
   try {
-    const turn = await sendToCustomer(depsFor(store, deps.env()), conversationId, user.email, body.text);
+    const turn = await sendToCustomer(depsFor(store, deps.env()), conversationId, user.email, body.text, typeof body.requestId === "string" ? body.requestId : undefined);
     deps.log({ action: "send_to_customer", email: user.email, id: conversationId, channel: turn.channel, length: body.text.length });
     return json({ turn });
   } catch (error) {

@@ -24,7 +24,7 @@ export const SMS_FOOTER = "\n回复 STOP 不再接收 / Reply STOP to opt out";
 
 export async function sendSms(config: SmsConfig, to: string, text: string, fetchImpl: typeof fetch = fetch): Promise<SendResult> {
   try {
-    const body = new URLSearchParams({ To: to, Body: `${text}${SMS_FOOTER}`.slice(0, 1500) });
+    const body = new URLSearchParams({ To: to, Body: `${text}${SMS_FOOTER}` });
     // A messaging service id (MG…) goes in MessagingServiceSid, a number in From.
     body.set(config.from.startsWith("MG") ? "MessagingServiceSid" : "From", config.from);
     const response = await fetchImpl(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(config.accountSid)}/Messages.json`, {

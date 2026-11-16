@@ -48,7 +48,8 @@ export type MessageChannel = "whatsapp" | "sms";
 
 /** How a message staff sent to the customer's phone is doing. */
 export interface Delivery {
-  status: "sent" | "delivered" | "read" | "failed";
+  /** "sending": written down before the provider was asked, so a retry never sends twice. */
+  status: "sending" | "sent" | "delivered" | "read" | "failed";
   /** The provider's message id, to match its status reports. */
   id?: string;
   /** Short reason when it failed (no account details). */

@@ -110,6 +110,15 @@ export class ConversationStore {
     return found.sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
   }
 
+  /** Phone numbers whose owner asked us to stop messaging them: kept by number, so a new conversation can't undo it. */
+  async isOptedOut(e164: string): Promise<boolean> {
+    return (await this.kv.get(`workbench-optout-v1:${e164}`)) !== null;
+  }
+
+  async setOptedOut(e164: string): Promise<void> {
+    await this.kv.put(`workbench-optout-v1:${e164}`, String(this.now()));
+  }
+
   /** The conversation holding a message the provider knows by this id (to apply its delivery reports). */
   async findByMessageId(messageId: string): Promise<Conversation | null> {
     for (const c of (await this.all()).values()) if (c.turns.some((t) => t.delivery?.id === messageId || t.id === messageId)) return c;

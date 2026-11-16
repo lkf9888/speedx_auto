@@ -6,7 +6,7 @@ import type { Conversation, Delivery, MessageChannel, Turn } from "@/lib/workben
 
 export const CHANNEL_NAME: Record<MessageChannel, string> = { whatsapp: "WhatsApp", sms: "短信" };
 
-const DELIVERY_TEXT: Record<Delivery["status"], string> = { sent: "已发出", delivered: "已送达", read: "客人已读", failed: "没发出去" };
+const DELIVERY_TEXT: Record<Delivery["status"], string> = { sending: "发送中", sent: "已发出", delivered: "已送达", read: "客人已读", failed: "没发出去" };
 
 /** "WhatsApp · 已送达" under a message that went to or came from the customer's phone. */
 export function ChannelBadge({ turn }: { turn: Pick<Turn, "channel" | "delivery" | "author"> }) {
@@ -38,6 +38,8 @@ export function CustomerMessageBox({
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // One id per message being written: pressing the button again after a failed reply can't send it twice.
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const plan = ready ? plannedChannel(conversation, ready) : null;
   const blocked = !ready || !plan?.channel;
 
@@ -50,12 +52,13 @@ export function CustomerMessageBox({
       const response = await fetch(`/api/workbench/conversations/${encodeURIComponent(conversation.id)}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: body }),
+        body: JSON.stringify({ text: body, requestId }),
       });
       const data = (await response.json().catch(() => null)) as { turn?: Turn; message?: string } | null;
       if (response.ok && data?.turn) {
         onSent(data.turn);
         setText("");
+        setRequestId(crypto.randomUUID());
       } else {
         setError(data?.message ?? "发送失败，请再试一次。");
       }
