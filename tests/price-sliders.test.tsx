@@ -210,7 +210,7 @@ describe("public assistant: fixes from the chat review", () => {
     const { SYSTEM_PROMPT } = await import("@/lib/repair-chat/prompt");
     expect(SYSTEM_PROMPT).toContain("only ONE question per reply");
     expect(SYSTEM_PROMPT).not.toContain("a couple of questions at a time");
-    expect(SYSTEM_PROMPT).toContain("Never offer, suggest or mention used, salvage or recycled parts");
+    expect(SYSTEM_PROMPT).toContain("The shop quotes new parts only");
     expect(SYSTEM_PROMPT).toContain("doesn't exist for that model and year");
     expect(SYSTEM_PROMPT).toContain("right here in this chat");
     expect(SYSTEM_PROMPT).toContain("Don't call request_team_quote again for the same vehicle and job");
