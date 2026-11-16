@@ -136,7 +136,15 @@ function heroTotal(label: string, total: number, regular: number | null, savedLa
 }
 
 /** The page as DOM, with inline styles only (the site's theme colours don't reach it). */
-export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "/workbench/logo-wide.png", sheet?: SheetPdf, soleLabor?: PdfLabor | null): HTMLElement {
+/**
+ * The logo file for this page. The staff subdomain serves only /workbench/ paths and the public site (where shared
+ * conversations open) serves the file at its root, so the path depends on where the page is open.
+ */
+export function defaultLogoUrl(host = typeof window === "undefined" ? "" : window.location.hostname): string {
+  return /^repair\./i.test(host) ? "/workbench/logo-wide.png" : "/logo-wide.png";
+}
+
+export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = defaultLogoUrl(), sheet?: SheetPdf, soleLabor?: PdfLabor | null): HTMLElement {
   const logo = document.createElement("img");
   logo.src = logoUrl;
   // The logo file is 900 x 309: its height follows from the width.

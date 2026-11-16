@@ -85,3 +85,12 @@ describe("the customer estimate", () => {
     expect(root.textContent).toContain("WhatsApp");
   });
 });
+
+describe("the logo path", () => {
+  it("uses the staff subdomain's own path there, and the public file everywhere else (shared conversations)", async () => {
+    const { defaultLogoUrl } = await import("@/lib/workbench/quote-pdf");
+    expect(defaultLogoUrl("repair.speedxrental.com")).toBe("/workbench/logo-wide.png");
+    expect(defaultLogoUrl("speedxrental.com")).toBe("/logo-wide.png");
+    expect(defaultLogoUrl("localhost")).toBe("/logo-wide.png");
+  });
+});
