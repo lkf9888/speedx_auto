@@ -211,6 +211,7 @@ describe("the lighter estimate form", () => {
     expect(link.getAttribute("href")).toContain("wa.me/");
     expect(text).toContain(en.repairChat.gate.whatsappIntro);
     expect(text).toContain("front pads on my 2015 Civic");
+    expect(link).toHaveAttribute("href");
 
     await userEvent.type(within(gate).getByLabelText(en.repairChat.gate.phone), "604-555-0182");
     await userEvent.click(within(gate).getByRole("button", { name: en.repairChat.gate.submit }));

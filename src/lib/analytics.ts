@@ -28,7 +28,7 @@ export const HOSTING_LEAD_CONVERSION_DESTINATION: string | null = "AW-625073096/
 
 export type ContactMethod = "whatsapp" | "phone" | "wechat" | "email";
 export type ContactIntent = "hosting" | "auto_repair" | "general";
-export type ContactPlacement = "hero" | "middle" | "footer" | "sticky_mobile" | "chat";
+export type ContactPlacement = "hero" | "middle" | "footer" | "sticky_mobile" | "chat" | "chat_gate";
 
 export interface ContactClickEvent {
   method: ContactMethod;

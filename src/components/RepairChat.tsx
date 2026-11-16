@@ -280,7 +280,7 @@ function LeadGate({
             method="whatsapp"
             intent="auto_repair"
             locale={locale}
-            placement="chat"
+            placement="chat_gate"
             pagePath={pagePath ?? ""}
             target="_blank"
             rel="noopener noreferrer"
@@ -438,8 +438,9 @@ export function RepairChat({
 
   /** The WhatsApp message offered on the "estimate ready" form: the car and what the customer asked, so the shop can pick it up there. */
   function gateWhatsapp(): string {
-    const asked = [...turns].reverse().find((t) => t.role === "user" && t.text.trim())?.text.trim().slice(0, 300);
-    return [copy.gate.whatsappIntro, vehicle?.label, asked].filter(Boolean).join("\n");
+    const asked = [...turns].reverse().find((t) => t.role === "user" && t.text.trim())?.text.trim();
+    // By code point, so a cut never splits an emoji (encodeURIComponent throws on half of one).
+    return [copy.gate.whatsappIntro, vehicle?.label, asked ? Array.from(asked).slice(0, 300).join("") : ""].filter(Boolean).join("\n");
   }
 
   // Once per time the form appears, so the shown count lines up with the leads and WhatsApp clicks.
