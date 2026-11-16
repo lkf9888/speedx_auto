@@ -17,6 +17,12 @@ const part = (listPrice: number, cost: number): StaffPartOption => ({ descriptio
 const rotors = buildLaborQuote("2019 Toyota Camry", { serviceName: "Brake Rotor R&R", position: "Front", laborHours: 2, laborNote: "", primaryPartName: "Brake Disc", otherPartNames: [], partsNote: "", partOptions: [part(200, 100)] }, "W-1", env);
 
 describe("tax on the estimate", () => {
+  it("rounds half cents up", async () => {
+    const { taxOn } = await import("@/lib/workbench/tax");
+    expect(taxOn(42.3)).toEqual({ subtotal: 42.3, gst: 2.12, pst: 2.96, total: 47.38 });
+  });
+
+
   it("adds GST 5% and PST 7% and the after-tax total, with the saving called out", () => {
     const quote = withFinalPrices(rotors);
     const total = quote.options[0].customerTotal - 60;

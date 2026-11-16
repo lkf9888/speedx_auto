@@ -7,7 +7,6 @@
 export const GST_RATE = 0.05;
 export const PST_RATE = 0.07;
 
-const cents = (value: number) => Math.round(value * 100) / 100;
 
 export interface Taxed {
   subtotal: number;
@@ -17,8 +16,9 @@ export interface Taxed {
 }
 
 export function taxOn(subtotal: number): Taxed {
-  const base = cents(subtotal);
-  const gst = cents(base * GST_RATE);
-  const pst = cents(base * PST_RATE);
-  return { subtotal: base, gst, pst, total: cents(base + gst + pst) };
+  // Whole cents, so half-cent amounts round up the way a till does (42.30 × 5% is $2.115, $2.12).
+  const base = Math.round(subtotal * 100);
+  const gst = Math.round((base * 5) / 100);
+  const pst = Math.round((base * 7) / 100);
+  return { subtotal: base / 100, gst: gst / 100, pst: pst / 100, total: (base + gst + pst) / 100 };
 }
