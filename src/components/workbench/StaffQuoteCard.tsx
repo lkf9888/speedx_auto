@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { bridgeErrorText, callAlldata, CART_URLS, type CartAddResult, type CartSupplier } from "@/lib/workbench/alldata-bridge";
 import { optionLinks, orderLine, type ProductLink } from "@/lib/workbench/links";
 import { finalCustomerText, priceOption, withFinalPrices } from "@/lib/workbench/final-price";
 import { staffName } from "@/lib/workbench/conversation-types";
@@ -62,6 +63,87 @@ function CopyOrder({ text }: { text: string }) {
       </button>
       {state === "done" && <span className="text-[11px] text-emerald-700">已复制（内部，含进价）</span>}
       {state === "failed" && <span className="text-[11px] text-amber-700">浏览器不让复制，请手动选择</span>}
+    </div>
+  );
+}
+
+const CART_NOTE: Record<Exclude<CartAddResult["status"], "ok">, string> = {
+  not_signed_in: "这台电脑的 Chrome 没登录这家的 Nexpart，请先登录再试。",
+  not_found: "这家的 Nexpart 里搜不到这个零件号，没有加进购物车。",
+  not_added: "点了加购物车，但购物车数量没有增加，没有加成功。请到 Nexpart 里看一眼。",
+  page_changed: "Nexpart 页面和预期不一样（可能改版了），没有加进购物车。",
+  bad_request: "零件号或数量不合规，没有加进购物车。",
+};
+
+/**
+ * One click into the seller's Nexpart cart (Kevin, 2026-11-16): staff confirm the part and quantity, the
+ * extension adds it in this computer's signed-in Nexpart, and staff place the order themselves in the cart.
+ */
+function AddToCart({ option }: { option: StaffQuoteOption }) {
+  const [step, setStep] = useState<"idle" | "confirm" | "adding" | "done" | "error">("idle");
+  const [message, setMessage] = useState("");
+  const supplier: CartSupplier | null = option.source === "westcan" ? "westcan" : option.source === "lordco" ? "lordco" : null;
+  if (!supplier || !option.partNumber || option.outOfStock) return null;
+  const name = supplier === "westcan" ? "Westcan" : "Lordco";
+  const total = option.unitCost === null ? null : Math.round(option.unitCost * option.quantity * 100) / 100;
+
+  async function add() {
+    setStep("adding");
+    try {
+      const result = await callAlldata("cartAdd", { supplier: supplier!, partNumber: option.partNumber, qty: option.quantity }, 60_000);
+      if (result.status === "ok") {
+        setMessage(`已加进 ${name} 购物车（现在购物车里 ${result.cartAfter} 件）。去购物车核对，由你自己下单。`);
+        setStep("done");
+      } else {
+        setMessage(CART_NOTE[result.status]);
+        setStep("error");
+      }
+    } catch (error) {
+      setMessage(bridgeErrorText(error));
+      setStep("error");
+    }
+  }
+
+  return (
+    <div className="mt-1" data-testid="add-to-cart">
+      {step === "idle" && (
+        <button type="button" onClick={() => setStep("confirm")} className="rounded-full border border-amber-600 px-2 py-0.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-50">
+          加进 {name} 购物车
+        </button>
+      )}
+      {step === "confirm" && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+          <p>
+            加进 {name} 购物车？{[option.brand, option.label].filter(Boolean).join(" ")} #{option.partNumber} × {option.quantity}
+            {total !== null ? `，进价 $${total.toFixed(2)}` : ""}。只加购物车，<b>不会下单</b>。
+          </p>
+          <div className="mt-1 flex gap-2">
+            <button type="button" data-testid="cart-confirm" onClick={() => void add()} className="rounded bg-amber-700 px-2 py-0.5 font-semibold text-white hover:bg-amber-800">
+              确认加入
+            </button>
+            <button type="button" onClick={() => setStep("idle")} className="rounded border border-amber-400 px-2 py-0.5">
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+      {step === "adding" && <p className="text-[11px] text-ink-600">正在加进 {name} 购物车…（会在后台打开一个标签页，几秒钟）</p>}
+      {step === "done" && (
+        <p data-testid="cart-done" className="text-[11px] text-emerald-800">
+          {message}{" "}
+          <a href={CART_URLS[supplier]} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
+            打开 {name} 购物车 ↗
+          </a>
+        </p>
+      )}
+      {step === "error" && (
+        <p role="alert" className="text-[11px] text-amber-800">
+          {message}{" "}
+          <button type="button" className="underline" onClick={() => setStep("confirm")}>
+            再试一次
+          </button>
+        </p>
+      )}
     </div>
   );
 }
@@ -364,6 +446,7 @@ export function StaffQuoteCard({
                     {o.core !== null && <div className="text-xs text-amber-700">核心件押金 {money(o.core)}</div>}
                     <ProductLinks links={optionLinks(quote, o)} />
                     {quote.kind === "labor" && o.partNumber && o.source !== "used" && !o.outOfStock && <CopyOrder text={orderLine(quote, o)} />}
+                    {quote.kind === "labor" && <AddToCart option={o} />}
                   </td>
                   <td className="px-3 py-2">{o.quantity}</td>
                   {showCost && <td data-testid="cost-cell" className="px-3 py-2 text-right font-medium text-amber-700">{money(quote.kind === "tires" ? o.unitCost : o.costTotal)}</td>}

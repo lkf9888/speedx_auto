@@ -500,4 +500,93 @@ async function westcanSearchNow(args) {
   return result;
 }
 
-const OPS = { status, searchDocuments, searchCustomers, createEstimate, openPdf, westcanSearch };
+// ------------------------------------------------------------------ add to cart (Westcan / Lordco)
+
+const NEXPART_SELLERS = { westcan: "https://3501660.nexpart.com", lordco: "https://1000027.nexpart.com" };
+
+// Runs inside a Nexpart "Stock Check" page (Westcan or Lordco), signed in as the shop.
+// Types the part number and quantity into the first Stock Check row, runs the stock check,
+// then presses the page's own "Add to Cart". It never presses Buy Now or Place Order.
+async function nexpartAddToCart(args) {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const waitFor = async (fn, ms) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const value = fn();
+      if (value) return value;
+      await sleep(250);
+    }
+    return null;
+  };
+  const cartCount = () => Number((document.querySelector(".banner__cartQty") || {}).innerText) || 0;
+  const setValue = (input, value) => {
+    input.focus();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    setter.call(input, value);
+    for (const type of ["input", "keyup", "change"]) input.dispatchEvent(new Event(type, { bubbles: true }));
+    input.blur();
+  };
+  const part = String(args.partNumber || "").trim();
+  const qty = Math.max(1, Math.min(20, Number(args.qty) || 1));
+  if (!part) return { status: "bad_request" };
+  if (/login/i.test(location.pathname)) return { status: "not_signed_in" };
+  const partInput = await waitFor(() => document.getElementById("PARTN_stockCheck1"), 15000);
+  const qtyInput = document.getElementById("QTY_stockCheck1");
+  if (!partInput || !qtyInput) return { status: /login/i.test(location.pathname) ? "not_signed_in" : "page_changed" };
+  const before = cartCount();
+  setValue(partInput, part);
+  setValue(qtyInput, String(qty));
+  const check = document.getElementById("StockCheckButtonTop");
+  if (!check) return { status: "page_changed" };
+  check.click();
+  // The row for this part shows up with its price once the stock check has answered.
+  const needle = part.toLowerCase();
+  const shown = await waitFor(() => {
+    const text = document.body.innerText.toLowerCase();
+    return text.includes(needle) && /your price/i.test(document.body.innerText) ? text : null;
+  }, 15000);
+  if (!shown) {
+    const message = /not found|invalid|no match|not available|could not/i.exec(document.body.innerText);
+    return { status: "not_found", note: message ? message[0] : "" };
+  }
+  await sleep(500);
+  const add = [...document.querySelectorAll(".addToCartBtn__stock")].find((el) => el.offsetParent);
+  if (!add) return { status: "page_changed" };
+  add.click();
+  const grew = await waitFor(() => (cartCount() > before ? cartCount() : null), 12000);
+  if (!grew) return { status: "not_added", cartBefore: before };
+  return { status: "ok", cartBefore: before, cartAfter: grew };
+}
+
+// One cart change at a time, each in its own background tab so the staff member's own tabs are left alone.
+let cartQueue = Promise.resolve();
+
+function cartAdd(args) {
+  const run = cartQueue.then(() => cartAddNow(args));
+  cartQueue = run.catch(() => undefined);
+  return run;
+}
+
+/** Adds one part to the seller's Nexpart cart. Never places an order. */
+async function cartAddNow(args) {
+  const origin = NEXPART_SELLERS[args.supplier];
+  const part = text(args.partNumber, 40);
+  const qty = positiveInt(args.qty);
+  if (!origin || !/^[A-Za-z0-9][A-Za-z0-9 ._\/-]{1,39}$/.test(part) || !qty || qty > 20) throw new BridgeError("bad_request", "bad cart request");
+  const tab = await chrome.tabs.create({ url: `${origin}/ts2orderparts.php`, active: false });
+  try {
+    await waitForLoad(tab.id);
+    const [run] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world: "MAIN", func: nexpartAddToCart, args: [{ partNumber: part, qty }] });
+    const result = run && run.result;
+    if (!result) throw new BridgeError("westcan_error", "no answer from the Nexpart page");
+    return result;
+  } finally {
+    try {
+      await chrome.tabs.remove(tab.id);
+    } catch {
+      // The tab is already gone.
+    }
+  }
+}
+
+const OPS = { status, searchDocuments, searchCustomers, createEstimate, openPdf, westcanSearch, cartAdd };

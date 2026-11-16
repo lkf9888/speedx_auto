@@ -35,6 +35,15 @@ WorldPac 本地仓库没货时，工作台会自动用这台电脑的 Chrome 去
 - 报价规则：Westcan 零件按拿货价 × 1.3；顺序是 WorldPac 本地有货 → Westcan（Richmond 有货优先，其次其他分店、明天到）→ WorldPac 调货 → 待补价。
 - Nexpart 分不清发动机时，卡片会提示先告诉助手发动机或 VIN。
 
+## 加进购物车（1.2.0 起，Westcan 和 Lordco）
+
+工作台里，来自 Westcan 或 Lordco 的零件旁边有“加进购物车”按钮。点了会先让你确认零件、数量和进价，确认后扩展在**后台打开一个新标签页**（用这台电脑已登录的 Nexpart），在“Stock Check”里输入零件号和数量，按网页自己的“Add to Cart”，看到购物车数量增加就关掉这个标签页，并告诉工作台结果。
+
+- **只加购物车，不下单。** 扩展从不点 Buy Now 或 Place Order；到 Nexpart 的购物车页面核对后，由你自己点 Place Order。
+- 需要在同一个 Chrome 里登录对应的 Nexpart：Westcan `3501660.nexpart.com`，Lordco `1000027.nexpart.com`。
+- 1.2.0 新增了 Lordco 的网站权限，更新后 Chrome 可能提示“扩展需要新的权限”，请点同意（在 `chrome://extensions` 里如果扩展显示错误，先点刷新）。
+- 找不到零件（Nexpart 里没有这个零件号）、没登录、页面改版，工作台都会明说，什么都不会被加进购物车。
+
 ## 更新
 
 扩展代码有更新时，把新文件覆盖到同一个文件夹，然后在 `chrome://extensions` 里点这个扩展的刷新按钮。

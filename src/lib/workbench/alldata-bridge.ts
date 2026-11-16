@@ -70,7 +70,20 @@ export interface BridgeOps {
   };
   openPdf: { args: { documentId: number; documentType: AlldataDocumentType }; result: { opened: true } };
   westcanSearch: { args: WestcanLookup; result: WestcanSearchResult };
+  /** Westcan or Lordco: one part into the seller's Nexpart cart (never an order). */
+  cartAdd: { args: { supplier: CartSupplier; partNumber: string; qty: number }; result: CartAddResult };
 }
+
+export type CartSupplier = "westcan" | "lordco";
+
+export type CartAddResult =
+  | { status: "ok"; cartBefore: number; cartAfter: number }
+  | { status: "not_signed_in" | "not_found" | "not_added" | "page_changed" | "bad_request"; note?: string; cartBefore?: number };
+
+export const CART_URLS: Record<CartSupplier, string> = {
+  westcan: "https://3501660.nexpart.com/cart.php",
+  lordco: "https://1000027.nexpart.com/cart.php",
+};
 
 export type BridgeErrorCode = "not_installed" | "not_signed_in" | "timeout" | "alldata_error" | "bad_request" | "westcan_not_signed_in" | "westcan_error";
 
