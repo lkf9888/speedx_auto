@@ -27,6 +27,8 @@ interface ContactBarProps {
   whatsappText?: string;
   /** Sticky bar only: the shop number leads as the wide button; WhatsApp and WeChat follow as compact ones. */
   stickyPhoneFirst?: boolean;
+  /** Inline bar only: leave the phone button out when a larger call button sits right next to it. */
+  hidePhone?: boolean;
 }
 
 export function ContactBar({
@@ -41,6 +43,7 @@ export function ContactBar({
   quoteLabel,
   whatsappText,
   stickyPhoneFirst = false,
+  hidePhone = false,
 }: ContactBarProps) {
   const whatsappHref = whatsappText
     ? `${whatsappLink}?text=${encodeURIComponent(whatsappText)}`
@@ -196,9 +199,11 @@ export function ContactBar({
       >
         <WhatsAppIcon /> {dict.cta.whatsapp}
       </a>
-      <a href={telLink} className={ghost} onClick={() => track("phone")}>
-        <PhoneIcon /> {company.phoneDisplay}
-      </a>
+      {hidePhone ? null : (
+        <a href={telLink} className={ghost} onClick={() => track("phone")}>
+          <PhoneIcon /> {company.phoneDisplay}
+        </a>
+      )}
       <a href={mailtoLink} className={ghost} onClick={() => track("email")}>
         <MailIcon /> {dict.cta.email}
       </a>

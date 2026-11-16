@@ -96,6 +96,20 @@ describe("auto repair hub page", () => {
     expect(screen.getByRole("heading", { level: 1 }).className).toContain("font-bold");
   });
 
+  it.each(locales)("puts the chat beside the hero text and keeps the sample estimate below it in %s", async (locale, dict) => {
+    vi.stubEnv("NEXT_PUBLIC_REPAIR_CHAT_ENABLED", "true");
+    const { view } = await renderPage(locale);
+    const hero = view.container.querySelector("section");
+    const chat = view.container.querySelectorAll("#estimate");
+
+    expect(chat).toHaveLength(1);
+    expect(hero?.contains(chat[0])).toBe(true);
+    expect(hero?.contains(screen.getByTestId("answer-summary"))).toBe(true);
+    expect(screen.getByRole("region", { name: dict.repairChat.title })).toBe(chat[0]);
+    expect(screen.getAllByText(dict.repairChat.demo.label)).toHaveLength(1);
+    expect(hero?.contains(screen.getByText(dict.repairChat.demo.label))).toBe(false);
+  });
+
   it.each(locales)("publishes the same FAQs in %s markup and visible text", async (locale, dict) => {
     const { graph } = await renderPage(locale);
     const faq = graph.find((node) => node["@type"] === "FAQPage");

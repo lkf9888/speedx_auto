@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { estimateRanges, type EstimateCard } from "@/lib/repair-chat/pricing";
 import { prepareAttachment, type PreparedAttachment } from "@/lib/workbench/prepare-attachment";
@@ -314,7 +314,7 @@ export function RepairChat({
   locale: Locale;
   dict: Dictionary;
   pagePath: string;
-  /** The chat opens the page on a phone: its own heading and intro step aside (the page's h1 leads) and the spacing tightens. */
+  /** The chat sits inside the page's hero: no section padding, heading or intro of its own (the page's headline leads), no photo tip, and the sample estimate is rendered by the page via RepairSampleEstimate. */
   hero?: boolean;
   /** Chat copy in every language, so an estimate card follows the customer's language. */
   cardCopies?: Partial<Record<Locale, ChatCopy>>;
@@ -632,9 +632,13 @@ export function RepairChat({
   const noQuestionYet = !turns.some((t) => t.role === "user");
 
   return (
-    <section id="estimate" className={hero ? "scroll-mt-16 pb-8 pt-3 sm:py-20" : "py-10 sm:py-20"} aria-labelledby="repair-chat-title">
-      <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
-        <div className={hero ? "hidden sm:block" : undefined}>
+    <ChatShell hero={hero}>
+      {hero ? (
+        <h2 id="repair-chat-title" className="sr-only">
+          {copy.title}
+        </h2>
+      ) : (
+        <>
           <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700">
             {copy.eyebrow}
           </span>
@@ -642,9 +646,10 @@ export function RepairChat({
             {copy.title}
           </h2>
           <p className="mt-3 leading-7 text-ink-600">{copy.intro}</p>
-        </div>
+        </>
+      )}
 
-        <div className={`${hero ? "mt-0 sm:mt-8" : "mt-8"} overflow-hidden rounded-2xl border border-ink-200 bg-[#efeae2] shadow-sm`}>
+        <div className={`${hero ? "mt-0" : "mt-8"} overflow-hidden rounded-2xl border border-ink-200 bg-[#efeae2] shadow-sm`}>
           <div className="flex items-center gap-3 bg-[#008069] px-3 py-2 text-white">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -742,7 +747,7 @@ export function RepairChat({
                     {starter}
                   </button>
                 ))}
-                <p className={`w-full text-right text-xs text-[#667781] ${hero ? "hidden sm:block" : ""}`}>📷 {copy.photo.tip}</p>
+                <p className={`w-full text-right text-xs text-[#667781] ${hero ? "hidden" : ""}`}>📷 {copy.photo.tip}</p>
               </div>
             )}
             {awaitingLead && (
@@ -874,11 +879,42 @@ export function RepairChat({
           </div>
         </div>
 
-        <div className="mt-10">
-          <p className="text-sm font-semibold text-ink-900">{copy.demo.label}</p>
-          <p className="mt-1 text-sm text-ink-500">{copy.demo.caption}</p>
-          <QuoteSheet card={DEMO_ESTIMATE} copy={copy} sample />
-        </div>
+        {!hero && <SampleEstimate copy={copy} className="mt-10" />}
+    </ChatShell>
+  );
+}
+
+function ChatShell({ hero, children }: { hero: boolean; children: ReactNode }) {
+  if (hero) {
+    return (
+      <div id="estimate" className="scroll-mt-24" role="region" aria-labelledby="repair-chat-title">
+        {children}
+      </div>
+    );
+  }
+  return (
+    <section id="estimate" className="py-10 sm:py-20" aria-labelledby="repair-chat-title">
+      <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">{children}</div>
+    </section>
+  );
+}
+
+function SampleEstimate({ copy, className }: { copy: ChatCopy; className?: string }) {
+  return (
+    <div className={className}>
+      <p className="text-sm font-semibold text-ink-900">{copy.demo.label}</p>
+      <p className="mt-1 text-sm text-ink-500">{copy.demo.caption}</p>
+      <QuoteSheet card={DEMO_ESTIMATE} copy={copy} sample />
+    </div>
+  );
+}
+
+/** The sample estimate under the chat, for pages that put the chat in their hero. */
+export function RepairSampleEstimate({ dict }: { dict: Dictionary }) {
+  return (
+    <section className="pb-10 pt-2 sm:pb-16">
+      <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
+        <SampleEstimate copy={dict.repairChat} />
       </div>
     </section>
   );
