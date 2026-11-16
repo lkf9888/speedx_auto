@@ -97,7 +97,7 @@ describe("the quote card", () => {
   it("shows one price, cost and markup in dollars, and no stock, margin or extra price columns", () => {
     render(<StaffQuoteCard quote={front()} tier="referral" />);
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual(["选项", "数量", "零件售价", "进价", "加价", "推荐价（零件+工时）"]);
+    expect(headers).toEqual(["选项", "数量", "采购价", "零件卖价", "安装工时价", "加价", "推荐价（零件+工时）"]);
     expect(screen.queryByText(/F-3/)).toBeNull();
     expect(screen.getAllByTestId("surcharge").map((c) => c.textContent)).toEqual(["+$110.00", "+$80.00"]);
     expect(screen.getByTestId("labor-line")).toHaveTextContent("1 h × $96.00 = $96.00");
@@ -122,7 +122,7 @@ describe("the combined quote sheet", () => {
     await userEvent.click(screen.getByRole("button", { name: "复制报价给客人" }));
     const text = writeText.mock.calls[0][0];
     // Friend: front F-2 cost 70 + 100 = 170, capped at its $150 list, + $96 = 246; rear 80 + 100 = 180 (= list) + 86.4 = 266.4.
-    expect(text).toContain("合计：$512.40");
+    expect(text).toContain("合计（税前）：$512.40");
     expect(text).not.toMatch(/进价|cost/i);
   });
 });

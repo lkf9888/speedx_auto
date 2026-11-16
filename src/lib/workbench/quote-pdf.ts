@@ -8,6 +8,7 @@
 import { company } from "@/lib/company";
 import type { PricedQuote } from "./final-price";
 import { toEnglish } from "./pdf-english";
+import { taxOn } from "./tax";
 
 const PAGE_WIDTH_PX = 794; // A4 at 96 dpi
 const A4_MM = { width: 210, height: 297 };
@@ -88,7 +89,16 @@ function jobRows(title: string, amount: number, labor: PdfLabor, index: number):
   ];
   if (discount > 0.004) {
     out.push(
-      row([td(""), td(`Labor discount (${percentOff(labor.list, labor.charged)})`, { indent: true, color: GREEN }), td("", { align: "right" }), td("", { align: "right" }), td(sign(discount), { align: "right", color: GREEN, bold: true })]),
+      row(
+        [
+          td(""),
+          td(`Labor discount (${percentOff(labor.list, labor.charged)})`, { indent: true, color: GREEN, bold: true }),
+          td("", { align: "right" }),
+          td("", { align: "right" }),
+          el("td", { padding: "7px 10px", borderBottom: `1px solid ${LINE}`, textAlign: "right", fontWeight: "800", fontSize: "16px", color: GREEN }, sign(discount)),
+        ],
+        "#ecfdf5",
+      ),
     );
   }
   out.push(row([td(""), td("Job total", { bold: true, indent: true }), td("", { align: "right" }), td("", { align: "right" }), td(money(amount), { align: "right", bold: true })]));
@@ -135,6 +145,7 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
     th("Qty", "right", "56px"),
     th(unitShown ? (tires ? "Each, installed" : "Unit price") : "Price", "right", "118px"),
     th("Amount", "right", "108px"),
+    ...(!sheet && quote.options.length > 1 ? [th("After tax", "right", "108px")] : []),
   ]);
 
   let body: HTMLElement[];
@@ -177,6 +188,7 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
           td(String(o.quantity), { align: "right" }),
           td(unitShown ? money(o.unitPrice) : "", { align: "right" }),
           td(money(o.customerTotal), { align: "right", bold: true }),
+          ...(quote.options.length > 1 ? [td(money(taxOn(o.customerTotal).total), { align: "right", bold: true })] : []),
         ]),
       );
     }
@@ -194,9 +206,20 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
     summaryLines.push(sum(`Labor at list price`, money(laborList)));
     if (laborList - laborCharged > 0.004) summaryLines.push(sum(`Labor discount (${percentOff(laborList, laborCharged)})`, sign(laborList - laborCharged), { color: GREEN, bold: true }));
   }
+  // (the saving banner, tax lines and total follow below)
+  const taxed = taxOn(grand);
+  const saved = laborList - laborCharged;
+  const saving =
+    breakdown && saved > 0.004
+      ? el("div", { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "24px", marginTop: "8px", padding: "9px 12px", background: "#ecfdf5", border: `2px solid ${GREEN}`, color: GREEN, fontWeight: "800" }, undefined, [
+          el("span", { fontSize: "14px" }, `You save on labor (${percentOff(laborList, laborCharged)})`),
+          el("span", { fontSize: "22px" }, money(saved)),
+        ])
+      : null;
+  const taxLines = [sum(pending ? "Subtotal so far (before tax)" : "Subtotal (before tax)", money(taxed.subtotal), { bold: true }), sum("GST (5%)", money(taxed.gst)), sum("PST (7%)", money(taxed.pst))];
   const totalBand = el("div", { display: "flex", justifyContent: "space-between", gap: "24px", marginTop: "6px", padding: "9px 12px", background: BAND, color: "#ffffff", fontSize: "16px", fontWeight: "800" }, undefined, [
-    el("span", {}, pending ? "Total so far (before tax)" : "Total (before tax)"),
-    el("span", {}, money(grand)),
+    el("span", {}, pending ? "Total so far (after tax)" : "Total (after tax)"),
+    el("span", {}, money(taxed.total)),
   ]);
   const summary = several
     ? el("div", { fontSize: "13px", marginTop: "12px", color: "#374151" }, undefined, [
@@ -206,13 +229,15 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
     : el("div", { display: "flex", justifyContent: "flex-end", marginTop: "14px" }, undefined, [
         el("div", { width: "320px" }, undefined, [
           ...summaryLines,
+          ...(saving ? [saving] : []),
+          ...taxLines,
           totalBand,
           ...(pending ? [el("div", { fontSize: "11.5px", color: "#4b5563", marginTop: "6px", textAlign: "right" }, "Items marked “To be quoted” will be priced once the parts are confirmed.")] : []),
         ]),
       ]);
 
   const notes = el("div", { marginTop: "26px", fontSize: "11.5px", color: "#4b5563", lineHeight: "1.7", borderTop: `1px solid ${LINE}`, paddingTop: "10px" }, undefined, [
-    el("div", {}, "• Prices are before tax; GST / PST extra."),
+    el("div", {}, "• GST (5%) and PST (7%) are included in the total after tax."),
     el("div", {}, "• The final price is confirmed after inspection at the shop."),
     el("div", {}, `• Hours: ${company.hours}`),
   ]);

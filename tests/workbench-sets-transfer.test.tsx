@@ -108,7 +108,7 @@ describe("the quote sheet", () => {
     const text = writeText.mock.calls[0][0];
     expect(text).toContain("$961.88");
     expect(text).toContain("Brake Rotor R&R · Rear：待补价");
-    expect(text).toContain("已报价部分合计：$961.88");
+    expect(text).toContain("已报价部分合计（税前）：$961.88");
     expect(text).not.toMatch(/PFL|PFR|342/);
   });
 });

@@ -16,6 +16,25 @@ const env = {} as NodeJS.ProcessEnv;
 const part = (listPrice: number, cost: number): StaffPartOption => ({ description: "Brake Disc", series: "", listPrice, quantity: 1, inStockLocally: true, note: "", prices: { unitPrice: cost }, partNumber: "P-1", brand: "ACME", availability: "", qtyAvailable: 3, fields: {} });
 const rotors = buildLaborQuote("2019 Toyota Camry", { serviceName: "Brake Rotor R&R", position: "Front", laborHours: 2, laborNote: "", primaryPartName: "Brake Disc", otherPartNames: [], partsNote: "", partOptions: [part(200, 100)] }, "W-1", env);
 
+describe("tax on the estimate", () => {
+  it("adds GST 5% and PST 7% and the after-tax total, with the saving called out", () => {
+    const quote = withFinalPrices(rotors);
+    const total = quote.options[0].customerTotal - 60;
+    const text = buildQuotePage({ ...quote, options: [{ ...quote.options[0], customerTotal: total }] }, new Date("2026-11-16T20:00:00Z"), undefined, undefined, { hours: 2, list: 240, charged: 180 }).textContent ?? "";
+    expect(text).toContain("You save on labor (25% off)");
+    expect(text).toContain("GST (5%)");
+    expect(text).toContain("PST (7%)");
+    expect(text).toContain("Total (after tax)");
+    expect(text).toContain(`$${(total * 1.12).toFixed(2)}`);
+  });
+
+  it("the sheet shows tax and an after-tax total", () => {
+    render(<QuoteSheetSummary quotes={[rotors]} tier="retail" />);
+    expect(screen.getByTestId("quote-sheet-after-tax")).toHaveTextContent("GST 5%");
+    expect(screen.getByTestId("quote-sheet-after-tax")).toHaveTextContent("PST 7%");
+  });
+});
+
 describe("labor discount on the estimate", () => {
   it("shows the list labor, the discount and its amount on the sheet and in the copy", () => {
     render(<QuoteSheetSummary quotes={[rotors]} tier="custom" custom={{ partsPct: 100, laborRate: 90 }} />);

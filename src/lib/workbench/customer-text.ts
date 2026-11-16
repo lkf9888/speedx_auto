@@ -4,6 +4,7 @@
  * browser for just the options staff tick.
  */
 import type { StaffQuote } from "./quote";
+import { taxOn } from "./tax";
 
 const dollars = (value: number) => `$${value.toFixed(2)}`;
 
@@ -23,10 +24,10 @@ export function customerText(quote: Omit<StaffQuote, "customerText">): string {
       const name = [o.brand, o.label].filter(Boolean).join(" ");
       const each =
         quote.kind === "tires" ? `，每条 ${dollars(o.unitPrice)} × ${o.quantity}` : quote.kind === "labor" && o.quantity > 1 ? ` × ${o.quantity}` : "";
-      lines.push(`${i + 1}. ${name}${each}：${dollars(o.customerTotal)}${o.source === "used" ? "（二手件，质保以卖家陈述为准）" : ""}${o.eta ? `（需调货，${o.eta}）` : ""}`);
+      lines.push(`${i + 1}. ${name}${each}：${dollars(o.customerTotal)}${o.source === "used" ? "（二手件，质保以卖家陈述为准）" : ""}${o.eta ? `（需调货，${o.eta}）` : ""}（税后 ${dollars(taxOn(o.customerTotal).total)}）`);
     });
   }
-  lines.push("以上为税前参考价，最终以到店检查为准。");
+  lines.push("以上为税前参考价，括号内为含 GST 5% + PST 7% 的税后价，最终以到店检查为准。");
   lines.push(`报价编号 ${quote.id}`);
   return lines.join("\n");
 }

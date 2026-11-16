@@ -282,8 +282,9 @@ export function StaffQuoteCard({
               <tr>
                 <th className="px-3 py-2 font-medium">选项</th>
                 <th className="px-3 py-2 font-medium">数量</th>
-                <th className="px-3 py-2 text-right font-medium">{quote.kind === "tires" ? "每条（含安装）" : quote.kind === "labor" ? "零件售价" : "单价"}</th>
-                {showCost && <th className="px-3 py-2 text-right font-medium">{quote.kind === "tires" ? "进价 / 条" : "进价"}</th>}
+                {showCost && <th className="px-3 py-2 text-right font-medium text-amber-800">{quote.kind === "tires" ? "采购价 / 条" : "采购价"}</th>}
+                <th className="px-3 py-2 text-right font-medium text-emerald-800">{quote.kind === "tires" ? "每条（含安装）" : quote.kind === "labor" ? "零件卖价" : "单价"}</th>
+                {quote.kind === "labor" && labor !== null && <th className="px-3 py-2 text-right font-medium text-emerald-800">安装工时价</th>}
                 {showCost && <th className="px-3 py-2 text-right font-medium">{quote.kind === "tires" ? "加价（合计）" : "加价"}</th>}
                 <th className="px-3 py-2 text-right font-medium">{quote.kind === "labor" && quote.labor ? `${TIER_LABEL[tier]}（零件+工时）` : showCost ? TIER_LABEL[tier] : "客户总价"}</th>
               </tr>
@@ -340,8 +341,9 @@ export function StaffQuoteCard({
                     <ProductLinks links={optionLinks(quote, o)} />
                   </td>
                   <td className="px-3 py-2">{o.quantity}</td>
-                  <td className="px-3 py-2 text-right">{money(partsSell)}</td>
-                  {showCost && <td className="px-3 py-2 text-right">{money(quote.kind === "tires" ? o.unitCost : o.costTotal)}</td>}
+                  {showCost && <td data-testid="cost-cell" className="px-3 py-2 text-right font-medium text-amber-700">{money(quote.kind === "tires" ? o.unitCost : o.costTotal)}</td>}
+                  <td data-testid="sell-cell" className="px-3 py-2 text-right font-medium text-emerald-700">{money(partsSell)}</td>
+                  {quote.kind === "labor" && labor !== null && <td data-testid="labor-cell" className="px-3 py-2 text-right font-medium text-emerald-700">{money(labor)}</td>}
                   {showCost && (
                     <td data-testid="surcharge" className="px-3 py-2 text-right text-ink-600">
                       {markup === null ? "—" : `${markup >= 0 ? "+" : "−"}${money(Math.abs(markup))}`}

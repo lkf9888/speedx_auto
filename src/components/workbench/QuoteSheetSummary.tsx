@@ -18,6 +18,7 @@ import {
   type PriceTier,
 } from "@/lib/workbench/price-tier";
 import type { StaffQuote } from "@/lib/workbench/quote";
+import { taxOn } from "@/lib/workbench/tax";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 const money = (value: number) => usd.format(value);
@@ -82,6 +83,7 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
   const discountTotal = cents(lines.reduce((sum, l) => sum + (laborOf(l)?.discount ?? 0), 0));
   const priced = lines.filter((l) => l.chosen);
   const total = cents(priced.reduce((sum, l) => sum + l.chosen!.option.customerTotal, 0));
+  const taxed = taxOn(total);
   const vehicle = quotes.find((q) => q.vehicle && q.vehicle !== "—")?.vehicle ?? "—";
 
   // Kevin, 2026-11-14: a job with no price yet can still go out, marked 待补价.
@@ -94,8 +96,10 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
       l.chosen ? `${i + 1}. ${l.name}：${optionName(l.chosen.option, false)}，$${l.chosen.option.customerTotal.toFixed(2)}${eta(l)}` : `${i + 1}. ${l.name}：待补价（零件确认后补报）`,
     ),
     ...(discountTotal > 0 ? [`工时按 $120/h 原价，已优惠 −$${discountTotal.toFixed(2)}`] : []),
-    `${pending.length ? "已报价部分合计" : "合计"}：$${total.toFixed(2)}`,
-    "以上为税前参考价，最终以到店检查为准。",
+    `${pending.length ? "已报价部分合计" : "合计"}（税前）：$${total.toFixed(2)}`,
+    `GST 5%：$${taxed.gst.toFixed(2)}　PST 7%：$${taxed.pst.toFixed(2)}`,
+    `税后${pending.length ? "合计（已报价部分）" : "合计"}：$${taxed.total.toFixed(2)}`,
+    "以上为参考价，最终以到店检查为准。",
     `报价编号 ${priced.map((l) => l.chosen!.quote.id).join(" / ")}`,
   ].join("\n");
   const [pdf, setPdf] = useState<"idle" | "making" | "failed">("idle");
@@ -151,6 +155,9 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
         </div>
         <p className="text-lg font-semibold tabular-nums text-ink-900" data-testid="quote-sheet-total">
           {pending.length ? "已报价合计" : "合计"} {money(total)}
+        </p>
+        <p data-testid="quote-sheet-after-tax" className="basis-full text-xs text-ink-600">
+          GST 5% {money(taxed.gst)} · PST 7% {money(taxed.pst)} · <span className="font-semibold text-ink-900">税后 {money(taxed.total)}</span>
         </p>
         {discountTotal > 0 && (
           <p data-testid="labor-discount-total" className="basis-full text-xs font-semibold text-emerald-800">
