@@ -206,11 +206,11 @@ describe("the assistants always leave one question", () => {
 
 // Kevin, 2026-11-16, after reading two weeks of real website chats.
 describe("public assistant: fixes from the chat review", () => {
-  it("asks one question, shows wide ranges by option, checks impossible engines, takes photos in chat", async () => {
+  it("asks one question, checks impossible engines, takes photos in chat", async () => {
     const { SYSTEM_PROMPT } = await import("@/lib/repair-chat/prompt");
     expect(SYSTEM_PROMPT).toContain("only ONE question per reply");
     expect(SYSTEM_PROMPT).not.toContain("a couple of questions at a time");
-    expect(SYSTEM_PROMPT).toContain("add one short line per option");
+    expect(SYSTEM_PROMPT).toContain("Never offer, suggest or mention used, salvage or recycled parts");
     expect(SYSTEM_PROMPT).toContain("doesn't exist for that model and year");
     expect(SYSTEM_PROMPT).toContain("right here in this chat");
     expect(SYSTEM_PROMPT).toContain("Don't call request_team_quote again for the same vehicle and job");
