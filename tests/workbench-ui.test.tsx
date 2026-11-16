@@ -115,6 +115,21 @@ describe("shared workbench conversations", () => {
     vi.unstubAllGlobals();
   });
 
+  it("on a phone the tools sit in a ⋯ menu; the staff accounts are there for owners only", async () => {
+    const owner = render(<Workbench email="kevin@example.com" isOwner />);
+    await userEvent.click(screen.getByRole("button", { name: "更多" }));
+    expect(screen.getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["记忆", "调教对外助手", "员工账号", "ALLDATA 单据"]);
+    await userEvent.click(screen.getByRole("menuitem", { name: "员工账号" }));
+    expect(screen.getByRole("dialog", { name: "员工账号" })).toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    owner.unmount();
+
+    render(<Workbench email="staff@example.com" />);
+    await userEvent.click(screen.getByRole("button", { name: "更多" }));
+    expect(screen.getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["记忆", "调教对外助手", "ALLDATA 单据"]);
+    expect(screen.queryByRole("button", { name: "员工账号" })).not.toBeInTheDocument();
+  });
+
   it("keeps each conversation's messages and vehicle apart", async () => {
     render(<Workbench email="staff@example.com" />);
     await ask("2019 Camry 前刹车片");

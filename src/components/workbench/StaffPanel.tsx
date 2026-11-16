@@ -69,7 +69,7 @@ export function StaffPanel({ onClose }: { onClose: () => void }) {
           <h2 className="text-lg font-bold">员工账号</h2>
           <p className="mt-1 text-xs leading-5 text-slate-600">名单里的人用自己的邮箱登录就能用工作台。停用后马上不能用，对话记录还在。</p>
         </div>
-        <button type="button" onClick={onClose} aria-label="关闭" className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold hover:bg-slate-100">
+        <button type="button" onClick={onClose} aria-label="关闭" className="shrink-0 whitespace-nowrap rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">
           关闭
         </button>
       </header>

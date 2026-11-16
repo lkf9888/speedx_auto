@@ -167,6 +167,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
   const [showStatus, setShowStatus] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showStaff, setShowStaff] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showFollowUp, setShowFollowUp] = useState(false);
   /** Whether WhatsApp and SMS are set up on the server (asked once). */
@@ -862,6 +863,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
               <p className="truncate text-xs text-[color:var(--wb-muted)]">{active.vehicle ? `当前车辆：${active.vehicle.label}` : "输入车型、VIN 或轮胎尺寸，也可以发照片"}</p>
             </div>
             <ConnectionButton open={showStatus} onToggle={() => setShowStatus((v) => !v)} down={connection.down} />
+            <div className="hidden shrink-0 items-center gap-1.5 sm:flex sm:gap-2">
             <button
               type="button"
               onClick={() => setShowMemory((v) => !v)}
@@ -902,6 +904,42 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
             >
               ALLDATA<span className="hidden sm:inline"> 单据</span>
             </button>
+            </div>
+            <div className="relative sm:hidden">
+              <button
+                type="button"
+                onClick={() => setShowMore((v) => !v)}
+                aria-expanded={showMore}
+                aria-label="更多"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-[color:var(--wb-icon)] hover:bg-[color:var(--wb-hover)]"
+              >
+                ⋯
+              </button>
+              {showMore && <button type="button" tabIndex={-1} aria-hidden className="fixed inset-0 z-30 cursor-default" onClick={() => setShowMore(false)} />}
+              {showMore && (
+                <div role="menu" className="absolute right-0 top-11 z-40 w-48 overflow-hidden rounded-xl border border-[color:var(--wb-line)] bg-white py-1 text-sm shadow-xl">
+                  {[
+                    { label: "记忆", run: () => setShowMemory(true) },
+                    { label: "调教对外助手", run: () => setShowRules(true) },
+                    ...(isOwner ? [{ label: "员工账号", run: () => setShowStaff(true) }] : []),
+                    { label: "ALLDATA 单据", run: () => setShowDocuments(true) },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setShowMore(false);
+                        item.run();
+                      }}
+                      className="block w-full px-4 py-3 text-left text-[#111b21] hover:bg-slate-100"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {currentId && active.turns.length > 0 && renaming?.id !== active.id && (
               <>
                 <button
@@ -1188,7 +1226,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
                 rows={1}
                 maxLength={2000}
                 placeholder="车型+项目 / VIN / 尺寸 / 照片"
-                className="max-h-32 min-h-[2.75rem] flex-1 resize-none rounded-[1.4rem] border-0 bg-[color:var(--wb-input)] px-4 py-[0.7rem] text-sm leading-5 text-[color:var(--wb-text)] placeholder:text-[color:var(--wb-muted)] focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                className="max-h-32 min-h-[2.75rem] flex-1 resize-none rounded-[1.4rem] border-0 bg-[color:var(--wb-input)] px-4 py-[0.7rem] text-base leading-5 text-[color:var(--wb-text)] sm:text-sm placeholder:text-[color:var(--wb-muted)] focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
               />
               <button
                 type="submit"

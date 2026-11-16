@@ -94,3 +94,20 @@ describe("the logo path", () => {
     expect(defaultLogoUrl("localhost")).toBe("/images/logo-wide.png");
   });
 });
+
+describe("on a phone", () => {
+  it("the sheet shows its total right under the title, before the list", () => {
+    render(<QuoteSheetSummary quotes={[front, rear]} tier="referral" />);
+    const bar = screen.getByTestId("quote-sheet-phone-total");
+    expect(bar).toHaveTextContent("$688.00");
+    expect(bar).toHaveTextContent(`$${taxOn(688).total.toFixed(2)}`);
+  });
+
+  it("each part option of a quote card is a card of labelled rows, not a wide table", async () => {
+    const { StaffQuoteCard } = await import("@/components/workbench/StaffQuoteCard");
+    render(<StaffQuoteCard quote={front} tier="retail" />);
+    const labels = [...document.querySelectorAll("tbody td[data-label]")].map((td) => td.getAttribute("data-label"));
+    expect(labels).toEqual(expect.arrayContaining(["数量", "采购价", "零件卖价", "安装工时价", "加价"]));
+    expect(document.querySelector("tbody tr")!.className).toContain("max-md:block");
+  });
+});

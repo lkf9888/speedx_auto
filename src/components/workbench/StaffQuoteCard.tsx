@@ -456,8 +456,8 @@ export function StaffQuoteCard({
 
       {visible.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[440px] border-collapse text-left tabular-nums">
-            <thead className="bg-ink-50 text-xs text-ink-500">
+          <table className="w-full border-collapse text-left tabular-nums md:min-w-[440px] max-md:block">
+            <thead className="bg-ink-50 text-xs text-ink-500 max-md:hidden">
               <tr>
                 <th className="px-3 py-2 font-medium">选项</th>
                 <th className="px-3 py-2 font-medium">数量</th>
@@ -468,14 +468,14 @@ export function StaffQuoteCard({
                 <th className="px-3 py-2 text-right font-medium">{quote.kind === "labor" && quote.labor ? `${TIER_LABEL[tier]}（零件+工时）` : showCost ? TIER_LABEL[tier] : "客户总价"}</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="max-md:block">
               {rows.map((o, i) => {
                 if (quote.options[i].outOfStock) return null;
                 const markup = rowMarkup(quote, o, tier, custom);
                 const partsSell = quote.kind === "labor" ? Math.round((o.customerTotal - (labor ?? 0)) * 100) / 100 : o.unitPrice;
                 return (
-                <tr key={`${o.label}-${i}`} className="border-t border-ink-100 align-top">
-                  <td className="px-3 py-2">
+                <tr key={`${o.label}-${i}`} className="border-t border-ink-100 align-top max-md:mx-2 max-md:my-2 max-md:block max-md:rounded-lg max-md:border max-md:px-3 max-md:py-2">
+                  <td className="px-3 py-2 max-md:block max-md:px-0">
                     {visible.length > 1 && (
                       <label className="mb-1 flex items-center gap-1.5 text-[11px] text-ink-500">
                         <input
@@ -526,16 +526,17 @@ export function StaffQuoteCard({
                     {quote.kind === "labor" && o.partNumber && o.source !== "used" && !o.outOfStock && <CopyOrder text={orderLine(quote, o)} />}
                     {quote.kind === "labor" && <AddToCart quote={quote} option={o} vehicleKey={vehicleKey} />}
                   </td>
-                  <td className="px-3 py-2">{o.quantity}</td>
-                  {showCost && <td data-testid="cost-cell" className="px-3 py-2 text-right font-medium text-amber-700">{money(quote.kind === "tires" ? o.unitCost : o.costTotal)}</td>}
-                  <td data-testid="sell-cell" className="px-3 py-2 text-right font-medium text-emerald-700">{money(partsSell)}</td>
-                  {quote.kind === "labor" && labor !== null && <td data-testid="labor-cell" className="px-3 py-2 text-right font-medium text-emerald-700">{money(labor)}</td>}
+                  <td data-label="数量" className="px-3 py-2 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-3 max-md:px-0 max-md:py-1 max-md:before:text-xs max-md:before:font-normal max-md:before:text-ink-500 max-md:before:content-[attr(data-label)]">{o.quantity}</td>
+                  {showCost && <td data-testid="cost-cell" data-label="采购价" className="px-3 py-2 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-3 max-md:px-0 max-md:py-1 max-md:before:text-xs max-md:before:font-normal max-md:before:text-ink-500 max-md:before:content-[attr(data-label)] text-right font-medium text-amber-700">{money(quote.kind === "tires" ? o.unitCost : o.costTotal)}</td>}
+                  <td data-testid="sell-cell" data-label={quote.kind === "labor" ? "零件卖价" : "单价"} className="px-3 py-2 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-3 max-md:px-0 max-md:py-1 max-md:before:text-xs max-md:before:font-normal max-md:before:text-ink-500 max-md:before:content-[attr(data-label)] text-right font-medium text-emerald-700">{money(partsSell)}</td>
+                  {quote.kind === "labor" && labor !== null && <td data-testid="labor-cell" data-label="安装工时价" className="px-3 py-2 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-3 max-md:px-0 max-md:py-1 max-md:before:text-xs max-md:before:font-normal max-md:before:text-ink-500 max-md:before:content-[attr(data-label)] text-right font-medium text-emerald-700">{money(labor)}</td>}
                   {showCost && (
-                    <td data-testid="surcharge" className="px-3 py-2 text-right text-ink-600">
+                    <td data-testid="surcharge" data-label="加价" className="px-3 py-2 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-3 max-md:px-0 max-md:py-1 max-md:before:text-xs max-md:before:font-normal max-md:before:text-ink-500 max-md:before:content-[attr(data-label)] text-right text-ink-600">
                       {markup === null ? "—" : `${markup >= 0 ? "+" : "−"}${money(Math.abs(markup))}`}
                     </td>
                   )}
-                  <td className="px-3 py-2 text-right font-semibold text-ink-900">
+                  <td data-label={quote.kind === "labor" && quote.labor ? TIER_LABEL[tier] : showCost ? TIER_LABEL[tier] : "客户总价"} className="px-3 py-2 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-3 max-md:px-0 max-md:py-1 max-md:before:text-xs max-md:before:font-normal max-md:before:text-ink-500 max-md:before:content-[attr(data-label)] text-right font-semibold text-ink-900">
+                    <div className="max-md:text-right">
                     {editing ? (
                       <input
                         type="number"
@@ -552,6 +553,7 @@ export function StaffQuoteCard({
                     )}
                     {o.originalTotal !== null && <div className="text-[11px] font-normal text-ink-400 line-through">{money(o.originalTotal)}</div>}
                     {noFriendPrice(stored.options[i], tier) && <div className="text-[11px] font-normal text-ink-400">没有进价，按「原价+8折人工」</div>}
+                    </div>
                   </td>
                 </tr>
                 );

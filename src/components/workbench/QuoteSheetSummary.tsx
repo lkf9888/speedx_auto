@@ -189,6 +189,10 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
               {pending.length ? <span className="ml-2 font-semibold text-amber-800">{pending.length} 项待补价</span> : null}
             </p>
           </header>
+          <p data-testid="quote-sheet-phone-total" className="flex items-baseline justify-between gap-3 border-t border-ink-100 bg-slate-50 px-4 py-2 text-xs text-ink-600 md:hidden">
+            <span>{pending.length ? "已报价合计" : "合计"}（税前）<b className="ml-1 text-base tabular-nums text-ink-900">{money(total)}</b></span>
+            <span>税后 <b className="tabular-nums text-ink-900">{money(taxed.total)}</b></span>
+          </p>
           <ul className="divide-y divide-ink-100 border-t border-ink-100">
             {lines.map(({ key, name, options, chosen }) => (
               <li key={key} className="px-4 py-2.5">
@@ -363,7 +367,7 @@ export function PriceChoiceCard({
   return (
     <div data-testid="price-choice" className="ml-auto w-full max-w-xl rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-[#111b21]">
       <p className="text-xs font-semibold text-sky-900">按哪个价报？{current ? `（现在按${priceLabel(current, currentPricing)}，可以重新选）` : ""}</p>
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+      <div className="mt-2 grid grid-cols-2 gap-2">
         {QUICK_TIERS.map((tier) => {
           const quick = tier as Exclude<PriceTier, "custom">;
           return (
@@ -376,7 +380,7 @@ export function PriceChoiceCard({
               className={`rounded-lg px-3 py-2 text-left disabled:opacity-50 ${draft.preset === tier ? "bg-sky-700 text-white" : "border border-sky-300 bg-white text-sky-900 hover:bg-sky-100"}`}
             >
               <span className="block text-sm font-semibold">{TIER_LABEL[tier]}</span>
-              <span className={`mt-0.5 block text-[11px] leading-4 ${draft.preset === tier ? "text-sky-100" : "text-sky-800/80"}`}>{TIER_HINT[tier]}</span>
+              <span className={`mt-0.5 block text-[11px] leading-4 ${draft.preset === tier ? "text-sky-100" : "text-sky-800/80 max-sm:hidden"}`}>{TIER_HINT[tier]}</span>
             </button>
           );
         })}
