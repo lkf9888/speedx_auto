@@ -498,17 +498,31 @@ const quoteOutcome = (quote: StaffQuote) => ({
             : "No WorldPac local stock: the page is now checking Westcan from staff's Chrome and the card will update by itself (Westcan comes before WorldPac ordered-in parts). Say the card shows the final parts price; don't present the ordered-in price as final.",
         }
       : {}),
+    // No WorldPac local stock and no Westcan check at all (Nexpart couldn't match the vehicle or part): not "nobody has it".
+    ...(!quote.westcan && !quote.used && quote.kind === "labor" && quote.labor && !quote.options.some((o) => !o.outOfStock && !o.eta && o.partNumber)
+      ? { other_suppliers: "No WorldPac local stock, and Westcan and Lordco could NOT be checked for this part (their catalog didn't match this vehicle or part). Tell staff the other suppliers are unchecked, not out of stock, and that they should look there by hand. Never say no supplier has it." }
+      : {}),
   }),
   isError: false,
   events: [{ type: "quote", quote } as WorkbenchEvent],
 });
 
+/**
+ * The part category Nexpart should be asked for. WorldPac's own category code isn't always the ACES part type
+ * (a Porsche rotor is N1000 while its parts say ACES 1896); the parts WorldPac returned carry the ACES id, so it wins.
+ */
+export function nexpartCategory(quote: Pick<StaffQuote, "options">, partCategory: string | undefined): string | undefined {
+  const aces = quote.options.map((o) => Number(o.fields?.acaPartTerminologyID)).find((n) => Number.isInteger(n) && n > 0);
+  return aces ? `N${aces}` : partCategory;
+}
+
 /** Nothing WorldPac has locally: the quote gets a Westcan check (Kevin, 2026-11-15). */
 async function withWestcan(quote: StaffQuote, vehicle: VehicleRef, partCategory: string | undefined, position: string, bothSides: boolean): Promise<StaffQuote> {
   const local = quote.options.some((o) => !o.outOfStock && !o.eta && o.partNumber);
-  if (local || !partCategory) return quote;
+  const category = nexpartCategory(quote, partCategory);
+  if (local || !category) return quote;
   const lookup = await Promise.race([
-    westcanLookup(vehicle, partCategory, position, { bothSides }).catch(() => null),
+    westcanLookup(vehicle, category, position, { bothSides }).catch(() => null),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
   ]);
   // The server's own Nexpart sign-in first; the staff extension is the fallback.

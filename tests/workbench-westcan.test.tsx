@@ -241,3 +241,13 @@ describe("review fixes", () => {
     await expect(store.markCard("cwest02", "a@x", { kind: "quote", itemId: quote.id, totals: { 0: 100 } })).rejects.toThrow(/Westcan/);
   });
 });
+
+describe("the category Nexpart is asked for", () => {
+  it("uses the ACES id on WorldPac's parts when WorldPac's own category code differs (a Porsche rotor: N1000 vs 1896)", async () => {
+    const { nexpartCategory } = await import("@/lib/workbench/assistant");
+    const porsche = { options: [{ fields: { categoryCode: "N1000", acaPartTerminologyID: 1896 } }] } as never;
+    expect(nexpartCategory(porsche, "N1000")).toBe("N1896");
+    expect(nexpartCategory({ options: [{ fields: {} }] } as never, "N1896")).toBe("N1896");
+    expect(nexpartCategory({ options: [] } as never, undefined)).toBeUndefined();
+  });
+});
