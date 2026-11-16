@@ -48,6 +48,14 @@ export class StaffRoster {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
+  /** Changes run one at a time in this server, so two quick edits can't overwrite each other (read, change, write is one step). */
+  private queue: Promise<unknown> = Promise.resolve();
+  private serial<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(work, work);
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
   async list(): Promise<StaffMember[]> {
     let raw: string | null;
     try {
@@ -58,7 +66,12 @@ export class StaffRoster {
     if (!raw) return [];
     try {
       const parsed = JSON.parse(raw) as { staff?: StaffMember[] };
-      return (parsed.staff ?? []).filter((m) => m && typeof m.email === "string");
+      // Only well-formed entries count; `active` must be exactly true to let someone in (a stray "false" string must not).
+      return (Array.isArray(parsed.staff) ? parsed.staff : []).flatMap((m) =>
+        m && typeof m.email === "string" && EMAIL.test(cleanEmail(m.email))
+          ? [{ email: cleanEmail(m.email), name: typeof m.name === "string" ? m.name.slice(0, 40) : "", active: m.active === true, addedBy: typeof m.addedBy === "string" ? m.addedBy : "", addedAt: typeof m.addedAt === "string" ? m.addedAt : "" }]
+          : [],
+      );
     } catch {
       throw new StaffRosterError("upstream", "员工名单数据损坏");
     }
@@ -73,7 +86,11 @@ export class StaffRoster {
     return staff;
   }
 
-  async add(emailInput: unknown, nameInput: unknown, by: string): Promise<StaffMember[]> {
+  add(emailInput: unknown, nameInput: unknown, by: string): Promise<StaffMember[]> {
+    return this.serial(() => this.addNow(emailInput, nameInput, by));
+  }
+
+  private async addNow(emailInput: unknown, nameInput: unknown, by: string): Promise<StaffMember[]> {
     const email = cleanEmail(emailInput);
     if (!EMAIL.test(email)) throw new StaffRosterError("invalid", "邮箱格式不对");
     const name = typeof nameInput === "string" ? nameInput.trim().slice(0, 40) : "";
@@ -83,7 +100,11 @@ export class StaffRoster {
     return this.save([...staff, { email, name, active: true, addedBy: by, addedAt: this.now().toISOString() }]);
   }
 
-  async update(emailInput: unknown, changes: { active?: unknown; name?: unknown }): Promise<StaffMember[]> {
+  update(emailInput: unknown, changes: { active?: unknown; name?: unknown }): Promise<StaffMember[]> {
+    return this.serial(() => this.updateNow(emailInput, changes));
+  }
+
+  private async updateNow(emailInput: unknown, changes: { active?: unknown; name?: unknown }): Promise<StaffMember[]> {
     const email = cleanEmail(emailInput);
     const staff = await this.list();
     const member = staff.find((m) => m.email === email);
@@ -93,7 +114,11 @@ export class StaffRoster {
     return this.save(staff);
   }
 
-  async remove(emailInput: unknown): Promise<StaffMember[]> {
+  remove(emailInput: unknown): Promise<StaffMember[]> {
+    return this.serial(() => this.removeNow(emailInput));
+  }
+
+  private async removeNow(emailInput: unknown): Promise<StaffMember[]> {
     const email = cleanEmail(emailInput);
     const staff = await this.list();
     if (!staff.some((m) => m.email === email)) throw new StaffRosterError("not_found", "名单里没有这个邮箱");
@@ -123,8 +148,11 @@ export interface RosterAccess {
 // The active emails are cached briefly so that a request doesn't wait on KV; a change through this server shows at once.
 const CACHE_MS = 30_000;
 let cache: { at: number; staff: StaffMember[] } | null = null;
+// A read that started before a change must not refill the cache with the old list afterwards.
+let generation = 0;
 export const forgetStaffCache = () => {
   cache = null;
+  generation += 1;
 };
 
 async function activeStaff(access: RosterAccess): Promise<StaffMember[]> {
@@ -132,8 +160,9 @@ async function activeStaff(access: RosterAccess): Promise<StaffMember[]> {
   if (cache && at - cache.at < CACHE_MS) return cache.staff;
   const roster = (access.roster ?? getStaffRoster)();
   if (!roster) return [];
+  const before = generation;
   const staff = await roster.list();
-  cache = { at, staff };
+  if (generation === before) cache = { at, staff };
   return staff;
 }
 
@@ -151,7 +180,7 @@ export async function signedInStaff(headers: Headers, access: RosterAccess = {})
   const email = cleanEmail(user.email);
   if (owners.includes(email) || (env.NODE_ENV !== "production" && env.WORKBENCH_DEV_EMAIL && cleanEmail(env.WORKBENCH_DEV_EMAIL) === email)) return { ...user, role: "owner" };
   try {
-    const member = (await activeStaff(access)).find((m) => m.email === email && m.active);
+    const member = (await activeStaff(access)).find((m) => m.email === email && m.active === true);
     return member ? { ...user, role: "staff", name: member.name || undefined } : null;
   } catch {
     return null;

@@ -55,6 +55,52 @@ describe("the staff accounts API", () => {
     return { call, logs, roster };
   };
 
+  it("two quick changes don't undo each other", async () => {
+    const { call, roster } = setup();
+    await call("POST", { email: "a@x.ca" });
+    await call("POST", { email: "b@x.ca" });
+    const [one, two] = await Promise.all([call("PATCH", { email: "a@x.ca", active: false }), call("PATCH", { email: "b@x.ca", active: false })]);
+    expect([one.status, two.status]).toEqual([200, 200]);
+    expect((await roster.list()).map((m) => m.active)).toEqual([false, false]);
+  });
+
+  it("a read that began before a disable can't refill the cache with the old list", async () => {
+    const kv = memoryKv();
+    const roster = new StaffRoster(kv, () => new Date(NOW));
+    await roster.add("lee@x.ca", "", "kevin@x.ca");
+    const slow = new StaffRoster({ ...kv, get: async (key: string) => { const old = await kv.get(key); await new Promise((r) => setTimeout(r, 30)); return old; } });
+    const access = { env: env("kevin@x.ca"), roster: () => slow, verify: as("lee@x.ca"), now: () => NOW };
+    const pending = signedInStaff(new Headers(), access); // reads the old list slowly
+    await roster.update("lee@x.ca", { active: false });
+    forgetStaffCache(); // what the API does after a change
+    expect(await pending).toMatchObject({ role: "staff" }); // the request already in flight
+    // ...but the next request reads the new list, not a cached old one.
+    expect(await signedInStaff(new Headers(), { ...access, roster: () => roster })).toBeNull();
+  });
+
+  it("ignores malformed entries: only active === true lets someone in", async () => {
+    const kv = memoryKv({ "workbench-staff-v1": JSON.stringify({ staff: [{ email: "s@x.ca", name: "S", active: "false" }, { email: 5 }, { email: "ok@x.ca", active: true }] }) });
+    const roster = new StaffRoster(kv);
+    const access = (email: string) => ({ env: env("kevin@x.ca"), roster: () => roster, verify: as(email), now: () => NOW });
+    expect(await signedInStaff(new Headers(), access("s@x.ca"))).toBeNull();
+    expect(await signedInStaff(new Headers(), access("ok@x.ca"))).toMatchObject({ role: "staff" });
+  });
+
+  it("an account that later became an owner is shown as an owner and can't be changed here", async () => {
+    // The roster still holds lee from before he became an owner.
+    const kv = memoryKv({ "workbench-staff-v1": JSON.stringify({ staff: [{ email: "lee@x.ca", name: "", active: true, addedBy: "", addedAt: "" }] }) });
+    const withLee = (method: string, body?: unknown) =>
+      handleStaff(new Request("https://repair.speedxrental.com/api/workbench/staff", { method, ...(body ? { body: JSON.stringify(body) } : {}) }), {
+        user: async () => ({ email: "kevin@x.ca", role: "owner" }),
+        roster: () => new StaffRoster(kv),
+        owners: () => ["kevin@x.ca", "lee@x.ca"],
+        log: () => {},
+      });
+    expect((await (await withLee("GET")).json()).staff).toEqual([]);
+    expect((await withLee("PATCH", { email: "lee@x.ca", active: false })).status).toBe(403);
+    expect((await withLee("DELETE", { email: "lee@x.ca" })).status).toBe(403);
+  });
+
   it("is for owners only", async () => {
     expect((await setup(null).call("GET")).status).toBe(401);
     expect((await setup({ email: "lee@x.ca", role: "staff" }).call("GET")).status).toBe(403);

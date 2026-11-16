@@ -33,7 +33,8 @@ async function readBody(request: Request): Promise<Record<string, unknown> | nul
   }
 }
 
-const view = (staff: StaffMember[], owners: string[] | null) => ({ staff, owners: owners ?? [] });
+// An account that later became an owner is shown once, as an owner.
+const view = (staff: StaffMember[], owners: string[] | null) => ({ staff: staff.filter((m) => !owners?.includes(m.email)), owners: owners ?? [] });
 
 export async function handleStaff(request: Request, deps: StaffDeps = defaultDeps): Promise<Response> {
   const user = await deps.user(request);
@@ -55,6 +56,7 @@ export async function handleStaff(request: Request, deps: StaffDeps = defaultDep
       deps.log({ action: "add", by: user.email, email });
       return json(view(staff, owners), 201);
     }
+    if ((request.method === "PATCH" || request.method === "DELETE") && owners.includes(email)) return json({ error: "forbidden", message: "老板账号不能在这里修改" }, 403);
     if (request.method === "PATCH") {
       const staff = await roster.update(email, { active: body.active, name: body.name });
       forgetStaffCache();
