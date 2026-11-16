@@ -1,11 +1,11 @@
 import { headers } from "next/headers";
 import { Workbench } from "@/components/workbench/Workbench";
-import { staffUser } from "@/lib/workbench/access";
+import { signedInStaff } from "@/lib/workbench/staff-roster";
 
 export const dynamic = "force-dynamic";
 
 export default async function WorkbenchPage() {
-  const user = await staffUser(await headers());
+  const user = await signedInStaff(await headers());
   if (!user) {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-3 px-6 text-center">
@@ -16,5 +16,5 @@ export default async function WorkbenchPage() {
       </main>
     );
   }
-  return <Workbench email={user.email} />;
+  return <Workbench email={user.email} isOwner={user.role === "owner"} />;
 }

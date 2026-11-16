@@ -3,7 +3,8 @@
  * signed-in staff member may change them; every change is logged with the
  * staff member's email.
  */
-import { staffUser, type StaffUser } from "./access";
+import type { StaffUser } from "./access";
+import { signedInStaff } from "./staff-roster";
 import { getMemoryStore, MemoryError, type MemoryStore } from "./memory";
 
 export interface MemoryDeps {
@@ -13,7 +14,7 @@ export interface MemoryDeps {
 }
 
 const defaultDeps: MemoryDeps = {
-  user: (request) => staffUser(request.headers),
+  user: (request) => signedInStaff(request.headers),
   store: () => getMemoryStore(),
   log: (entry) => console.info("workbench memory", JSON.stringify(entry)),
 };

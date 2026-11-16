@@ -4,7 +4,8 @@
  * made or cancelled is logged with the staff member's email.
  */
 import { BASE_URL } from "@/lib/site-routes";
-import { staffUser, type StaffUser } from "./access";
+import type { StaffUser } from "./access";
+import { signedInStaff } from "./staff-roster";
 import { ConversationError, getConversationStore, type ConversationStore } from "./conversations";
 import { getShareStore, isShareToken, ShareError, type ShareStore } from "./shares";
 
@@ -16,7 +17,7 @@ export interface ShareDeps {
 }
 
 const defaultDeps: ShareDeps = {
-  user: (request) => staffUser(request.headers),
+  user: (request) => signedInStaff(request.headers),
   conversations: () => getConversationStore(),
   shares: () => getShareStore(),
   log: (entry) => console.info("workbench share", JSON.stringify(entry)),

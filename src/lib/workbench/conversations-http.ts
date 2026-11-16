@@ -2,7 +2,8 @@
  * /api/workbench/conversations — the shared conversations every signed-in
  * staff member sees. Changes are logged with the staff member's email.
  */
-import { staffUser, type StaffUser } from "./access";
+import type { StaffUser } from "./access";
+import { signedInStaff } from "./staff-roster";
 import { ConversationError, getConversationStore, type ConversationStore } from "./conversations";
 import { isPriceTier, snapPricing } from "./price-tier";
 import type { WestcanAnswer } from "./westcan";
@@ -14,7 +15,7 @@ export interface ConversationDeps {
 }
 
 const defaultDeps: ConversationDeps = {
-  user: (request) => staffUser(request.headers),
+  user: (request) => signedInStaff(request.headers),
   store: () => getConversationStore(),
   log: (entry) => console.info("workbench conversation", JSON.stringify(entry)),
 };

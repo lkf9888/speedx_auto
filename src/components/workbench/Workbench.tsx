@@ -20,6 +20,7 @@ import type { StaffQuote } from "@/lib/workbench/quote";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
 import { HouseRulesPanel } from "./HouseRulesPanel";
+import { StaffPanel } from "./StaffPanel";
 import { FollowUpPanel } from "./FollowUpPanel";
 import { SharePanel } from "./SharePanel";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
@@ -149,7 +150,7 @@ function westcanErrorText(error: unknown): string {
   return "Westcan 结果没保存上，请重试。";
 }
 
-export function Workbench({ email }: { email: string }) {
+export function Workbench({ email, isOwner = false }: { email: string; isOwner?: boolean }) {
   const hydrated = useSyncExternalStore(noSubscribe, () => true, () => false);
   const [summaries, setSummaries] = useState<ConversationSummary[]>([]);
   const [serverPending, setServerPending] = useState<Record<string, PendingQuery>>({});
@@ -165,6 +166,7 @@ export function Workbench({ email }: { email: string }) {
   const [showMemory, setShowMemory] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showStaff, setShowStaff] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showFollowUp, setShowFollowUp] = useState(false);
   /** Whether WhatsApp and SMS are set up on the server (asked once). */
@@ -880,6 +882,17 @@ export function Workbench({ email }: { email: string }) {
               <span className="sm:hidden">调教</span>
               <span className="hidden sm:inline">调教对外助手</span>
             </button>
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setShowStaff((v) => !v)}
+                aria-expanded={showStaff}
+                aria-label="员工账号"
+                className="shrink-0 rounded-full border border-[color:var(--wb-line)] bg-white px-2 py-1.5 text-xs font-semibold text-[color:var(--wb-icon)] hover:bg-[color:var(--wb-hover)] sm:px-3"
+              >
+                员工
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowDocuments((v) => !v)}
@@ -1218,6 +1231,11 @@ export function Workbench({ email }: { email: string }) {
       {showRules && (
         <Modal label="调教对外助手" onClose={() => setShowRules(false)}>
           <HouseRulesPanel onClose={() => setShowRules(false)} />
+        </Modal>
+      )}
+      {showStaff && isOwner && (
+        <Modal label="员工账号" onClose={() => setShowStaff(false)}>
+          <StaffPanel onClose={() => setShowStaff(false)} />
         </Modal>
       )}
       {showStatus && (

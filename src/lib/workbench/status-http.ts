@@ -3,7 +3,8 @@
  * only. `?fresh=1` re-checks sources not checked in the last 15 seconds;
  * `?peek=1` returns the last results without checking anything (the header dot).
  */
-import { staffUser, type StaffUser } from "./access";
+import type { StaffUser } from "./access";
+import { signedInStaff } from "./staff-roster";
 import { getStatusMonitor, type StatusMonitor } from "./status";
 
 export interface StatusDeps {
@@ -12,7 +13,7 @@ export interface StatusDeps {
 }
 
 const defaultDeps: StatusDeps = {
-  user: (request) => staffUser(request.headers),
+  user: (request) => signedInStaff(request.headers),
   monitor: getStatusMonitor,
 };
 

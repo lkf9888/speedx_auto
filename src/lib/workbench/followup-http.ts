@@ -16,7 +16,8 @@ import type { HouseRuleChange } from "@/lib/repair-chat/house-rules";
 import { summarizeEstimateForModel, type EstimateCard } from "@/lib/repair-chat/pricing";
 import { matchScript } from "@/lib/repair-chat/script";
 import { BASE_URL } from "@/lib/site-routes";
-import { staffUser, type StaffUser } from "./access";
+import type { StaffUser } from "./access";
+import { signedInStaff } from "./staff-roster";
 import { WORKBENCH_MODEL } from "./assistant";
 import type { Conversation } from "./conversation-types";
 import { ConversationError, getConversationStore, type ConversationStore } from "./conversations";
@@ -37,7 +38,7 @@ export interface FollowUpDeps {
 let anthropic: MessagesClient | null = null;
 
 const defaultDeps: FollowUpDeps = {
-  user: (request) => staffUser(request.headers),
+  user: (request) => signedInStaff(request.headers),
   conversations: () => getConversationStore(),
   store: () => getFollowUpStore(),
   rules: () => getHouseRulesStore(),

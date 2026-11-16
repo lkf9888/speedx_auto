@@ -5,7 +5,8 @@
 import { addToWorldpacCart } from "@/lib/worldpac/cart";
 import { decodeVehicleKey, type CatalogApi } from "@/lib/worldpac/catalog";
 import { getWorldpacClient } from "@/lib/worldpac/client";
-import { staffUser, type StaffUser } from "./access";
+import type { StaffUser } from "./access";
+import { signedInStaff } from "./staff-roster";
 
 export interface CartDeps {
   user: (request: Request) => Promise<StaffUser | null>;
@@ -15,7 +16,7 @@ export interface CartDeps {
 }
 
 const defaultDeps: CartDeps = {
-  user: (request) => staffUser(request.headers),
+  user: (request) => signedInStaff(request.headers),
   catalog: () => getWorldpacClient(),
   log: (entry) => console.info("workbench cart", JSON.stringify(entry)),
 };

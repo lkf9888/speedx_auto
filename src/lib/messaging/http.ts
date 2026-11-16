@@ -6,7 +6,8 @@
  *   GET      /api/workbench/messaging                which channels are set up
  * The two webhooks are public but check the provider's signature, and refuse when it is missing.
  */
-import { staffUser, type StaffUser } from "@/lib/workbench/access";
+import type { StaffUser } from "@/lib/workbench/access";
+import { signedInStaff } from "@/lib/workbench/staff-roster";
 import { getConversationStore, type ConversationStore } from "@/lib/workbench/conversations";
 import { toE164 } from "./phone";
 import { channelsReady, handleWhatsAppEvents, MessagingError, receiveFromCustomer, sendToCustomer, type MessagingDeps } from "./service";
@@ -24,7 +25,7 @@ export interface MessagingHttpDeps {
 }
 
 const defaultDeps: MessagingHttpDeps = {
-  user: (request) => staffUser(request.headers),
+  user: (request) => signedInStaff(request.headers),
   store: () => getConversationStore(),
   env: () => process.env,
   log: (entry) => console.info("messaging", JSON.stringify(entry)),

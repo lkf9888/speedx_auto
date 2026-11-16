@@ -17,6 +17,10 @@ import { createPublicKey, verify, type JsonWebKey } from "node:crypto";
 
 export interface StaffUser {
   email: string;
+  /** Set by the staff roster (staff-roster.ts): owners manage the accounts. */
+  role?: "owner" | "staff";
+  /** The name the owner gave the account, when there is one. */
+  name?: string;
 }
 
 interface AccessConfig {

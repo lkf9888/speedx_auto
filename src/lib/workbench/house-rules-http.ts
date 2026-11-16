@@ -10,7 +10,8 @@ import type { MessagesClient } from "@/lib/repair-chat/agent";
 import { shopNow } from "@/lib/repair-chat/booking";
 import { HouseRuleError, type HouseRule, type HouseRuleChange } from "@/lib/repair-chat/house-rules";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
-import { staffUser, type StaffUser } from "./access";
+import type { StaffUser } from "./access";
+import { signedInStaff } from "./staff-roster";
 import { askRulesAssistant, type RulesReply, type RulesTurn } from "./house-rules-agent";
 import { canEditHouseRules, getHouseRulesStore, type HouseRulesStore } from "./house-rules-store";
 
@@ -29,7 +30,7 @@ export interface HouseRulesDeps {
 let anthropic: MessagesClient | null = null;
 
 const defaultDeps: HouseRulesDeps = {
-  user: (request) => staffUser(request.headers),
+  user: (request) => signedInStaff(request.headers),
   store: () => getHouseRulesStore(),
   canEdit: (email) => canEditHouseRules(email),
   log: (entry) => console.info("website rules", JSON.stringify(entry)),

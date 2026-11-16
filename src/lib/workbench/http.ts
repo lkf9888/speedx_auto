@@ -10,7 +10,8 @@ import { estimateRanges, type EstimateCard } from "@/lib/repair-chat/pricing";
 import { RateLimiter } from "@/lib/repair-chat/rate-limit";
 import type { CatalogApi } from "@/lib/worldpac/catalog";
 import { getWorldpacClient } from "@/lib/worldpac/client";
-import { staffUser, type StaffUser } from "./access";
+import type { StaffUser } from "./access";
+import { signedInStaff } from "./staff-roster";
 import { attachmentBlocks, parseAttachments, type WorkbenchAttachment } from "./attachments";
 import { WORKBENCH_PROFILE, type WorkbenchEvent } from "./assistant";
 import { getMemoryStore, memoryPrompt, type MemoryNote, type MemoryStore } from "./memory";
@@ -141,7 +142,7 @@ async function loadNotes(deps: WorkbenchDeps): Promise<MemoryNote[]> {
 let anthropic: MessagesClient | null = null;
 
 const defaultDeps: WorkbenchDeps = {
-  user: (request) => staffUser(request.headers),
+  user: (request) => signedInStaff(request.headers),
   client: () => (anthropic ??= new Anthropic()),
   catalog: () => getWorldpacClient(),
   // Per staff member, generous: it's a work tool, but it still spends money.
