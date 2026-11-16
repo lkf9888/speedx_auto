@@ -224,12 +224,13 @@ describe("supplier on the chat quote sheet and cards", () => {
   it("names the supplier for each kind of option", async () => {
     const { supplierLabel } = await import("@/lib/workbench/quote");
     const w = { supplier: "worldpac" as const };
-    expect(supplierLabel(w, {})).toBe("WorldPac · 本地有货");
-    expect(supplierLabel(w, { eta: "明天到" })).toBe("WorldPac · 调货");
-    expect(supplierLabel(w, { source: "westcan" })).toBe("Westcan · Richmond 有货");
-    expect(supplierLabel(w, { source: "lordco", eta: "明天到" })).toBe("Lordco · 其他分店调货");
-    expect(supplierLabel({ supplier: "dt" }, {})).toBe("DT Tire Hub");
-    expect(supplierLabel({ supplier: "shop" }, {})).toBe("店内一口价");
+    expect(supplierLabel(w, { partNumber: "P-1" })).toBe("WorldPac · 本地有货");
+    expect(supplierLabel(w, { partNumber: "P-1", eta: "明天到" })).toBe("WorldPac · 调货");
+    expect(supplierLabel(w, { partNumber: "" })).toBe("");
+    expect(supplierLabel(w, { source: "westcan", partNumber: "A" })).toBe("Westcan · Richmond 有货");
+    expect(supplierLabel(w, { source: "lordco", eta: "明天到", partNumber: "A" })).toBe("Lordco · 其他分店调货");
+    expect(supplierLabel({ supplier: "dt" }, { partNumber: "" })).toBe("DT Tire Hub");
+    expect(supplierLabel({ supplier: "shop" }, { partNumber: "" })).toBe("店内一口价");
   });
 
   it("shows it on the staff card and the sheet but never in the customer copy", async () => {

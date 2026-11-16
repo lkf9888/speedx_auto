@@ -416,11 +416,12 @@ export function buildTireQuote(
  * in the chat doesn't show the supplier"). Staff screens only; the customer
  * copy, PDF and image never say where the shop buys.
  */
-export function supplierLabel(quote: Pick<StaffQuote, "supplier">, option: Pick<StaffQuoteOption, "source" | "eta" | "outOfStock">): string {
+export function supplierLabel(quote: Pick<StaffQuote, "supplier">, option: Pick<StaffQuoteOption, "source" | "eta" | "outOfStock" | "partNumber">): string {
   if (option.source === "westcan") return option.eta ? "Westcan · 其他分店调货" : "Westcan · Richmond 有货";
   if (option.source === "lordco") return option.eta ? "Lordco · 其他分店调货" : "Lordco · 本店有货";
   if (option.source === "used") return "二手件";
-  if (quote.supplier === "worldpac") return option.eta ? "WorldPac · 调货" : option.outOfStock ? "WorldPac · 没货" : "WorldPac · 本地有货";
+  // A labor-only line (no part to buy) has no supplier.
+  if (quote.supplier === "worldpac") return !option.partNumber ? "" : option.eta ? "WorldPac · 调货" : option.outOfStock ? "WorldPac · 没货" : "WorldPac · 本地有货";
   if (quote.supplier === "dt") return "DT Tire Hub";
   if (quote.supplier === "partner_tires") return "合作轮胎表 / Wheel Mart";
   if (quote.supplier === "shop") return "店内一口价";
