@@ -124,6 +124,7 @@ export function StaffQuoteCard({
   const [editing, setEditing] = useState<Record<string, string> | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [image, setImage] = useState<"idle" | "making" | "failed">("idle");
   const [pdf, setPdf] = useState<{ state: "idle" | "making" | "failed" } | { state: "ready"; file: File }>({ state: "idle" });
 
   const priced = withFinalPrices(quote);
@@ -180,11 +181,25 @@ export function StaffQuoteCard({
     void saveFinal(totals);
   }
 
+  /** Labor at the list rate, and what this price charges, for the estimate's discount line. */
+  const pdfLabor = stored.labor ? { hours: stored.labor.hours, list: stored.labor.walkIn, charged: tierLabor(stored, tier, custom) ?? stored.labor.walkIn } : null;
+
+  async function makeImage() {
+    setImage("making");
+    try {
+      const { downloadFile, quoteImage } = await import("@/lib/workbench/quote-pdf");
+      downloadFile(await quoteImage({ ...priced, options: chosen }, new Date(), undefined, pdfLabor));
+      setImage("idle");
+    } catch {
+      setImage("failed");
+    }
+  }
+
   async function makePdf() {
     setPdf({ state: "making" });
     try {
       const { downloadFile, quotePdf } = await import("@/lib/workbench/quote-pdf");
-      const file = await quotePdf({ ...priced, options: chosen });
+      const file = await quotePdf({ ...priced, options: chosen }, new Date(), undefined, pdfLabor);
       downloadFile(file);
       setPdf({ state: "ready", file });
     } catch {
@@ -400,6 +415,17 @@ export function StaffQuoteCard({
                 {pdf.state === "making" ? "正在生成 PDF…" : "下载 PDF 报价单"}
               </button>
             )}
+            {quote.options.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void makeImage()}
+                disabled={chosen.length === 0 || image === "making"}
+                className="rounded-full border border-ink-900 px-4 py-1.5 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
+              >
+                {image === "making" ? "正在生成图片…" : "下载图片报价单"}
+              </button>
+            )}
+            {image === "failed" && <span className="text-xs text-amber-700">图片生成失败，请再试一次</span>}
             {pdf.state === "ready" && canShare && (
               <button type="button" onClick={() => void sharePdf(pdf.file)} className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
                 发给客人（WhatsApp / 微信）
