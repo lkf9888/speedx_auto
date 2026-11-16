@@ -141,7 +141,7 @@ function heroTotal(label: string, total: number, regular: number | null, savedLa
  * conversations open) serves the file at its root, so the path depends on where the page is open.
  */
 export function defaultLogoUrl(host = typeof window === "undefined" ? "" : window.location.hostname): string {
-  return /^repair\./i.test(host) ? "/workbench/logo-wide.png" : "/logo-wide.png";
+  return /^repair\./i.test(host) ? "/workbench/logo-wide.png" : "/images/logo-wide.png";
 }
 
 export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = defaultLogoUrl(), sheet?: SheetPdf, soleLabor?: PdfLabor | null): HTMLElement {
