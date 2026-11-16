@@ -182,7 +182,8 @@ export function StaffQuoteCard({
   }
 
   /** Labor at the list rate, and what this price charges, for the estimate's discount line. */
-  const pdfLabor = stored.labor ? { hours: stored.labor.hours, list: stored.labor.walkIn, charged: tierLabor(stored, tier, custom) ?? stored.labor.walkIn } : null;
+  // An agreed final price replaces the total, so the labor split no longer applies.
+  const pdfLabor = stored.labor && chosen.every((o) => o.originalTotal == null) ? { hours: stored.labor.hours, list: stored.labor.walkIn, charged: tierLabor(stored, tier, custom) ?? stored.labor.walkIn } : null;
 
   async function makeImage() {
     setImage("making");

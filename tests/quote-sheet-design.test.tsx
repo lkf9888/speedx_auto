@@ -43,6 +43,12 @@ describe("labor discount on the estimate", () => {
     if (process.env.DUMP_QUOTE_PAGE) writeFileSync(process.env.DUMP_QUOTE_PAGE, "<meta charset=utf-8>" + page.outerHTML);
   });
 
+  it("shows no labor discount once a final price replaces the total", () => {
+    const final = { ...rotors, final: { totals: { "0": 340 }, by: "k@x", at: 1 } };
+    render(<QuoteSheetSummary quotes={[final]} tier="custom" custom={{ partsPct: 100, laborRate: 90 }} />);
+    expect(screen.queryByTestId("labor-discount")).toBeNull();
+  });
+
   it("the image button saves a PNG", async () => {
     const made: string[] = [];
     vi.doMock("@/lib/workbench/quote-pdf", () => ({

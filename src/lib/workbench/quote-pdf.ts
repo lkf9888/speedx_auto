@@ -142,6 +142,7 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
   let laborList = 0;
   let laborCharged = 0;
   let breakdown = false;
+  let others = false;
   if (sheet) {
     body = sheet.rows.flatMap((r, i) => {
       const title = toEnglish(r.label) + (r.note ? ` (${toEnglish(r.note)})` : "");
@@ -153,7 +154,10 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
         laborCharged += labor.charged;
         return jobRows(title, r.amount, labor, i + 1);
       }
-      if (r.amount !== null) partsSum += r.amount;
+      if (r.amount !== null) {
+        partsSum += r.amount;
+        others = true;
+      }
       return [row([td(String(i + 1)), td(title), td("1", { align: "right" }), td("", { align: "right" }), td(r.amount === null ? "To be quoted" : money(r.amount), { align: "right", bold: true })])];
     });
   } else {
@@ -186,7 +190,7 @@ export function buildQuotePage(quote: PricedQuote, now = new Date(), logoUrl = "
     el("div", { display: "flex", justifyContent: "space-between", gap: "24px", padding: "4px 0", fontSize: "13px", color: o.color ?? INK, fontWeight: o.bold ? "700" : "400" }, undefined, [el("span", {}, label), el("span", {}, value)]);
   const summaryLines: HTMLElement[] = [];
   if (breakdown) {
-    summaryLines.push(sum("Parts", money(partsSum)));
+    summaryLines.push(sum(others ? "Parts & other items" : "Parts", money(partsSum)));
     summaryLines.push(sum(`Labor at list price`, money(laborList)));
     if (laborList - laborCharged > 0.004) summaryLines.push(sum(`Labor discount (${percentOff(laborList, laborCharged)})`, sign(laborList - laborCharged), { color: GREEN, bold: true }));
   }

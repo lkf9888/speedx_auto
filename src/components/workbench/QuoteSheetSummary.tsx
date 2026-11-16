@@ -74,7 +74,7 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
   /** Labor at the shop's $120/h list price, what this price charges, and the discount (Kevin, 2026-11-15). */
   const laborOf = (l: (typeof lines)[number]) => {
     const labor = l.chosen?.quote.labor;
-    if (!l.chosen || !labor) return null;
+    if (!l.chosen || !labor || l.chosen.option.originalTotal != null) return null;
     const charged = tierLabor(l.chosen.quote, tier, custom) ?? labor.walkIn;
     const discount = cents(labor.walkIn - charged);
     return discount > 0.004 && l.chosen.option.customerTotal >= charged ? { hours: labor.hours, list: labor.walkIn, charged, discount, pct: Math.round((discount / labor.walkIn) * 100) } : null;
@@ -102,7 +102,7 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
   const [image, setImage] = useState<"idle" | "making" | "failed">("idle");
   const sheetFor = () => ({
     rows: lines.map((l) => ({
-      labor: l.chosen?.quote.labor ? { hours: l.chosen.quote.labor.hours, list: l.chosen.quote.labor.walkIn, charged: tierLabor(l.chosen.quote, tier, custom) ?? l.chosen.quote.labor.walkIn } : null,
+      labor: l.chosen?.quote.labor && l.chosen.option.originalTotal == null ? { hours: l.chosen.quote.labor.hours, list: l.chosen.quote.labor.walkIn, charged: tierLabor(l.chosen.quote, tier, custom) ?? l.chosen.quote.labor.walkIn } : null,
       label: `${l.name}${l.chosen ? ` – ${[l.chosen.option.brand, l.chosen.option.label].filter(Boolean).join(" ")}${l.chosen.option.source === "used" ? " (used part, warranty as stated by the seller)" : ""}` : ""}`,
       amount: l.chosen ? l.chosen.option.customerTotal : null,
       ...(l.chosen?.option.eta ? { note: "special order" } : {}),
