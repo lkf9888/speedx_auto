@@ -263,21 +263,34 @@ function startingDraft(current?: PriceTier, pricing?: CustomPricing | null): Dra
 /**
  * The assistant asks which price to quote (Kevin, 2026-11-15): three quick
  * buttons that just move two sliders (parts: cost to suggested retail in 5%
- * steps; labor: $60 to $120 in $5 steps), and nothing goes on to the assistant
- * until staff press confirm.
+ * steps; labor: $60 to $120 in $1 steps). Before the first confirm nothing goes
+ * on to the assistant; once a price is chosen the sliders stay live (Kevin,
+ * 2026-11-16): each move re-prices the quotes at once, without asking the
+ * assistant again.
  */
 export function PriceChoiceCard({
   current,
   currentPricing,
   onChoose,
+  onAdjust,
   disabled,
+  busy,
 }: {
   current?: PriceTier;
   currentPricing?: CustomPricing | null;
   onChoose: (choice: PriceChoice) => void;
+  /** Once a price is chosen, every slider move or quick button lands here and re-prices the quotes. */
+  onAdjust?: (choice: PriceChoice) => void;
   disabled?: boolean;
+  /** The assistant is answering: the confirm button waits, the sliders still move. */
+  busy?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>(() => startingDraft(current, currentPricing));
+  const live = Boolean(current) && Boolean(onAdjust);
+  const change = (next: Draft) => {
+    setDraft(next);
+    if (live) onAdjust?.(next.preset ? { tier: next.preset } : { tier: "custom", pricing: { partsPct: next.partsPct, laborRate: next.laborRate } });
+  };
   const friend = draft.preset === "friend";
   return (
     <div data-testid="price-choice" className="ml-auto w-full max-w-xl rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-[#111b21]">
@@ -291,7 +304,7 @@ export function PriceChoiceCard({
               type="button"
               disabled={disabled}
               aria-pressed={draft.preset === tier}
-              onClick={() => setDraft({ ...PRESET_PRICING[quick], preset: quick })}
+              onClick={() => change({ ...PRESET_PRICING[quick], preset: quick })}
               className={`rounded-lg px-3 py-2 text-left disabled:opacity-50 ${draft.preset === tier ? "bg-sky-700 text-white" : "border border-sky-300 bg-white text-sky-900 hover:bg-sky-100"}`}
             >
               <span className="block text-sm font-semibold">{TIER_LABEL[tier]}</span>
@@ -317,7 +330,7 @@ export function PriceChoiceCard({
             value={draft.partsPct}
             disabled={disabled}
             aria-label="零件加价"
-            onChange={(e) => setDraft({ ...draft, partsPct: Number(e.target.value), preset: null })}
+            onChange={(e) => change({ ...draft, partsPct: Number(e.target.value), preset: null })}
             className="mt-1 w-full accent-sky-700"
           />
           <span className="flex justify-between text-[11px] text-sky-800/80">
@@ -341,7 +354,7 @@ export function PriceChoiceCard({
             value={draft.laborRate}
             disabled={disabled}
             aria-label="工时单价"
-            onChange={(e) => setDraft({ ...draft, laborRate: Number(e.target.value), preset: null })}
+            onChange={(e) => change({ ...draft, laborRate: Number(e.target.value), preset: null })}
             className="mt-1 w-full accent-sky-700"
           />
           <span className="flex justify-between text-[11px] text-sky-800/80">
@@ -350,15 +363,16 @@ export function PriceChoiceCard({
           </span>
         </label>
       </div>
-      <div className="mt-3 flex justify-end">
+      <div className="mt-3 flex items-center justify-end gap-3">
+        {live && <span data-testid="price-live" className="text-[11px] text-sky-800/80">已确认：调整滑块，下面的报价会自动按新价格更新</span>}
         <button
           type="button"
           data-testid="price-confirm"
-          disabled={disabled}
+          disabled={disabled || busy}
           onClick={() => onChoose(draft.preset ? { tier: draft.preset } : { tier: "custom", pricing: { partsPct: draft.partsPct, laborRate: draft.laborRate } })}
           className="rounded-lg bg-sky-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-800 disabled:opacity-50"
         >
-          确认
+          {live ? "按此价重新报价" : "确认"}
         </button>
       </div>
     </div>

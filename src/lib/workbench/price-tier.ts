@@ -21,7 +21,7 @@ export const TIER_HINT: Record<PriceTier, string> = {
 /**
  * Sliders (Kevin, 2026-11-15). Parts: 0% = cost, 100% = suggested retail
  * (other suppliers: cost x 1.3), one step = 5% of that spread. Labor: $60 to
- * $120 an hour in $5 steps. The quick buttons are three positions on them.
+ * $120 an hour in $1 steps. The quick buttons are three positions on them.
  */
 export interface CustomPricing {
   partsPct: number;
@@ -30,7 +30,7 @@ export interface CustomPricing {
 export const PARTS_STEP = 5;
 export const LABOR_MIN = 60;
 export const LABOR_MAX = 120;
-export const LABOR_STEP = 5;
+export const LABOR_STEP = 1;
 /** Slider positions the quick buttons stand for; friend parts are cost + $100 per part number, not a percentage. */
 export const PRESET_PRICING: Record<"retail" | "referral" | "friend", CustomPricing> = {
   retail: { partsPct: 100, laborRate: 120 },

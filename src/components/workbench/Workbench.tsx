@@ -391,6 +391,26 @@ export function Workbench({ email }: { email: string }) {
     if (carryOn) void send(pricing ? `按${TIER_LABEL.custom}报价（${describePricing(pricing)}）` : `按${TIER_LABEL[choice.tier]}报价`);
   }
 
+  /** Sliders moved after a price was chosen: the quotes re-price at once, saved a moment after the last move, and the assistant isn't asked again. */
+  const adjustTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function adjustPriceTier(conversationId: string, choice: PriceChoice) {
+    const pricing = choice.tier === "custom" ? choice.pricing : undefined;
+    patchLocal(conversationId, (c) => {
+      const next = { ...c, priceTier: choice.tier };
+      if (pricing) next.pricing = pricing;
+      else delete next.pricing;
+      return next;
+    });
+    if (adjustTimer.current) clearTimeout(adjustTimer.current);
+    adjustTimer.current = setTimeout(() => {
+      void fetch(`/api/workbench/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceTier: choice.tier, ...(pricing ? { pricing } : {}) }),
+      }).catch(() => null);
+    }, 400);
+  }
+
   /** Save a new title; an empty title goes back to the first question. */
   async function renameConversation(id: string, title: string) {
     setRenaming(null);
@@ -956,7 +976,14 @@ export function Workbench({ email }: { email: string }) {
                     </div>
                   ))}
                   {turn.priceChoice && (
-                    <PriceChoiceCard current={active.priceTier} currentPricing={active.pricing} disabled={Boolean(activePending) || !currentId} onChoose={(choice) => void choosePriceTier(active.id, choice, true)} />
+                    <PriceChoiceCard
+                      current={active.priceTier}
+                      currentPricing={active.pricing}
+                      disabled={!currentId}
+                      busy={Boolean(activePending)}
+                      onChoose={(choice) => void choosePriceTier(active.id, choice, true)}
+                      onAdjust={(choice) => adjustPriceTier(active.id, choice)}
+                    />
                   )}
                   {distinctJobs(turn.quotes) > 1 ? (
                     <>

@@ -154,3 +154,50 @@ describe("saving the sliders", () => {
     expect((await store.get("cabc1234"))?.priceTier).toBeUndefined();
   });
 });
+
+// Kevin, 2026-11-16: labor moves in $1 steps; after a price is confirmed the
+// sliders stay live and re-price the quotes without asking the assistant again.
+describe("live sliders after confirm", () => {
+  it("moves labor in $1 steps", () => {
+    render(<PriceChoiceCard onChoose={() => {}} />);
+    expect(screen.getByTestId("labor-slider")).toHaveAttribute("step", "1");
+  });
+
+  it("before the first confirm a move changes nothing outside the card", () => {
+    const onAdjust = vi.fn();
+    render(<PriceChoiceCard onChoose={() => {}} onAdjust={onAdjust} />);
+    fireEvent.change(screen.getByTestId("labor-slider"), { target: { value: "97" } });
+    expect(onAdjust).not.toHaveBeenCalled();
+  });
+
+  it("after a price is chosen each move is applied at once", () => {
+    const onAdjust = vi.fn();
+    const onChoose = vi.fn();
+    render(<PriceChoiceCard current="retail" onChoose={onChoose} onAdjust={onAdjust} />);
+    fireEvent.change(screen.getByTestId("labor-slider"), { target: { value: "97" } });
+    expect(onAdjust).toHaveBeenLastCalledWith({ tier: "custom", pricing: { partsPct: 100, laborRate: 97 } });
+    fireEvent.change(screen.getByTestId("parts-slider"), { target: { value: "40" } });
+    expect(onAdjust).toHaveBeenLastCalledWith({ tier: "custom", pricing: { partsPct: 40, laborRate: 97 } });
+    fireEvent.click(screen.getByRole("button", { name: "朋友价 WorldPac 零件进价 + $100（每个零件号），其他供货商进价 ×1.3，工时 $96/h" }));
+    expect(onAdjust).toHaveBeenLastCalledWith({ tier: "friend" });
+    expect(onChoose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("price-live")).toBeInTheDocument();
+  });
+
+  it("the sliders stay usable while the assistant is answering", () => {
+    render(<PriceChoiceCard current="retail" busy onChoose={() => {}} onAdjust={() => {}} />);
+    expect(screen.getByTestId("labor-slider")).toBeEnabled();
+    expect(screen.getByTestId("price-confirm")).toBeDisabled();
+  });
+});
+
+describe("the assistants always leave one question", () => {
+  it("both prompts say so", async () => {
+    const { WORKBENCH_PROMPT } = await import("@/lib/workbench/assistant");
+    const { SYSTEM_PROMPT } = await import("@/lib/repair-chat/prompt");
+    for (const prompt of [WORKBENCH_PROMPT, SYSTEM_PROMPT]) {
+      expect(prompt).toContain("End every reply with ONE short question");
+      expect(prompt).toContain("When the request is vague");
+    }
+  });
+});
