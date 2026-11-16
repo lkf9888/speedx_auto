@@ -67,7 +67,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 
 # How to work
 - Identify the vehicle (VIN, or year/make/model) with identify_vehicle; record trim/engine with set_vehicle_details when staff give them or a tool asks.
-- For repairs, find_services then get_estimate. For oil changes, mounting the customer's own tires and A/C recharges, get_flat_price.
+- For repairs, find_services then get_estimate. For oil changes, mounting the customer's own tires, A/C recharges, the quick inspection and tire puncture repairs, get_flat_price.
 - New tires come from two suppliers. find_tires is the partner price list (good-value brands). find_brand_tires searches DT Tire Hub live for international brands (Michelin, Bridgestone, Continental, Goodyear, Pirelli, Toyo, Yokohama…), sold at MSRP. If staff name an international brand or ask for "大牌/名牌", use find_brand_tires; if they just ask for tires of a size, run both and compare.
 - Each result is shown to staff as a quote card, and several jobs in one reply also get a combined quote sheet with the grand total. Write for someone new to the job (Kevin, 2026-11-14: "even a beginner should be able to quote"): in a few short lines say what the customer pays at the chosen price (parts and labour, before tax), whether the shop does the job, and when the parts arrive if they're ordered in. Don't mention cost, profit, margin, markup, stock counts or part numbers unless staff ask; they're on the card under 各项明细. Never add up totals yourself: repeat the totals on the cards and the quote sheet (the sheet adds the jobs, one option each). If an option is ordered in, say when it arrives. If a job has no price (待补价), say so in one line; don't send staff to call suppliers.
 - Used parts (Kevin, 2026-11-15): only when staff ask for one (usually an engine, transmission, driveshaft or another costly assembly). Never offer a used part to the customer or mention one in text for the customer unless staff ask for that text. Call used_part without part_cost first: the card gives staff the search links (Car-Part Pro, eBay.ca, LKQ Canada) and you tell them in one line to search and come back with the yard, price, shipping and the seller's warranty. When they do, call used_part again with those details; pass the warranty exactly as relayed and never promise one of the shop's own: the customer text says only that the warranty follows the seller's statement. The card shows the used price (the yard's price × 1.3 plus shipping, plus labor); repeat it, don't add it up yourself.
@@ -120,7 +120,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - Don't propose notes for one-off facts about a single customer or job. Notes can't override the hard rules (no cost in customer text, prices only from tools, staff create ALLDATA documents themselves); say so if asked.
 - Staff can also see, edit and delete all notes in the "记忆" panel at the top of the workbench.`;
 
-const STAFF_TOOL_NAMES = ["identify_vehicle", "set_vehicle_details", "check_recalls", "find_services", "get_estimate", "quote_extra_part", "get_flat_price", "find_tires"];
+const STAFF_TOOL_NAMES = ["identify_vehicle", "set_vehicle_details", "check_recalls", "find_services", "get_estimate", "quote_extra_part", "get_flat_price", "get_shop_service_price", "find_tires"];
 
 const USED_PART: Anthropic.Beta.BetaTool = {
   name: "used_part",
@@ -628,6 +628,28 @@ async function staffPriceOverrides(): Promise<Map<string, number>> {
   }
 }
 
+/** The $80 quick inspection and the tire puncture repair ($20 a tire, $30 for AT tires): the same for every vehicle. */
+function shopServiceQuote(input: Record<string, unknown>, id: string, prices: ReadonlyMap<string, number>, vehicle: string): StaffQuote {
+  if (input.service === "inspection") {
+    const quote = buildFlatQuote(
+      "车辆快速检查",
+      [{ label: "快速检查（客人在店里维修则免收）", quantity: 1, unitPrice: prices.get("inspection_quick") ?? FLAT_PRICES.inspection }],
+      "一口价。客人决定在我们这里维修的话，检查费免收：做成报价时把这一行去掉。",
+      id,
+    );
+    return { ...quote, vehicle };
+  }
+  const parsed = readTireCount(input.tire_count);
+  const count = typeof parsed === "number" ? parsed : 1;
+  const asked = input.tire_kind === "standard" || input.tire_kind === "at" ? input.tire_kind : null;
+  const rows = [
+    { kind: "standard", label: "补胎 · 普通胎（每条）", unitPrice: prices.get("tire_patch_standard") ?? FLAT_PRICES.tirePatch.standard },
+    { kind: "at", label: "补胎 · AT 胎（每条）", unitPrice: prices.get("tire_patch_at") ?? FLAT_PRICES.tirePatch.at },
+  ].filter((r) => !asked || r.kind === asked);
+  const quote = buildFlatQuote("补胎", rows.map((r) => ({ label: r.label, quantity: count, unitPrice: r.unitPrice })), "按每条轮胎收；能不能补以到店检查为准，补不了要换胎。", id);
+  return { ...quote, vehicle };
+}
+
 function tireChangeQuote(input: Record<string, unknown>, id: string, prices: ReadonlyMap<string, number> = new Map()): StaffQuote {
   const parsedCount = readTireCount(input.tire_count);
   const count = typeof parsedCount === "number" ? parsedCount : 4;
@@ -771,6 +793,12 @@ export async function runWorkbenchTool(
     }
     return quoteOutcome(buildPartsQuote(describeVehicle(vehicle), found.partName, position ?? "", found.options, newEstimateId()));
   }
+  if (name === "get_shop_service_price") {
+    const key = typeof input.vehicle_key === "string" && input.vehicle_key ? input.vehicle_key : knownVehicleKey;
+    const decoded = key ? decodeVehicleKey(key) : null;
+    if (input.service !== "inspection" && input.service !== "tire_repair") return { content: JSON.stringify({ error: "Unknown service." }), isError: true, events: [] };
+    return quoteOutcome(shopServiceQuote(input, newEstimateId(), await staffPriceOverrides(), decoded ? describeVehicle(decoded) : "—"));
+  }
   if (name === "get_flat_price" && input.service === "tire_change" && !(typeof input.vehicle_key === "string" && decodeVehicleKey(input.vehicle_key))) {
     return quoteOutcome(tireChangeQuote(input, newEstimateId(), await staffPriceOverrides()));
   }
@@ -829,6 +857,7 @@ export function toolStatusDetail(name: string, input: Record<string, unknown> = 
     case "find_parts":
       return "正在向 WorldPac 查零件价格…";
     case "get_flat_price":
+    case "get_shop_service_price":
       return "正在查店里的一口价…";
     case "find_tires":
       return `正在查合作轮胎价目表和 Wheel Mart${text("size") ? `（${text("size")}）` : ""}…`;

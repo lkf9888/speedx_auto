@@ -25,6 +25,10 @@ import {
   FLAT_SERVICES,
   flatWord,
   quoteFlatService,
+  quoteShopService,
+  SHOP_SERVICES,
+  type PatchKind,
+  type ShopService,
   vehicleFacts,
   type FlatRequest,
   type FlatService,
@@ -201,6 +205,21 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
       },
       required: ["vehicle_key", "service_id", "position", "done_with_service_id", "done_with_position", "both_sides"],
       additionalProperties: false,
+    },
+  },
+  {
+    name: "get_shop_service_price",
+    description:
+      "Shop flat price for a quick vehicle inspection ($80, waived if the customer has the repair done at the shop) or a tire puncture repair / patch ($20 per tire, $30 per tire for AT tires). The same for every vehicle, so no vehicle is needed. The result is shown to the customer as a card. For tire_repair leave tire_kind null unless the customer said the tire is an AT (all-terrain) tire, and tire_count null for one tire. Use it when the customer asks for an inspection, a check-up, or a flat/punctured tire repair.",
+    input_schema: {
+      type: "object",
+      properties: {
+        service: { type: "string", enum: [...SHOP_SERVICES] },
+        tire_kind: { type: "string", enum: ["standard", "at"], description: "tire_repair only: at for AT / all-terrain tires; omit when unknown" },
+        tire_count: { type: "integer", description: "tire_repair only: how many tires; omit for one" },
+        vehicle_key: { type: "string", description: "When the vehicle is known; optional" },
+      },
+      required: ["service"],
     },
   },
   {
@@ -653,6 +672,16 @@ export async function runTool(
         [{ type: "estimate", estimate: card }],
       );
     }
+    case "get_shop_service_price": {
+      const service = pick<ShopService>(input.service, SHOP_SERVICES);
+      if (!service) return fail("Unknown service.");
+      const decoded = readVehicle(input);
+      const kind = pick<PatchKind>(input.tire_kind, ["standard", "at"]);
+      const count = Number(input.tire_count);
+      const quote = quoteShopService(service, kind, Number.isInteger(count) ? count : null);
+      const card = adjustCard(buildFlatEstimate(decoded ? describeVehicle(decoded) : "—", quote, locale, newEstimateId()));
+      return ok({ status: "ok", summary: summarizeEstimateForModel(card) }, [{ type: "estimate", estimate: card }]);
+    }
     case "get_flat_price": {
       const decoded = readVehicle(input);
       if (!decoded) return fail("Unknown vehicle_key. Call identify_vehicle first.");
@@ -831,7 +860,7 @@ export async function runTool(
 
 export function statusForTool(name: string): StatusKey {
   if (name === "find_services") return "services";
-  if (["get_estimate", "quote_extra_part", "get_flat_price", "find_tires", "find_brand_tires", "find_parts", "draft_alldata_estimate", "request_team_quote"].includes(name)) return "estimate";
+  if (["get_estimate", "quote_extra_part", "get_flat_price", "get_shop_service_price", "find_tires", "find_brand_tires", "find_parts", "draft_alldata_estimate", "request_team_quote"].includes(name)) return "estimate";
   if (name === "request_appointment" || name === "propose_memory") return "thinking";
   return "vehicle";
 }

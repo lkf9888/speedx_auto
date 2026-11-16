@@ -218,7 +218,8 @@ export function buildFlatEstimate(
   const totals = partOptions.map((p) => p.total);
   const low = Math.min(...totals);
   const high = Math.max(...totals);
-  const noteKey = quote.service === "oil_change" ? "oil_note" : quote.service === "tire_change" ? "tire_note" : "ac_note";
+  const noteKey =
+    quote.service === "oil_change" ? "oil_note" : quote.service === "tire_change" ? "tire_note" : quote.service === "inspection" ? "inspection_note" : quote.service === "tire_repair" ? "tire_repair_note" : "ac_note";
   return {
     id,
     kind: "flat",

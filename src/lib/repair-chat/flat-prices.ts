@@ -2,7 +2,7 @@
  * The shop's posted flat prices, with nothing imported, so browser code (the
  * workbench's rules panel) can read them without pulling in the catalog.
  */
-export type FlatService = "oil_change" | "tire_change" | "ac_recharge";
+export type FlatService = "oil_change" | "tire_change" | "ac_recharge" | "inspection" | "tire_repair";
 
 /** CAD, tax extra. Oil change prices include oil and filter. */
 export const FLAT_PRICES = {
@@ -14,6 +14,10 @@ export const FLAT_PRICES = {
   },
   tirePerWheel: { up_to_18: 25, over_18: 30, run_flat: 35, off_road: 45 },
   acRecharge: { r134a: 150, r1234yf: 230 },
+  /** Quick vehicle inspection; waived when the owner has the repair done at the shop (Kevin, 2026-11-16). */
+  inspection: 80,
+  /** Tire puncture repair (patch), per tire; AT tires cost more. */
+  tirePatch: { standard: 20, at: 30 },
 } as const;
 
 
@@ -35,6 +39,9 @@ export const FLAT_PRICE_SLOTS = {
   tire_off_road: { service: "tire_change", zh: "换胎 · 越野胎 AT/MT/RT（每条）", price: FLAT_PRICES.tirePerWheel.off_road },
   ac_r134a: { service: "ac_recharge", zh: "空调加雪种 · R134a", price: FLAT_PRICES.acRecharge.r134a },
   ac_r1234yf: { service: "ac_recharge", zh: "空调加雪种 · R1234yf", price: FLAT_PRICES.acRecharge.r1234yf },
+  inspection_quick: { service: "inspection", zh: "车辆快速检查（在店维修则免）", price: FLAT_PRICES.inspection },
+  tire_patch_standard: { service: "tire_repair", zh: "补胎 · 普通胎（每条）", price: FLAT_PRICES.tirePatch.standard },
+  tire_patch_at: { service: "tire_repair", zh: "补胎 · AT 胎（每条）", price: FLAT_PRICES.tirePatch.at },
 } as const satisfies Record<string, { service: FlatService; zh: string; price: number }>;
 
 export type FlatPriceSlot = keyof typeof FLAT_PRICE_SLOTS;

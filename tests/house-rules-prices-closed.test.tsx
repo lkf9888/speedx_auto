@@ -50,7 +50,7 @@ describe("price rules", () => {
   });
 
   it("covers every posted price", () => {
-    expect(Object.keys(FLAT_PRICE_SLOTS)).toHaveLength(13);
+    expect(Object.keys(FLAT_PRICE_SLOTS)).toHaveLength(16);
     expect(oilCard().partOptions.every((o) => o.slot && o.slot in FLAT_PRICE_SLOTS)).toBe(true);
   });
 });

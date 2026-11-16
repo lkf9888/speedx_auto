@@ -19,6 +19,10 @@ export type Refrigerant = "r134a" | "r1234yf";
 export { FLAT_PRICE_SLOT_KEYS, FLAT_PRICE_SLOTS, FLAT_PRICES, type FlatPriceSlot } from "./flat-prices";
 
 export const FLAT_SERVICES: readonly FlatService[] = ["oil_change", "tire_change", "ac_recharge"];
+/** Shop services priced flat for any vehicle (no size, engine or price-class rules): get_shop_service_price. */
+export const SHOP_SERVICES = ["inspection", "tire_repair"] as const;
+export type ShopService = (typeof SHOP_SERVICES)[number];
+export type PatchKind = "standard" | "at";
 
 const EUROPEAN_MAKES = [
   "audi", "bmw", "mercedes-benz", "volkswagen", "porsche", "volvo", "mini", "land rover",
@@ -182,6 +186,25 @@ export function quoteFlatService(facts: VehicleFacts, request: FlatRequest): Fla
   };
 }
 
+/**
+ * The quick inspection ($80, waived when the repair is done at the shop) and a
+ * tire puncture repair ($20 a tire, $30 for AT tires). Same for every vehicle.
+ */
+export function quoteShopService(service: ShopService, kind: PatchKind | null, count: number | null): Extract<FlatQuote, { status: "ok" }> {
+  if (service === "inspection") {
+    return { status: "ok", service, size: null, perWheel: false, options: [{ code: "inspection_quick", unitPrice: FLAT_PRICE_SLOTS.inspection_quick.price, quantity: 1, slot: "inspection_quick" }] };
+  }
+  const tires = count && count >= 1 && count <= 6 ? count : 1;
+  const kinds: PatchKind[] = kind ? [kind] : ["standard", "at"];
+  return {
+    status: "ok",
+    service,
+    size: null,
+    perWheel: true,
+    options: kinds.map((k) => ({ code: `tire_patch_${k}`, unitPrice: FLAT_PRICE_SLOTS[`tire_patch_${k}`].price, quantity: tires, slot: `tire_patch_${k}` as const })),
+  };
+}
+
 // ------------------------------------------------------------------- wording
 
 type Locale = "en" | "zh-CN" | "zh-TW";
@@ -214,6 +237,13 @@ const WORDS: Record<Locale, Record<string, string>> = {
     tire_ships_soon: "about 1–3 days to arrive",
     tire_studded: "studded",
     min_labor: "Minimum labor charge",
+    inspection: "Quick vehicle inspection",
+    tire_repair: "Tire puncture repair (patch)",
+    inspection_quick: "Quick inspection",
+    tire_patch_standard: "Standard tires, per tire",
+    tire_patch_at: "AT tires, per tire",
+    inspection_note: "Flat price. The inspection fee is waived if you have the repair done at SPEEDX.",
+    tire_repair_note: "Priced per tire. Whether the puncture can be patched is confirmed at the shop; if the tire can't be repaired it needs replacing.",
   },
   "zh-CN": {
     oil_change: "换机油",
@@ -242,6 +272,13 @@ const WORDS: Record<Locale, Record<string, string>> = {
     tire_ships_soon: "需调货，约 1–3 天",
     tire_studded: "带钉",
     min_labor: "最低工时补足",
+    inspection: "车辆快速检查",
+    tire_repair: "补胎",
+    inspection_quick: "快速检查",
+    tire_patch_standard: "普通胎，每条",
+    tire_patch_at: "AT 胎，每条",
+    inspection_note: "一口价。如果在我们这里维修，检查费免收。",
+    tire_repair_note: "按每条轮胎计价。能不能补以到店检查为准；补不了需要换胎。",
   },
   "zh-TW": {
     oil_change: "換機油",
@@ -270,7 +307,14 @@ const WORDS: Record<Locale, Record<string, string>> = {
     tire_ships_soon: "需調貨，約 1–3 天",
     tire_studded: "帶釘",
     min_labor: "最低工時補足",
-  },
+    inspection: "車輛快速檢查",
+    tire_repair: "補胎",
+    inspection_quick: "快速檢查",
+    tire_patch_standard: "普通胎，每條",
+    tire_patch_at: "AT 胎，每條",
+    inspection_note: "一口價。如果在我們這裡維修，檢查費免收。",
+    tire_repair_note: "按每條輪胎計價。能不能補以到店檢查為準；補不了需要換胎。",
+    },
 };
 
 export function flatWord(locale: string, key: string): string {
