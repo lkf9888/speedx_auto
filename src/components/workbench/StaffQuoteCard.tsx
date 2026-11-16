@@ -76,35 +76,32 @@ const CART_NOTE: Record<Exclude<CartAddResult["status"], "ok">, string> = {
 };
 
 /**
- * One click into the seller's Nexpart cart (Kevin, 2026-11-16): staff confirm the part and quantity, the
- * extension adds it in this computer's signed-in Nexpart, and staff place the order themselves in the cart.
+ * One click into a seller's cart (Kevin, 2026-11-16): staff confirm the part and quantity, the part goes into the
+ * seller's shopping cart, and staff place the order themselves there. Never an order.
  */
-function AddToCart({ option }: { option: StaffQuoteOption }) {
+function CartButton({
+  name,
+  summary,
+  run,
+  link,
+  slow,
+}: {
+  name: string;
+  summary: string;
+  run: () => Promise<{ ok: true; message: string; href?: string } | { ok: false; message: string }>;
+  link: { href: string; label: string };
+  slow: string;
+}) {
   const [step, setStep] = useState<"idle" | "confirm" | "adding" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
-  const supplier: CartSupplier | null = option.source === "westcan" ? "westcan" : option.source === "lordco" ? "lordco" : null;
-  // A left + right set carries two part numbers: one cart line can't be made from it.
-  if (!supplier || !option.partNumber || option.outOfStock || /\+/.test(option.partNumber)) return null;
-  const name = supplier === "westcan" ? "Westcan" : "Lordco";
-  const total = option.unitCost === null ? null : Math.round(option.unitCost * option.quantity * 100) / 100;
+  const [href, setHref] = useState(link.href);
 
   async function add() {
     setStep("adding");
-    try {
-      const result = await callAlldata("cartAdd", { supplier: supplier!, partNumber: option.partNumber, qty: option.quantity }, 60_000);
-      if (result.status === "ok") {
-        setMessage(`已加进 ${name} 购物车（现在购物车里 ${result.cartAfter} 件）。去购物车核对，由你自己下单。`);
-        setStep("done");
-      } else {
-        setMessage(CART_NOTE[result.status]);
-        setStep("error");
-      }
-    } catch (error) {
-      // An extension older than 1.2.0 doesn't know this request.
-      const old = error instanceof Error && error.name === "BridgeError" && /unknown operation/i.test(error.message);
-      setMessage(old ? "这台电脑的 SPEEDX 扩展版本太旧，请更新到 1.2.0（见扩展的 README），再试。" : bridgeErrorText(error));
-      setStep("error");
-    }
+    const result = await run();
+    setMessage(result.message);
+    if (result.ok && result.href) setHref(result.href);
+    setStep(result.ok ? "done" : "error");
   }
 
   return (
@@ -117,8 +114,7 @@ function AddToCart({ option }: { option: StaffQuoteOption }) {
       {step === "confirm" && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
           <p>
-            加进 {name} 购物车？{[option.brand, option.label].filter(Boolean).join(" ")} #{option.partNumber} × {option.quantity}
-            {total !== null ? `，进价 $${total.toFixed(2)}` : ""}。只加购物车，<b>不会下单</b>。
+            加进 {name} 购物车？{summary}。只加购物车，<b>不会下单</b>。
           </p>
           <div className="mt-1 flex gap-2">
             <button type="button" data-testid="cart-confirm" onClick={() => void add()} className="rounded bg-amber-700 px-2 py-0.5 font-semibold text-white hover:bg-amber-800">
@@ -130,19 +126,19 @@ function AddToCart({ option }: { option: StaffQuoteOption }) {
           </div>
         </div>
       )}
-      {step === "adding" && <p className="text-[11px] text-ink-600">正在加进 {name} 购物车…（会在后台打开一个标签页，几秒钟）</p>}
+      {step === "adding" && <p className="text-[11px] text-ink-600">正在加进 {name} 购物车…{slow}</p>}
       {step === "done" && (
         <p data-testid="cart-done" className="text-[11px] text-emerald-800">
           {message}{" "}
-          <a href={CART_URLS[supplier]} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
-            打开 {name} 购物车 ↗
+          <a href={href} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
+            {link.label} ↗
           </a>
         </p>
       )}
       {step === "error" && (
         <p role="alert" className="text-[11px] text-amber-800">
           {message}{" "}
-          <a href={CART_URLS[supplier]} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
+          <a href={link.href} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
             先打开 {name} 购物车看一眼 ↗
           </a>{" "}
           （确认没加上再重试，免得加两遍）{" "}
@@ -152,6 +148,76 @@ function AddToCart({ option }: { option: StaffQuoteOption }) {
         </p>
       )}
     </div>
+  );
+}
+
+const WORLDPAC_CART_NOTE: Record<string, string> = {
+  part_not_found: "WorldPac 现在查不到这个零件（可能刚卖完或下架了），没有加进购物车。",
+  failed: "speedDIAL 没有接受这次加购物车，没有加进去。",
+  bad_request: "零件、数量或车型不完整，没有加进购物车。",
+  unauthorized: "登录已失效，请刷新工作台重新登录。",
+  upstream: "speedDIAL 暂时没有回应，请稍后再试。",
+};
+
+const nexpartCart = (supplier: CartSupplier, name: string, option: StaffQuoteOption, total: number | null) => (
+  <CartButton
+    name={name}
+    summary={`${[option.brand, option.label].filter(Boolean).join(" ")} #${option.partNumber} × ${option.quantity}${total !== null ? `，进价 $${total.toFixed(2)}` : ""}`}
+    link={{ href: CART_URLS[supplier], label: `打开 ${name} 购物车` }}
+    slow="（会在后台打开一个标签页，几秒钟）"
+    run={async () => {
+      try {
+        const result = await callAlldata("cartAdd", { supplier, partNumber: option.partNumber, qty: option.quantity }, 60_000);
+        if (result.status === "ok") return { ok: true as const, message: `已加进 ${name} 购物车（现在购物车里 ${result.cartAfter} 件）。去购物车核对，由你自己下单。` };
+        return { ok: false as const, message: CART_NOTE[result.status] };
+      } catch (error) {
+        // An extension older than 1.2.0 doesn't know this request.
+        const old = error instanceof Error && error.name === "BridgeError" && /unknown operation/i.test(error.message);
+        return { ok: false as const, message: old ? "这台电脑的 SPEEDX 扩展版本太旧，请更新到 1.2.0（见扩展的 README），再试。" : bridgeErrorText(error) };
+      }
+    }}
+  />
+);
+
+/** Where WorldPac's own cart order opens in speedDIAL. */
+const worldpacCartHref = (orderNumber: string) => `https://speeddial.worldpac.com/#/order/${encodeURIComponent(orderNumber)}`;
+
+function AddToCart({ quote, option, vehicleKey }: { quote: StaffQuote; option: StaffQuoteOption; vehicleKey?: string }) {
+  if (!option.partNumber || option.outOfStock) return null;
+  const total = option.unitCost === null ? null : Math.round(option.unitCost * option.quantity * 100) / 100;
+  if (option.source === "westcan" || option.source === "lordco") {
+    // A left + right set carries two part numbers: one cart line can't be made from it.
+    if (/\+/.test(option.partNumber)) return null;
+    return nexpartCart(option.source, option.source === "westcan" ? "Westcan" : "Lordco", option, total);
+  }
+  // WorldPac: the server puts it into the shop's speedDIAL cart. A left + right set is two lines.
+  const category = String(option.fields?.categoryCode ?? "");
+  if (quote.supplier !== "worldpac" || option.source || !vehicleKey || !/^[A-Za-z0-9]{2,12}$/.test(category)) return null;
+  const parts = option.partNumber.split(/\s*\+\s*/).filter(Boolean);
+  if (parts.length === 0 || parts.length > 4) return null;
+  return (
+    <CartButton
+      name="WorldPac"
+      summary={`${[option.brand, option.label].filter(Boolean).join(" ")} #${parts.join(" + ")} × ${option.quantity}${total !== null ? `，进价 $${total.toFixed(2)}` : ""}`}
+      link={{ href: "https://speeddial.worldpac.com/", label: "打开 speedDIAL" }}
+      slow="（几秒钟）"
+      run={async () => {
+        try {
+          const response = await fetch("/api/workbench/cart/worldpac", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ vehicleKey, categoryCode: category, items: parts.map((partNumber) => ({ partNumber, qty: option.quantity })) }),
+          });
+          const data = (await response.json().catch(() => null)) as { orderNumber?: string; error?: string; created?: boolean } | null;
+          if (response.ok && data?.orderNumber) {
+            return { ok: true as const, message: `已加进 WorldPac 购物车（speedDIAL 订单 ${data.orderNumber}，${data.created ? "新建的购物车" : "加进了已有的购物车"}）。去 speedDIAL 核对，由你自己提交订单。`, href: worldpacCartHref(data.orderNumber) };
+          }
+          return { ok: false as const, message: WORLDPAC_CART_NOTE[data?.error ?? "failed"] ?? WORLDPAC_CART_NOTE.failed };
+        } catch {
+          return { ok: false as const, message: WORLDPAC_CART_NOTE.upstream };
+        }
+      }}
+    />
   );
 }
 
@@ -211,8 +277,11 @@ export function StaffQuoteCard({
   custom,
   westcanError,
   onRetryWestcan,
+  vehicleKey,
 }: {
   quote: StaffQuote;
+  /** The conversation's car, so a WorldPac part can be put into the speedDIAL cart. */
+  vehicleKey?: string;
   onSaveFinal?: (totals: Totals) => Promise<boolean>;
   /** Why the Westcan check couldn't run on this computer. */
   westcanError?: string;
@@ -453,7 +522,7 @@ export function StaffQuoteCard({
                     {o.core !== null && <div className="text-xs text-amber-700">核心件押金 {money(o.core)}</div>}
                     <ProductLinks links={optionLinks(quote, o)} />
                     {quote.kind === "labor" && o.partNumber && o.source !== "used" && !o.outOfStock && <CopyOrder text={orderLine(quote, o)} />}
-                    {quote.kind === "labor" && <AddToCart option={o} />}
+                    {quote.kind === "labor" && <AddToCart quote={quote} option={o} vehicleKey={vehicleKey} />}
                   </td>
                   <td className="px-3 py-2">{o.quantity}</td>
                   {showCost && <td data-testid="cost-cell" className="px-3 py-2 text-right font-medium text-amber-700">{money(quote.kind === "tires" ? o.unitCost : o.costTotal)}</td>}

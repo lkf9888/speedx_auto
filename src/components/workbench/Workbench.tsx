@@ -1043,6 +1043,7 @@ export function Workbench({ email }: { email: string }) {
                               key={`${quote.id}-${quote.westcan?.checked ? "w" : ""}`}
                               quote={quote}
                               tier={active.priceTier ?? "retail"}
+                              vehicleKey={active.vehicle?.key}
                               custom={active.pricing}
                               onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
                               westcanError={westcanErrors[quote.id]}
@@ -1058,6 +1059,7 @@ export function Workbench({ email }: { email: string }) {
                         key={`${quote.id}-${quote.westcan?.checked ? "w" : ""}`}
                         quote={quote}
                         tier={active.priceTier ?? "retail"}
+                        vehicleKey={active.vehicle?.key}
                               custom={active.pricing}
                         onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
                         westcanError={westcanErrors[quote.id]}

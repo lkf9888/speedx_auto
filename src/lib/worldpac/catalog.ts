@@ -16,7 +16,8 @@ import { TtlCache } from "./cache";
 
 export interface CatalogApi {
   get<T>(path: string): Promise<T>;
-  post<T>(path: string, data: unknown): Promise<T>;
+  /** `extra` goes next to header and data in the request body (the order calls need it). */
+  post<T>(path: string, data: unknown, extra?: Record<string, unknown>): Promise<T>;
 }
 
 const VEHICLE_GROUP_ID = 2; // Car, Van, Light Duty Truck
@@ -1085,7 +1086,7 @@ export interface StaffPartOption extends PartOption {
   fields: Record<string, string | number>;
 }
 
-const PART_NUMBER_FIELDS = ["manufacturerPart", "partNumber", "partNo", "productNumber", "itemNumber", "mfgPartNumber", "catalogNumber"];
+export const PART_NUMBER_FIELDS = ["manufacturerPart", "partNumber", "partNo", "productNumber", "itemNumber", "mfgPartNumber", "catalogNumber"];
 const BRAND_FIELDS = ["brandName", "brand", "manufacturerName", "manufacturer", "lineDescription", "mfgName"];
 
 function firstString(q: Record<string, unknown>, keys: string[]): string {

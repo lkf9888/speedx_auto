@@ -141,8 +141,8 @@ export class WorldpacClient {
   }
 
   /** POST to a speedDIAL /v3 path with the standard {header, data} envelope. */
-  async post<T>(path: string, data: unknown): Promise<T> {
-    return this.withSession(() => this.call<T>("POST", path, data));
+  async post<T>(path: string, data: unknown, extra?: Record<string, unknown>): Promise<T> {
+    return this.withSession(() => this.call<T>("POST", path, data, extra));
   }
 
   /** Force a fresh login. Used by the connection check script. */
@@ -169,7 +169,7 @@ export class WorldpacClient {
     }
   }
 
-  private async call<T>(method: "GET" | "POST", path: string, data?: unknown): Promise<T> {
+  private async call<T>(method: "GET" | "POST", path: string, data?: unknown, extra?: Record<string, unknown>): Promise<T> {
     const info = await this.clientInfo();
     const url = `${SPEEDDIAL_ORIGIN}/v3/${path.replace(/^\/+/, "")}`;
     const headers: Record<string, string> = {
@@ -180,8 +180,10 @@ export class WorldpacClient {
     if (method === "POST") {
       headers["Content-Type"] = "application/json";
       headers["X-CSRF-Token"] = this.csrfToken ?? "";
+      // `extra` sits next to header and data (the order calls carry orderType / orderNumber there).
       body = JSON.stringify({
         header: { clientVersion: info.clientVersion, clientInfo: "WEB", referrerID: "sDPro" },
+        ...extra,
         data,
       });
     }
