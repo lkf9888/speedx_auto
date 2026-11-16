@@ -48,6 +48,8 @@ export interface ChatSession {
   booking?: { date: string; time: string };
   /** A chat appointment request whose email waits for name and phone. */
   bookingNeedsContact?: boolean;
+  /** The assistant already invited this visitor to leave a phone or email (once per visit). */
+  contactOffered?: boolean;
   /** The shop was already emailed to call this visitor back. */
   callbackRequested?: boolean;
   pending?: PendingReply;
@@ -152,6 +154,11 @@ export class SessionStore {
     entry.session.booking = booking;
     entry.session.bookingNeedsContact = needsContact;
     this.touch(id);
+  }
+
+  markContactOffered(id: string): void {
+    const entry = this.entries.get(id);
+    if (entry) entry.session.contactOffered = true;
   }
 
   recordEstimate(id: string, card: EstimateCard): void {

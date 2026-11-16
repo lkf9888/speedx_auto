@@ -96,7 +96,7 @@ export function composeFollowUpEmail(
 ): OutgoingEmail {
   const asked = session.transcript.some((line) => line.role === "user");
   const vehicle = session.estimates[0]?.vehicle ?? "";
-  const subject = `【网站估价线索】${session.lead?.name ?? ""} ${session.lead?.phone ?? ""}${vehicle ? ` · ${vehicle}` : ""}`;
+  const subject = `【网站估价线索】${session.lead?.name ?? ""} ${session.lead?.phone || session.lead?.email || ""}${vehicle ? ` · ${vehicle}` : ""}`;
   const lines = [
     "网站维修估价助手有一位客户需要回访。",
     "",
@@ -183,7 +183,7 @@ export function composeCallbackEmail(lead: Lead, locale: string, session: ChatSe
   const transcript = session?.transcript ?? [];
   const vehicle = session?.estimates[0]?.vehicle ?? "";
   return {
-    subject: `【网站回电请求】${lead.name} ${lead.phone}${vehicle ? ` · ${vehicle}` : ""}`,
+    subject: `【网站回电请求】${lead.name} ${lead.phone || lead.email || ""}${vehicle ? ` · ${vehicle}` : ""}`,
     text: [
       "网站维修估价助手上有客户请师傅回电，请尽快致电（或 WhatsApp / 微信）联系。",
       "",

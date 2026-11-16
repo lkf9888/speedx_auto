@@ -180,7 +180,8 @@ export const en = {
       invalidWechat: "Please check your WeChat ID (letters, numbers, - and _ only).",
       invalidEmail: "Please check your email address.",
       callbackTitle: "Have a mechanic call you",
-      callbackIntro: "Leave your phone number and the shop will call you back as soon as it can.",
+      callbackIntro: "Leave your phone number or email and the shop will send you the price as soon as it can.",
+      invalidContact: "Please leave a phone number or an email.",
       callbackSubmit: "Call me back",
     },
     callback: {

@@ -37,11 +37,16 @@ const MAX_MESSAGE = 1500;
 const MAX_TURN_TEXT = 4000;
 const ALLOWED_ORIGINS = [/^https:\/\/(www\.)?speedxrental\.com$/, /^http:\/\/localhost(:\d+)?$/];
 
+/** Customer answers the assistant may take before it stops asking and invites a phone or email. */
+export const ASK_CONTACT_AFTER = 2;
+
 export type StreamEvent =
   | ChatEvent
   | { type: "message"; text: string }
   /** The reply is held until the browser collects name and phone (for an estimate or an appointment). */
   | { type: "lead_required"; reason: "estimate" | "appointment" }
+  /** The assistant asked the visitor to leave a phone or email: the page opens the contact form. */
+  | { type: "contact_offer" }
   /** Over today's limit: the reply is the fixed "please call us" text. */
   | { type: "capped" }
   | { type: "session"; id: string }
@@ -70,7 +75,7 @@ export function parseBody(raw: unknown): ChatRequestBody | null {
   if (!raw || typeof raw !== "object") return null;
   const body = raw as Record<string, unknown>;
   if (typeof body.locale !== "string" || !(locales as readonly string[]).includes(body.locale)) return null;
-  const lead = body.lead == null ? null : parseLead(body.lead, { nameOptional: true });
+  const lead = body.lead == null ? null : parseLead(body.lead, { nameOptional: true, phoneOptional: true });
   if (body.lead != null && !lead) return null;
   if (typeof body.message !== "string") return null;
   const attached = parseAttachments(body.photos);
@@ -270,7 +275,7 @@ export async function handleLead(
   } catch {
     raw = null;
   }
-  const lead = parseLead(raw?.lead, { nameOptional: true });
+  const lead = parseLead(raw?.lead, { nameOptional: true, phoneOptional: raw?.reason === "callback" });
   const locale = typeof raw?.locale === "string" && (locales as readonly string[]).includes(raw.locale) ? raw.locale : null;
   if (!lead || !locale) return Response.json({ error: "invalid" }, { status: 400 });
   if (isEvalRequest(request)) return Response.json({ ok: true, sessionId: null, pending: null });
@@ -411,6 +416,8 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
   // Staff follow up from the workbench; test runs and visitors over the limit aren't copied.
   const inbox = evaluation || capped ? null : (deps.inbox?.() ?? null);
   inbox?.asking(session.thread);
+  // Two answers given, still no price, no contact yet: the assistant stops asking and invites a phone or email (Kevin, 2026-11-16).
+  const askForContact = !evaluation && !capped && !session.lead && !session.contactOffered && session.estimates.length === 0 && session.transcript.filter((t) => t.role === "user").length > ASK_CONTACT_AFTER;
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -476,6 +483,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
             locale: request_.locale,
             vehicleKey: request_.vehicleKey,
             attachments: request_.photos.length ? attachmentBlocks(request_.photos) : undefined,
+            ...(askForContact ? { askForContact: true } : {}),
           },
           send,
           () => `E-${randomBytes(4).toString("hex").toUpperCase()}`,
@@ -492,6 +500,11 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
           sessions.holdReply(session.id, { text: result.text, estimates: held });
           send({ type: "lead_required", reason: held.length > 0 ? "estimate" : "appointment" });
         } else {
+          // Offered only when this reply really didn't price anything.
+          if (askForContact && shown.length === 0) {
+            sessions.markContactOffered(session.id);
+            send({ type: "contact_offer" });
+          }
           send({ type: "message", text: result.text });
         }
         copyToWorkbench(result.text);

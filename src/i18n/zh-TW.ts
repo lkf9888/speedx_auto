@@ -181,7 +181,8 @@ export const zhTW: Dictionary = {
       invalidWechat: "請檢查微信號（只能有字母、數字、- 和 _）。",
       invalidEmail: "請檢查電郵地址。",
       callbackTitle: "請師傅給您回電",
-      callbackIntro: "留下電話，店裡會盡快給您打過來。",
+      callbackIntro: "留下電話或電郵，店裡會盡快把報價傳給您。",
+      invalidContact: "請留下電話或電郵。",
       callbackSubmit: "請師傅回電",
     },
     callback: {

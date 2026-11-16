@@ -24,24 +24,29 @@ export const NO_NAME = "未留姓名";
 const EMAIL = /^[^\s@<>]{1,64}@[^\s@<>]+\.[^\s@<>]{2,}$/;
 const WECHAT = /^[A-Za-z0-9_+.-]{1,40}$/;
 
-export function parseLead(raw: unknown, options: { nameOptional?: boolean } = {}): Lead | null {
+export function parseLead(raw: unknown, options: { nameOptional?: boolean; phoneOptional?: boolean } = {}): Lead | null {
   if (!raw || typeof raw !== "object") return null;
   const { name, phone, wechat, email } = raw as Record<string, unknown>;
-  if (typeof phone !== "string") return null;
+  // A callback may leave an email instead of a phone number (Kevin, 2026-11-16); then the email must be valid.
+  const noPhone = options.phoneOptional && (phone === undefined || phone === null || (typeof phone === "string" && phone.trim() === ""));
+  if (!noPhone && typeof phone !== "string") return null;
   if (name !== undefined && name !== null && typeof name !== "string") return null;
   const typed = (typeof name === "string" ? name : "").replace(/\s+/g, " ").trim();
   // The name may be left out where the form says so; staff then see NO_NAME.
   const cleanName = typed || (options.nameOptional ? NO_NAME : "");
   if (cleanName.length < 1 || cleanName.length > 60 || /[<>{}\\]/.test(cleanName)) return null;
-  const cleanPhone = phone.trim();
-  if (cleanPhone.length > 25 || !/^\+?[\d\s().-]+$/.test(cleanPhone)) return null;
-  const digits = cleanPhone.replace(/\D/g, "");
-  if (digits.length < 10 || digits.length > 15) return null;
+  const cleanPhone = noPhone ? "" : (phone as string).trim();
+  if (!noPhone) {
+    if (cleanPhone.length > 25 || !/^\+?[\d\s().-]+$/.test(cleanPhone)) return null;
+    const digits = cleanPhone.replace(/\D/g, "");
+    if (digits.length < 10 || digits.length > 15) return null;
+  }
   // Optional fields: empty means not given; anything else must look right.
   const cleanWechat = typeof wechat === "string" ? wechat.trim() : "";
   const cleanEmail = typeof email === "string" ? email.trim() : "";
   if (cleanWechat && !WECHAT.test(cleanWechat)) return null;
   if (cleanEmail && (cleanEmail.length > 120 || !EMAIL.test(cleanEmail))) return null;
+  if (noPhone && !cleanEmail) return null;
   return { name: cleanName, phone: cleanPhone, ...(cleanWechat ? { wechat: cleanWechat } : {}), ...(cleanEmail ? { email: cleanEmail } : {}) };
 }
 
@@ -49,7 +54,7 @@ export function parseLead(raw: unknown, options: { nameOptional?: boolean } = {}
 export function contactLines(lead: Lead | null | undefined): string[] {
   return [
     `客户姓名：${lead?.name ?? "（未留）"}`,
-    `客户电话：${lead?.phone ?? "（未留）"}`,
+    `客户电话：${lead?.phone || "（未留）"}`,
     ...(lead?.wechat ? [`客户微信：${lead.wechat}`] : []),
     ...(lead?.email ? [`客户邮箱：${lead.email}`] : []),
   ];

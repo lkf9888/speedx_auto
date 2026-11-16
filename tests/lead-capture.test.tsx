@@ -226,3 +226,82 @@ describe("the lighter estimate form", () => {
     expect(firstName("Amy Lin")).toBe("Amy");
   });
 });
+
+// Kevin, 2026-11-16: after two answered questions with no price the assistant stops asking and invites a
+// phone number or email, because without contact details nobody can follow up.
+describe("asking for contact instead of a third question", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("takes an email without a phone on the callback form only", () => {
+    expect(parseLead({ name: "", email: "amy@example.com" }, { nameOptional: true, phoneOptional: true })).toEqual({ name: NO_NAME, phone: "", email: "amy@example.com" });
+    expect(parseLead({ phone: "" }, { nameOptional: true, phoneOptional: true })).toBeNull();
+    expect(parseLead({ email: "nope" }, { nameOptional: true, phoneOptional: true })).toBeNull();
+    expect(parseLead({ email: "amy@example.com" }, { nameOptional: true })).toBeNull();
+    expect(contactLines({ name: NO_NAME, phone: "", email: "amy@example.com" })).toContain("客户电话：（未留）");
+  });
+
+  it("tells the assistant not to ask a third question", async () => {
+    const { turnContext } = await import("@/lib/repair-chat/prompt");
+    expect(turnContext("en", null, "not sure", ["2010 civic", "right side"], new Date(), true)).toContain("Do NOT ask a third question");
+    expect(turnContext("en", null, "hi", [], new Date(), false)).not.toContain("third question");
+  });
+
+  it("opens the contact form under the reply and sends an email-only request", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/repair-lead") return Response.json({ ok: true, sessionId: SESSION, pending: null });
+      if (url === "/api/repair-booking") return Response.json({ days: [] });
+      return ndjson([{ type: "session", id: SESSION }, { type: "contact_offer" }, { type: "message", text: "The team will work out the price and send it to you. Leave a phone or email below." }, { type: "done" }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RepairChat locale="en" dict={en} pagePath="/en/auto-repair" />);
+    await userEvent.type(screen.getByLabelText(en.repairChat.placeholder), "cv boot 2010 civic{Enter}");
+    const form = await screen.findByTestId("callback-form");
+    expect(form).toHaveTextContent(en.repairChat.gate.callbackIntro);
+    // Neither phone nor email: refused with a plain message.
+    await userEvent.click(within(form).getByRole("button", { name: en.repairChat.gate.callbackSubmit }));
+    expect(await within(form).findByRole("alert")).toHaveTextContent(en.repairChat.gate.invalidContact);
+    await userEvent.type(within(form).getByLabelText(en.repairChat.gate.email), "amy@example.com");
+    await userEvent.click(within(form).getByRole("button", { name: en.repairChat.gate.callbackSubmit }));
+    expect(await screen.findByText(en.repairChat.callback.thanks)).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(([url]) => url === "/api/repair-lead") as unknown as [string, RequestInit];
+    expect(JSON.parse(call[1].body as string)).toMatchObject({ reason: "callback", lead: { phone: "", email: "amy@example.com" } });
+  });
+});
+
+describe("the server counts answers without a price", () => {
+  const catalog = { get: async () => ({}), post: async () => ({}) } as never;
+  function make(requests: string[]) {
+    const client = { beta: { messages: { create: async (params: unknown) => (requests.push(JSON.stringify(params)), { stop_reason: "end_turn", content: [{ type: "text", text: "Which side, and what engine?" }] } as never) } } };
+    return {
+      configured: () => true,
+      limiter: new RateLimiter(),
+      notify: async () => {},
+      sessions: new SessionStore(async () => {}),
+      catalog: () => catalog,
+      client: () => client as never,
+      houseRules: async () => [],
+    };
+  }
+  const chat = async (deps: ReturnType<typeof make>, message: string, sessionId: string | null) => {
+    const { handleChat } = await import("@/lib/repair-chat/http");
+    const text = await (await handleChat(new Request("https://speedxrental.com/api/repair-chat", { method: "POST", headers: { "Content-Type": "application/json", origin: "https://speedxrental.com" }, body: JSON.stringify({ locale: "en", history: [], message, vehicleKey: null, lead: null, sessionId }) }), deps as never)).text();
+    const events = text.trim().split("\n").map((l) => JSON.parse(l));
+    return { events, sessionId: events.find((e) => e.type === "session")?.id ?? sessionId };
+  };
+
+  it("invites contact on the third customer message, once, and not before", async () => {
+    const requests: string[] = [];
+    const deps = make(requests);
+    const one = await chat(deps, "cv boot 2010 civic", null);
+    const two = await chat(deps, "right side", one.sessionId);
+    expect(two.events.some((e) => e.type === "contact_offer")).toBe(false);
+    expect(requests.join()).not.toContain("third question");
+    const three = await chat(deps, "not sure", two.sessionId);
+    expect(three.events.some((e) => e.type === "contact_offer")).toBe(true);
+    expect(requests.at(-1)).toContain("Do NOT ask a third question");
+    // The customer keeps going: the assistant helps as usual, no second invitation.
+    const four = await chat(deps, "what about the engine", three.sessionId);
+    expect(four.events.some((e) => e.type === "contact_offer")).toBe(false);
+    expect(requests.at(-1)).not.toContain("third question");
+  });
+});

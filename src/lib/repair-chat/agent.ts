@@ -52,6 +52,8 @@ export interface ChatRequest {
   vehicleKey: string | null;
   /** Content blocks (photos, PDFs, file text) placed before the message; only the staff workbench sets this. */
   attachments?: Anthropic.Beta.BetaContentBlockParam[];
+  /** The customer has answered two questions and still has no price: don't ask a third, invite them to leave a phone or email (public chat only). */
+  askForContact?: boolean;
   /** The workbench conversation's chosen price (retail / referral / friend); only the staff workbench sets this. */
   priceTier?: string;
   /** Slider positions when priceTier is "custom"; only the staff workbench sets this. */
@@ -182,7 +184,7 @@ export const PUBLIC_PROFILE: ChatProfile<ChatEvent> = {
   effort: "low",
   system: SYSTEM_PROMPT,
   tools: TOOLS,
-  turnContext: (request, earlier, vehicle) => turnContext(request.locale, vehicle, request.message, earlier),
+  turnContext: (request, earlier, vehicle) => turnContext(request.locale, vehicle, request.message, earlier, new Date(), request.askForContact === true),
   runTool: (api, name, input, newEstimateId, cardLocale, knownVehicleKey) => publicTool(api, name, input, newEstimateId, cardLocale, knownVehicleKey),
   statusEvent: (name) => ({ type: "status", status: statusForTool(name) }),
   preface: (message, language) => safetyWarning(message, language),

@@ -146,6 +146,7 @@ export function turnContext(
   customerMessage = "",
   earlierCustomerMessages: string[] = [],
   now = new Date(),
+  askForContact = false,
 ): string {
   const language = detectCustomerLanguage(customerMessage, locale, earlierCustomerMessages);
   const lines = [
@@ -154,6 +155,11 @@ export function turnContext(
     `Turo hosting page for this language: https://speedxrental.com/${LANGUAGE_NAMES[locale] ? locale : "en"}/hosting`,
     `Today at the shop (Vancouver time): ${shopToday(now)}.`,
   ];
+  if (askForContact) {
+    lines.push(
+      "This customer has already answered two of your questions and still has no price. Do NOT ask a third question. If the tools can price the job with what you already know, do that. Otherwise say, in the customer's language and in two short sentences at most, that the team will work out the price and send it to them, and invite them to leave a phone number or email in the box shown under your message (never ask them to type it into the chat). If they keep asking afterwards, keep helping and price it whenever you can.",
+    );
+  }
   const concern = safetyConcern(customerMessage);
   if (concern) {
     lines.push(

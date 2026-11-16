@@ -193,12 +193,13 @@ function LeadGate({
     event.preventDefault();
     // The name is optional (Kevin, 2026-11-16): a phone number is enough.
     const cleanName = name.trim();
-    const digits = phoneDigits(phone);
-    if (digits < 10 || digits > 15 || !/^\+?[\d\s().-]+$/.test(phone.trim())) {
-      return setError(copy.gate.invalidPhone);
-    }
     const cleanWechat = wechat.trim();
     const cleanEmail = email.trim();
+    const digits = phoneDigits(phone);
+    // The callback form takes a phone number or an email; the other forms need the phone.
+    const phoneOk = digits >= 10 && digits <= 15 && /^\+?[\d\s().-]+$/.test(phone.trim());
+    if (callback && !phone.trim() && !cleanEmail) return setError(copy.gate.invalidContact);
+    if (!(callback && !phone.trim() && cleanEmail) && !phoneOk) return setError(copy.gate.invalidPhone);
     if (cleanWechat && !/^[A-Za-z0-9_+.-]{1,40}$/.test(cleanWechat)) return setError(copy.gate.invalidWechat);
     if (cleanEmail && !/^[^\s@<>]{1,64}@[^\s@<>]+\.[^\s@<>]{2,}$/.test(cleanEmail)) return setError(copy.gate.invalidEmail);
     setError(null);
@@ -544,6 +545,7 @@ export function RepairChat({
     let failure: keyof ChatCopy["errors"] | null = null;
     let nextVehicle = vehicle;
     let needsLead = false;
+    let offerContact = false;
     let gateReason: "estimate" | "appointment" = "estimate";
 
     try {
@@ -582,6 +584,7 @@ export function RepairChat({
               | { type: "message"; text: string }
               | { type: "session"; id: string }
               | { type: "lead_required"; reason?: "estimate" | "appointment" }
+              | { type: "contact_offer" }
               | { type: "capped" }
               | { type: "error"; code: "busy" | "unavailable" | "invalid" }
               | { type: "done" };
@@ -594,6 +597,7 @@ export function RepairChat({
               needsLead = true;
               gateReason = event.reason ?? "estimate";
             }
+            else if (event.type === "contact_offer") offerContact = true;
             else if (event.type === "capped") setCapped(true);
             else if (event.type === "error") failure = event.code === "busy" ? "busy" : "unavailable";
           }
@@ -608,7 +612,11 @@ export function RepairChat({
     setVehicle(nextVehicle);
     if (failure) appendReply(copy.errors[failure], estimates, true);
     else if (needsLead) setAwaitingLead(gateReason);
-    else appendReply(reply, estimates);
+    else {
+      appendReply(reply, estimates);
+      // The assistant just invited a phone or email: open the form under its reply.
+      if (offerContact && estimates.length === 0 && !lead) setCallbackOpen(true);
+    }
     setPending(false);
     setStatus(null);
   }
