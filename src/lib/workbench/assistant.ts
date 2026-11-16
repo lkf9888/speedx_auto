@@ -487,7 +487,7 @@ async function staffTires(size: string, season: string, wheelmart: () => Wheelma
   return [...fromList, ...fromWheelmart].sort((a, b) => a.retail - b.retail);
 }
 
-const quoteOutcome = (quote: StaffQuote) => ({
+const quoteOutcome = (quote: StaffQuote, othersUnchecked = false) => ({
   content: JSON.stringify({
     status: "ok",
     summary: summarizeStaffQuote(quote),
@@ -499,7 +499,7 @@ const quoteOutcome = (quote: StaffQuote) => ({
         }
       : {}),
     // No WorldPac local stock and no Westcan check at all (Nexpart couldn't match the vehicle or part): not "nobody has it".
-    ...(!quote.westcan && !quote.used && quote.kind === "labor" && quote.labor && !quote.options.some((o) => !o.outOfStock && !o.eta && o.partNumber)
+    ...(othersUnchecked
       ? { other_suppliers: "No WorldPac local stock, and Westcan and Lordco could NOT be checked for this part (their catalog didn't match this vehicle or part). Tell staff the other suppliers are unchecked, not out of stock, and that they should look there by hand. Never say no supplier has it." }
       : {}),
   }),
@@ -512,7 +512,11 @@ const quoteOutcome = (quote: StaffQuote) => ({
  * (a Porsche rotor is N1000 while its parts say ACES 1896); the parts WorldPac returned carry the ACES id, so it wins.
  */
 export function nexpartCategory(quote: Pick<StaffQuote, "options">, partCategory: string | undefined): string | undefined {
-  const aces = quote.options.map((o) => Number(o.fields?.acaPartTerminologyID)).find((n) => Number.isInteger(n) && n > 0);
+  // Only parts of the job's own category count: a rotor job's list can also carry pads (ACES 1684).
+  const aces = quote.options
+    .filter((o) => !partCategory || o.fields?.categoryCode === partCategory)
+    .map((o) => Number(o.fields?.acaPartTerminologyID))
+    .find((n) => Number.isInteger(n) && n > 0);
   return aces ? `N${aces}` : partCategory;
 }
 
@@ -681,7 +685,10 @@ export async function runWorkbenchTool(
         ? { ...job, laborHours: shared.chargedHours, laborNote: `与「${shared.otherName}」同时施工，工时按一半（原 ${job.laborHours} h → ${shared.chargedHours} h）。${job.laborNote}` }
         : { ...job, laborNote: `与「${shared.otherName}」同时施工：本项工时全收，对方按一半。${job.laborNote}` };
     const built = buildLaborQuote(describeVehicle(vehicle), charged, newEstimateId());
-    return quoteOutcome(await withWestcan(built, vehicle, quoted.partCategory, quoted.position, bothSides));
+    const checked = await withWestcan(built, vehicle, quoted.partCategory, quoted.position, bothSides);
+    // A part to buy, nothing local, and Nexpart never asked: unchecked, not "nobody has it".
+    const unchecked = !checked.westcan && Boolean(quoted.partCategory) && !checked.options.some((o) => !o.outOfStock && !o.eta && o.partNumber);
+    return quoteOutcome(checked, unchecked);
   }
   if (name === "quote_extra_part") {
     const vehicle = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;

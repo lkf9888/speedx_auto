@@ -247,6 +247,9 @@ describe("the category Nexpart is asked for", () => {
     const { nexpartCategory } = await import("@/lib/workbench/assistant");
     const porsche = { options: [{ fields: { categoryCode: "N1000", acaPartTerminologyID: 1896 } }] } as never;
     expect(nexpartCategory(porsche, "N1000")).toBe("N1896");
+    // A rotor job's list can also carry pads: only the job's own category counts.
+    const mixed = { options: [{ fields: { categoryCode: "N1010", acaPartTerminologyID: 1684 } }, { fields: { categoryCode: "N1000", acaPartTerminologyID: 1896 } }] } as never;
+    expect(nexpartCategory(mixed, "N1000")).toBe("N1896");
     expect(nexpartCategory({ options: [{ fields: {} }] } as never, "N1896")).toBe("N1896");
     expect(nexpartCategory({ options: [] } as never, undefined)).toBeUndefined();
   });
