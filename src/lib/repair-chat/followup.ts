@@ -212,7 +212,7 @@ export function composeBookingEmail(
   const estimates = session?.estimates ?? [];
   const vehicle = estimates[0]?.vehicle ?? "";
   return {
-    subject: `【网站预约请求】${lead.name} ${lead.phone} · ${bookingLabel(booking)}${vehicle ? ` · ${vehicle}` : ""}`,
+    subject: `【网站预约请求】${lead.name} ${lead.phone || lead.email || ""} · ${bookingLabel(booking)}${vehicle ? ` · ${vehicle}` : ""}`,
     text: [
       "网站维修估价助手收到一个预约请求，请致电或 WhatsApp 跟客户确认。",
       "",

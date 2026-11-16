@@ -305,3 +305,12 @@ describe("the server counts answers without a price", () => {
     expect(requests.at(-1)).not.toContain("third question");
   });
 });
+
+describe("review fixes for the contact invitation", () => {
+  it("an email-only visitor can still book", async () => {
+    const { handleBooking } = await import("@/lib/repair-chat/http");
+    expect(handleBooking).toBeTypeOf("function");
+    const { parseLead: parse } = await import("@/lib/repair-chat/lead");
+    expect(parse({ email: "amy@example.com" }, { nameOptional: true, phoneOptional: true })).toMatchObject({ phone: "", email: "amy@example.com" });
+  });
+});

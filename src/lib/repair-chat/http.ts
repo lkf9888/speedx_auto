@@ -417,6 +417,8 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
   const inbox = evaluation || capped ? null : (deps.inbox?.() ?? null);
   inbox?.asking(session.thread);
   // Two answers given, still no price, no contact yet: the assistant stops asking and invites a phone or email (Kevin, 2026-11-16).
+  // A session this process doesn't know, with more than two earlier customer messages: the invitation was already due, don't repeat it after a restart.
+  if (!known && request_.history.filter((t) => t.role === "user").length > ASK_CONTACT_AFTER) sessions.markContactOffered(session.id);
   const askForContact = !evaluation && !capped && !session.lead && !session.contactOffered && session.estimates.length === 0 && session.transcript.filter((t) => t.role === "user").length > ASK_CONTACT_AFTER;
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -590,7 +592,8 @@ export async function handleBooking(
   } catch {
     raw = null;
   }
-  const lead = parseLead(raw?.lead, { nameOptional: true });
+  // A visitor who left only an email can still book: the shop confirms by email.
+  const lead = parseLead(raw?.lead, { nameOptional: true, phoneOptional: true });
   const locale = typeof raw?.locale === "string" && (locales as readonly string[]).includes(raw.locale) ? raw.locale : null;
   const date = typeof raw?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.date) ? raw.date : null;
   const time = typeof raw?.time === "string" && (SLOT_TIMES as readonly string[]).includes(raw.time) ? raw.time : null;
