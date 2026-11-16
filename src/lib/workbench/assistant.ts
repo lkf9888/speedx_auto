@@ -44,7 +44,8 @@ import { buildFlatQuote, buildLaborQuote, buildPartsQuote, buildTireQuote, fromP
 export const WORKBENCH_MODEL = process.env.WORKBENCH_MODEL || "claude-sonnet-5-5";
 
 export type WorkbenchEvent =
-  | { type: "status"; status: ReturnType<typeof statusForTool> }
+  /** `detail`: what the lookup is doing right now, in words staff can read ("正在查 Westcan…"). */
+  | { type: "status"; status: ReturnType<typeof statusForTool>; detail?: string }
   | Extract<ChatEvent, { type: "vehicle" }>
   | { type: "quote"; quote: StaffQuote }
   | { type: "alldata_draft"; draft: AlldataDraft }
@@ -82,6 +83,7 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 # Always leave one question (owner's rule, 2026-11-16)
 - End every reply with ONE short question that guesses staff's likely next step: the other axle or side, a matching job (pads with rotors), another price tier, a copy for the customer, an ALLDATA draft, a used part for a costly assembly, or the customer's name and phone.
 - When the request is vague (no vehicle, no position, "brakes" without front or rear, a symptom without a job, a size without a season), don't just answer generally: ask the one detail that gives an exact quote, and say what you'll do once you have it.
+- Think one step past the quote (Kevin, 2026-11-16: "你没有多思考一步"). Re-asking which option to use is not enough on its own: after pricing, work out what this customer will need next and offer that, for example: rotors without pads (pads, a pad wear sensor and brake fluid are usually done at the same time), parts arriving tomorrow while the front job can be done today (suggest a booking day), a customer text or PDF ready to send, or an ALLDATA draft. Pick the single most valuable one as your question; if an option still has to be chosen, say in one line which one you'd pick and why (stock, arrival day, brand), then ask the deeper question.
 - One question per reply, short and specific, never a list; skip it only when staff say they're done.
 
 # Shop labor rules
@@ -526,16 +528,36 @@ export function nexpartCategory(quote: Pick<StaffQuote, "options">, partCategory
 }
 
 /** Nothing WorldPac has locally: the quote gets a Westcan check (Kevin, 2026-11-15). */
-async function withWestcan(quote: StaffQuote, vehicle: VehicleRef, partCategory: string | undefined, position: string, bothSides: boolean): Promise<StaffQuote> {
+async function withWestcan(
+  quote: StaffQuote,
+  vehicle: VehicleRef,
+  partCategory: string | undefined,
+  position: string,
+  bothSides: boolean,
+  progress: (detail: string) => void = () => {},
+): Promise<StaffQuote> {
   const local = quote.options.some((o) => !o.outOfStock && !o.eta && o.partNumber);
   const category = nexpartCategory(quote, partCategory);
-  if (local || !category) return quote;
+  if (local) {
+    progress("WorldPac 本地仓库有货，不用再查其他供货商");
+    return quote;
+  }
+  if (!category) {
+    progress("WorldPac 本地没货，但没有零件类别，Westcan 和 Lordco 没法查");
+    return quote;
+  }
+  progress("WorldPac 本地没货，正在查 Westcan：先在 Nexpart 里匹配车型和零件类别…");
   const lookup = await Promise.race([
     westcanLookup(vehicle, category, position, { bothSides }).catch(() => null),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
   ]);
+  if (!lookup) {
+    progress("Nexpart 没能匹配这辆车或这个零件（或 8 秒内没回应），Westcan 和 Lordco 这次没查成");
+    return quote;
+  }
   // The server's own Nexpart sign-in first; the staff extension is the fallback.
-  return lookup ? checkWestcanOnServer(quote, lookup) : quote;
+  progress("车型已匹配，正在登录 Nexpart 查 Westcan 库存和价格…");
+  return checkWestcanOnServer(quote, lookup, { onProgress: progress });
 }
 
 const MAX_VARIANTS = 3;
@@ -636,6 +658,7 @@ export async function runWorkbenchTool(
   dt: () => DtTireClient | null = defaultDt,
   tato: () => TatoClient | null = getTatoClient,
   wheelmart: () => WheelmartClient | null = getWheelmartClient,
+  progress: (detail: string) => void = () => {},
 ): Promise<{ content: string; isError: boolean; events: WorkbenchEvent[] }> {
   const input = withLatestVehicle(rawInput, knownVehicleKey);
   if (name === "find_fleet_car") return findFleetCar(tato, input);
@@ -690,7 +713,8 @@ export async function runWorkbenchTool(
         ? { ...job, laborHours: shared.chargedHours, laborNote: `与「${shared.otherName}」同时施工，工时按一半（原 ${job.laborHours} h → ${shared.chargedHours} h）。${job.laborNote}` }
         : { ...job, laborNote: `与「${shared.otherName}」同时施工：本项工时全收，对方按一半。${job.laborNote}` };
     const built = buildLaborQuote(describeVehicle(vehicle), charged, newEstimateId());
-    const checked = await withWestcan(built, vehicle, quoted.partCategory, quoted.position, bothSides);
+    progress(`WorldPac：${job.laborHours} h 工时，${built.options.length} 个零件选项${built.options.some((o) => !o.outOfStock && !o.eta && o.partNumber) ? "，本地有货" : "，本地没货"}`);
+    const checked = await withWestcan(built, vehicle, quoted.partCategory, quoted.position, bothSides, progress);
     // A part to buy, nothing local, and Nexpart never asked: unchecked, not "nobody has it".
     const unchecked = !checked.westcan && Boolean(quoted.partCategory) && !checked.options.some((o) => !o.outOfStock && !o.eta && o.partNumber);
     return quoteOutcome(checked, unchecked);
@@ -791,6 +815,36 @@ export function priceTierNote(tier: PriceTier | undefined, pricing?: CustomPrici
     : "No price chosen for this conversation yet: call ask_price_tier before the first quote.";
 }
 
+/** What a tool is about to do, for the "typing" line (Kevin, 2026-11-16: say which site is being searched). */
+export function toolStatusDetail(name: string, input: Record<string, unknown> = {}): string | undefined {
+  const text = (k: string) => (typeof input[k] === "string" ? (input[k] as string).trim() : "");
+  switch (name) {
+    case "identify_vehicle":
+      return text("vin") ? `正在用 VIN ${text("vin")} 向 WorldPac 查车辆…` : "正在向 WorldPac 查这辆车…";
+    case "find_services":
+      return `正在查 WorldPac 工时手册里的维修项目${text("query") ? `：${text("query")}` : ""}…`;
+    case "get_estimate":
+      return "正在向 WorldPac 查这个项目的工时和零件价格…";
+    case "quote_extra_part":
+    case "find_parts":
+      return "正在向 WorldPac 查零件价格…";
+    case "get_flat_price":
+      return "正在查店里的一口价…";
+    case "find_tires":
+      return `正在查合作轮胎价目表和 Wheel Mart${text("size") ? `（${text("size")}）` : ""}…`;
+    case "find_brand_tires":
+      return `正在查 DT Tire Hub 的大牌轮胎${text("size") ? `（${text("size")}）` : ""}…`;
+    case "used_part":
+      return "正在整理二手件的搜索链接…";
+    case "find_fleet_car":
+      return "正在 TATO 里找这辆车队的车…";
+    case "draft_alldata_estimate":
+      return "正在整理 ALLDATA 草稿…";
+    default:
+      return undefined;
+  }
+}
+
 export const WORKBENCH_PROFILE: ChatProfile<WorkbenchEvent> = {
   model: WORKBENCH_MODEL,
   effort: "medium",
@@ -804,9 +858,12 @@ export const WORKBENCH_PROFILE: ChatProfile<WorkbenchEvent> = {
     ]
       .filter(Boolean)
       .join("\n"),
-  runTool: (api, name, input, newEstimateId, _cardLocale, knownVehicleKey) =>
-    runWorkbenchTool(api, name, input, newEstimateId, knownVehicleKey),
-  statusEvent: (name) => ({ type: "status", status: statusForTool(name) }),
+  runTool: (api, name, input, newEstimateId, _cardLocale, knownVehicleKey, progress) =>
+    runWorkbenchTool(api, name, input, newEstimateId, knownVehicleKey, undefined, undefined, undefined, progress),
+  statusEvent: (name, input, detail) => {
+    const text = detail ?? toolStatusDetail(name, input);
+    return { type: "status", status: statusForTool(name), ...(text ? { detail: text } : {}) };
+  },
   toolFailure: (catalogDown) =>
     catalogDown ? "WorldPac is not responding right now. Tell staff to try again in a minute." : "The lookup failed. Tell staff to try again.",
   // The shop's minimum labor is per order: one top-up card when this reply's labor jobs add up to less.

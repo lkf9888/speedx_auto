@@ -216,3 +216,31 @@ describe("Lordco after Westcan", () => {
     warn.mockRestore();
   });
 });
+
+// Kevin, 2026-11-16: the "typing" line says which supplier is being asked and how it went.
+describe("progress while the suppliers are asked", () => {
+  const quote = () => buildLaborQuote("2019 Toyota Camry", { serviceName: "Brake Rotor R&R", position: "Front", laborHours: 1.5, laborNote: "", primaryPartName: "Brake Disc", otherPartNames: [], partsNote: "", partOptions: [] }, "W-1", {} as NodeJS.ProcessEnv);
+
+  it("reports Westcan's result", async () => {
+    const said: string[] = [];
+    const client = new WestcanClient({ username: "shop", password: "pw" }, fakeNexpart().fetchImpl);
+    await checkWestcanOnServer(quote(), lookup, { client: () => client, lordco: () => null, onProgress: (d) => said.push(d) });
+    expect(said).toEqual(["Westcan：找到 1 个可用零件"]);
+  });
+
+  it("says why Westcan failed, without account details", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const client = new WestcanClient({ username: "shop", password: "bad" }, fakeNexpart({ loginOutcome: "wrong" }).fetchImpl);
+    const said: string[] = [];
+    await checkWestcanOnServer(quote(), lookup, { client: () => client, onProgress: (d) => said.push(d) });
+    expect(said).toEqual(["Westcan 这次没查成：登录被拒绝（账号或密码不对），改由 Chrome 扩展再试"]);
+    expect(said.join()).not.toMatch(/bad|shop/);
+    warn.mockRestore();
+  });
+
+  it("says when the server has no account", async () => {
+    const said: string[] = [];
+    await checkWestcanOnServer(quote(), lookup, { client: () => null, onProgress: (d) => said.push(d) });
+    expect(said[0]).toContain("Chrome 扩展");
+  });
+});

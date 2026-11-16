@@ -5,7 +5,7 @@ import { optionLinks, type ProductLink } from "@/lib/workbench/links";
 import { finalCustomerText, priceOption, withFinalPrices } from "@/lib/workbench/final-price";
 import { staffName } from "@/lib/workbench/conversation-types";
 import { atTier, describePricing, noFriendPrice, TIER_LABEL, tierLabor, tierMarkup, type CustomPricing, type PriceTier } from "@/lib/workbench/price-tier";
-import type { StaffQuote, StaffQuoteOption } from "@/lib/workbench/quote";
+import { supplierLabel, type StaffQuote, type StaffQuoteOption } from "@/lib/workbench/quote";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 const money = (value: number | null) => (value === null ? "—" : usd.format(value));
@@ -335,6 +335,11 @@ export function StaffQuoteCard({
                     {o.eta && (
                       <div data-testid="eta" className="mt-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
                         {o.source === "used" ? "二手件到货" : o.source ? "其他分店调货" : "本地没货，调货"} · {o.eta}
+                      </div>
+                    )}
+                    {supplierLabel(quote, o) && o.source !== "westcan" && o.source !== "lordco" && o.source !== "used" && (
+                      <div data-testid="supplier-badge" className="mt-0.5 mr-1 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                        供应商：{supplierLabel(quote, o)}
                       </div>
                     )}
                     {o.core !== null && <div className="text-xs text-amber-700">核心件押金 {money(o.core)}</div>}

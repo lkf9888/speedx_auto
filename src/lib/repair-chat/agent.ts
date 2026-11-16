@@ -81,8 +81,10 @@ export interface ChatProfile<E extends { type: string }> {
     newEstimateId: () => string,
     cardLocale: "en" | "zh-CN" | "zh-TW",
     knownVehicleKey: string | null,
+    /** Says what the lookup is doing right now (workbench: which supplier is being asked, and how it went). */
+    progress?: (detail: string) => void,
   ): Promise<{ content: string; isError: boolean; events: E[] }>;
-  statusEvent(toolName: string): E;
+  statusEvent(toolName: string, input?: Record<string, unknown>, detail?: string): E;
   /** Fixed text shown above the reply (public: safety warning). */
   preface?(message: string, language: string): string | null;
   /** Last check on the reply text before it is shown (public: no hourly labor rate). */
@@ -295,7 +297,8 @@ export async function runChat<E extends { type: string } = ChatEvent>(
         | { vehicle?: { key?: string } }
         | undefined;
       const knownVehicleKey = lastVehicle?.vehicle?.key ?? request.vehicleKey;
-      emit(profile.statusEvent(use.name));
+      const toolInput = (use.input ?? {}) as Record<string, unknown>;
+      emit(profile.statusEvent(use.name, toolInput));
       try {
         const outcome = await profile.runTool(
           api,
@@ -304,6 +307,7 @@ export async function runChat<E extends { type: string } = ChatEvent>(
           newEstimateId,
           cardLocale,
           knownVehicleKey,
+          (detail) => emit(profile.statusEvent(use.name, toolInput, detail)),
         );
         outcome.events.forEach(emit);
         onTool?.(use.name, use.input, outcome.content);

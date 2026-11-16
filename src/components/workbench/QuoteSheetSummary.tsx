@@ -17,7 +17,7 @@ import {
   type CustomPricing,
   type PriceTier,
 } from "@/lib/workbench/price-tier";
-import type { StaffQuote } from "@/lib/workbench/quote";
+import { supplierLabel, type StaffQuote } from "@/lib/workbench/quote";
 import { taxOn } from "@/lib/workbench/tax";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
@@ -183,12 +183,12 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
                     {options.map((o) => (
                       <option key={o.key} value={o.key}>
                         {o.note ? `${o.note} · ` : ""}
-                        {optionName(o.option)} · {money(o.option.customerTotal)}
+                        {optionName(o.option)} · {supplierLabel(o.quote, o.option) || ""} · {money(o.option.customerTotal)}
                       </option>
                     ))}
                   </select>
                 ) : (
-                  <span className="min-w-0 flex-1 truncate text-xs text-ink-600">{optionName(options[0].option)}</span>
+                  <span data-testid="sheet-supplier" className="min-w-0 flex-1 truncate text-xs text-ink-600">{optionName(options[0].option)} · {supplierLabel(options[0].quote, options[0].option)}</span>
                 )}
                 <span className="w-24 shrink-0 text-right font-semibold tabular-nums text-ink-900">{chosen ? money(chosen.option.customerTotal) : "—"}</span>
                 {(() => {

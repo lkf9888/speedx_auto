@@ -217,3 +217,47 @@ describe("public assistant: fixes from the chat review", () => {
     expect(SYSTEM_PROMPT).toContain("Don't state the minimum's own dollar amount");
   });
 });
+
+// Kevin, 2026-11-16, from a shared Cayenne chat: the sheet in the chat didn't say which supplier a part comes from,
+// the typing line was generic, and the assistant only re-asked which option to use.
+describe("supplier on the chat quote sheet and cards", () => {
+  it("names the supplier for each kind of option", async () => {
+    const { supplierLabel } = await import("@/lib/workbench/quote");
+    const w = { supplier: "worldpac" as const };
+    expect(supplierLabel(w, {})).toBe("WorldPac · 本地有货");
+    expect(supplierLabel(w, { eta: "明天到" })).toBe("WorldPac · 调货");
+    expect(supplierLabel(w, { source: "westcan" })).toBe("Westcan · Richmond 有货");
+    expect(supplierLabel(w, { source: "lordco", eta: "明天到" })).toBe("Lordco · 其他分店调货");
+    expect(supplierLabel({ supplier: "dt" }, {})).toBe("DT Tire Hub");
+    expect(supplierLabel({ supplier: "shop" }, {})).toBe("店内一口价");
+  });
+
+  it("shows it on the staff card and the sheet but never in the customer copy", async () => {
+    const { QuoteSheetSummary } = await import("@/components/workbench/QuoteSheetSummary");
+    const quote = buildLaborQuote("2019 Toyota Camry", { serviceName: "Brake Rotor R&R", position: "Front", laborHours: 1, laborNote: "", primaryPartName: "Brake Disc", otherPartNames: [], partsNote: "", partOptions: [part(200, 100)] }, "W-1", env);
+    render(<StaffQuoteCard quote={quote} tier="retail" />);
+    expect(screen.getByTestId("supplier-badge")).toHaveTextContent("供应商：WorldPac · 本地有货");
+    render(<QuoteSheetSummary quotes={[quote]} tier="retail" />);
+    expect(screen.getByTestId("sheet-supplier")).toHaveTextContent("WorldPac · 本地有货");
+    expect(quote.customerText).not.toMatch(/WorldPac|Westcan|Lordco/);
+  });
+});
+
+describe("the typing line", () => {
+  it("says what each lookup is doing", async () => {
+    const { toolStatusDetail, WORKBENCH_PROFILE } = await import("@/lib/workbench/assistant");
+    expect(toolStatusDetail("get_estimate")).toContain("WorldPac");
+    expect(toolStatusDetail("find_tires", { size: "225/65R17" })).toContain("225/65R17");
+    expect(toolStatusDetail("find_brand_tires")).toContain("DT Tire Hub");
+    expect(toolStatusDetail("something_else")).toBeUndefined();
+    expect(WORKBENCH_PROFILE.statusEvent("get_estimate", {}, "Westcan：没有可用零件")).toEqual({ type: "status", status: "estimate", detail: "Westcan：没有可用零件" });
+  });
+
+  it("the prompts ask for a question one step past the quote", async () => {
+    const { WORKBENCH_PROMPT } = await import("@/lib/workbench/assistant");
+    const { SYSTEM_PROMPT } = await import("@/lib/repair-chat/prompt");
+    expect(WORKBENCH_PROMPT).toContain("Think one step past the quote");
+    expect(WORKBENCH_PROMPT).toContain("pads");
+    expect(SYSTEM_PROMPT).toContain("Think one step past the answer");
+  });
+});

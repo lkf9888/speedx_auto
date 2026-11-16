@@ -208,7 +208,7 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
         else if (event.type === "vehicle") reply.vehicle = event.vehicle;
         else if (event.type === "price_choice") reply.priceChoice = true;
         else if (event.type === "price_tier") reply.tier = event.tier;
-        else if (event.type === "status" && store && conversationId) store.pending.set(conversationId, { by: user.email, status: event.status, since: Date.now() });
+        else if (event.type === "status" && store && conversationId) store.pending.set(conversationId, { by: user.email, status: event.detail ?? event.status, since: Date.now() });
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       };
       try {

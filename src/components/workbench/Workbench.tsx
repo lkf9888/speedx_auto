@@ -591,7 +591,7 @@ export function Workbench({ email }: { email: string }) {
             newline = buffer.indexOf("\n");
             if (!line) continue;
             const event = JSON.parse(line) as
-              | { type: "status"; status: string }
+              | { type: "status"; status: string; detail?: string }
               | { type: "vehicle"; vehicle: { key: string; label: string } }
               | { type: "quote"; quote: StaffQuote }
               | { type: "alldata_draft"; draft: AlldataDraft }
@@ -602,7 +602,7 @@ export function Workbench({ email }: { email: string }) {
               | { type: "saved"; turns: Turn[] }
               | { type: "error"; code: "busy" | "unavailable" }
               | { type: "done" };
-            if (event.type === "status") setPending((p) => ({ ...p, [id]: event.status }));
+            if (event.type === "status") setPending((p) => ({ ...p, [id]: event.detail ?? event.status }));
             else if (event.type === "vehicle") nextVehicle = event.vehicle;
             else if (event.type === "quote") quotes.push(event.quote);
             else if (event.type === "alldata_draft") drafts.push(event.draft);
@@ -1062,7 +1062,7 @@ export function Workbench({ email }: { email: string }) {
                   <i />
                 </span>
                 {pendingBy ? `${staffName(pendingBy)} 的问题：` : ""}
-                {STATUS[activePending] ?? STATUS.thinking}
+                {STATUS[activePending] ?? activePending}
               </div>
             )}
             <div ref={endRef} />
