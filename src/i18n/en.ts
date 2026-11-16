@@ -171,7 +171,7 @@ export const en = {
       appointmentTitle: "Where can the shop reach you?",
       appointmentIntro: "Leave your phone number so the shop can confirm your appointment time.",
       appointmentSubmit: "Send my request",
-      consent: "By continuing, you agree SPEEDX AUTO may contact you about this estimate. Your contact details are not shared with the AI service.",
+      consent: "By continuing, you agree SPEEDX AUTO may contact you about this estimate by phone, WhatsApp or text message; reply STOP any time to opt out. Your contact details are not shared with the AI service.",
       invalidName: "Please enter your name.",
       invalidPhone: "Please enter a valid phone number (at least 10 digits).",
       failed: "Couldn't show the estimate. Please try again, or message us on WhatsApp.",

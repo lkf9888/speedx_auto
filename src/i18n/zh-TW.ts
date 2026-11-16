@@ -172,7 +172,7 @@ export const zhTW: Dictionary = {
       appointmentTitle: "店裡怎麼聯絡您？",
       appointmentIntro: "留下電話，店裡好跟您確認預約時間。",
       appointmentSubmit: "送出預約",
-      consent: "繼續即表示您同意 SPEEDX AUTO 就本次估價與您聯絡。您的聯絡方式不會提供給人工智慧服務。",
+      consent: "繼續即表示您同意 SPEEDX AUTO 就本次估價透過電話、WhatsApp 或簡訊與您聯絡；回覆 STOP 可隨時退訂。您的聯絡方式不會提供給人工智慧服務。",
       invalidName: "請輸入您的姓名。",
       invalidPhone: "請輸入有效的電話號碼（至少 10 位數字）。",
       failed: "暫時無法顯示報價，請重試，或透過 WhatsApp 聯絡我們。",

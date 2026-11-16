@@ -58,6 +58,8 @@ function visitor(contact: WebsiteContact, previous?: WebsiteVisitor, now = Date.
     locale: contact.locale,
     ...(booking ? { booking } : {}),
     ...(callbackAt ? { callbackAt } : {}),
+    // The form's consent line (WhatsApp / SMS replies) is shown with the number; remember when it was given.
+    ...(previous?.consentAt ? { consentAt: previous.consentAt } : contact.phone ? { consentAt: now } : {}),
   };
 }
 

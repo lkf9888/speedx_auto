@@ -27,6 +27,8 @@ import { AlldataDraftCard } from "./AlldataDraftCard";
 import { distinctJobs, PriceChoiceCard, QuoteSheetSummary, type PriceChoice } from "./QuoteSheetSummary";
 import { StaffQuoteCard } from "./StaffQuoteCard";
 import { bridgeErrorText, callAlldata, BridgeError } from "@/lib/workbench/alldata-bridge";
+import type { ChannelsReady } from "@/lib/messaging/plan";
+import { ChannelBadge, CustomerMessageBox } from "./CustomerMessageBox";
 import { WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
 
 type Turn = SharedTurn;
@@ -165,6 +167,15 @@ export function Workbench({ email }: { email: string }) {
   const [showRules, setShowRules] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showFollowUp, setShowFollowUp] = useState(false);
+  /** Whether WhatsApp and SMS are set up on the server (asked once). */
+  const [channels, setChannels] = useState<ChannelsReady | null>(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    fetch("/api/workbench/messaging")
+      .then((response) => (response.ok ? (response.json() as Promise<{ ready: ChannelsReady }>) : null))
+      .then((data) => data && setChannels(data.ready))
+      .catch(() => undefined);
+  }, [hydrated]);
   const connection = useConnectionSummary();
   /** Right-click (or ⋯) menu on a conversation, and whether the list shows the archived ones. */
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -959,6 +970,18 @@ export function Workbench({ email }: { email: string }) {
                     <p className="text-xs font-semibold text-[#c2410c]">🌐 {active.website?.name || "网站客人"}</p>
                     {turn.attachments?.length ? <SentFiles files={turn.attachments} /> : null}
                     {turn.text && <p className="whitespace-pre-wrap">{turn.text}</p>}
+                    <ChannelBadge turn={turn} />
+                    <Meta at={turn.at} />
+                  </div>
+                </div>
+              ) : turn.role === "user" && turn.channel && turn.delivery ? (
+                <div key={turn.id ?? index} className="flex justify-end" data-side="right">
+                  <div className="wa-bubble wa-bubble-out max-w-[85%] sm:max-w-[70%]" data-testid="customer-outbound">
+                    <p className="text-xs font-semibold" style={{ color: nameColour(turn.author) }}>
+                      {turn.author === email ? "你" : staffName(turn.author)}
+                    </p>
+                    <p className="whitespace-pre-wrap">{turn.text}</p>
+                    <ChannelBadge turn={turn} />
                     <Meta at={turn.at} />
                   </div>
                 </div>
@@ -1068,6 +1091,14 @@ export function Workbench({ email }: { email: string }) {
             <div ref={endRef} />
           </main>
 
+          {active.website?.phone && currentId && (
+            <CustomerMessageBox
+              key={active.id}
+              conversation={active}
+              ready={channels}
+              onSent={(turn) => patchLocal(active.id, (c) => ({ ...c, turns: [...c.turns, turn] }))}
+            />
+          )}
           <form onSubmit={onSubmit} className="bg-[color:var(--wb-header)] px-3 py-2">
             {(files.length > 0 || fileNotice) && (
               <div className="mb-2 flex flex-wrap items-center gap-2">

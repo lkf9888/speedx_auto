@@ -106,7 +106,15 @@ export function historyFromTurns(turns: Turn[]): ChatTurn[] {
       role: t.role,
       // Earlier files aren't sent again; the model is told they existed.
       text: [
-        t.source === "website" ? (t.role === "user" ? "[网站客人在公开估价页上问]" : "[网站 AI 客服回复客人]") : "",
+        t.source === "website"
+          ? t.channel
+            ? t.author === "website"
+              ? `[客人通过${t.channel === "whatsapp" ? " WhatsApp " : "短信"}回复]`
+              : `[员工已通过${t.channel === "whatsapp" ? " WhatsApp " : "短信"}发给客人，不是对你的提问]`
+            : t.role === "user"
+              ? "[网站客人在公开估价页上问]"
+              : "[网站 AI 客服回复客人]"
+          : "",
         t.text,
         t.attachments?.length ? `[附件：${t.attachments.map((a) => a.name).join("、")}]` : "",
         ...(t.estimates ?? []).map(websiteCardLine),

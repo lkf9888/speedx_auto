@@ -104,6 +104,18 @@ export class ConversationStore {
     return (await this.all()).get(id) ?? null;
   }
 
+  /** The newest conversation whose website customer has this phone number (compared with `same`). */
+  async findByPhone(same: (phone: string) => boolean): Promise<Conversation | null> {
+    const found = [...(await this.all()).values()].filter((c) => c.website?.phone && same(c.website.phone));
+    return found.sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+  }
+
+  /** The conversation holding a message the provider knows by this id (to apply its delivery reports). */
+  async findByMessageId(messageId: string): Promise<Conversation | null> {
+    for (const c of (await this.all()).values()) if (c.turns.some((t) => t.delivery?.id === messageId || t.id === messageId)) return c;
+    return null;
+  }
+
   /** Change one conversation at a time, then write it once. Creates it when `create` is given. */
   async change(id: string, by: string, edit: (c: Conversation) => Conversation | void, create = false): Promise<Conversation> {
     const previous = this.locks.get(id) ?? Promise.resolve();

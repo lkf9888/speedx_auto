@@ -36,8 +36,37 @@ export interface Turn {
   estimates?: EstimateCard[];
   /** The reply waits for the customer's name and phone: they haven't seen it yet. */
   held?: boolean;
+  /** WhatsApp / SMS (2026-11-16): the channel a message to or from the customer went through. */
+  channel?: MessageChannel;
+  /** A message staff sent to the customer's phone: who sent it is `author`; this says how it went. */
+  delivery?: Delivery;
   /** The assistant asked which price to quote; the card shows the choices. */
   priceChoice?: boolean;
+}
+
+export type MessageChannel = "whatsapp" | "sms";
+
+/** How a message staff sent to the customer's phone is doing. */
+export interface Delivery {
+  status: "sent" | "delivered" | "read" | "failed";
+  /** The provider's message id, to match its status reports. */
+  id?: string;
+  /** Short reason when it failed (no account details). */
+  error?: string;
+  /** A WhatsApp message that couldn't be delivered was sent again as an SMS. */
+  resentAsSms?: boolean;
+}
+
+/** What is known about reaching the customer's phone. */
+export interface Messaging {
+  /** When the customer last wrote to us on WhatsApp: free replies are allowed for 24 hours after. */
+  lastWhatsAppInboundAt?: number;
+  /** The customer wrote or got a message through WhatsApp, so the number is on it. */
+  whatsappWorks?: boolean;
+  /** WhatsApp failed for this number: use SMS. */
+  smsOnly?: boolean;
+  /** The customer asked us to stop (STOP / 退订): nothing more is sent. */
+  optedOut?: boolean;
 }
 
 export type Vehicle = { key: string; label: string } | null;
@@ -63,6 +92,8 @@ export interface Conversation {
   shares?: ShareLink[];
   /** Follow-up offers sent to (or logged for) a website customer. */
   followUps?: FollowUpRecord[];
+  /** Messaging with the customer's phone: windows, channel, opt-out. */
+  messaging?: Messaging;
 }
 
 /** A no-login link to a snapshot of a conversation; it stops working at expiresAt. */
@@ -83,6 +114,8 @@ export interface WebsiteVisitor {
   booking?: { date: string; time: string };
   /** When the customer asked to be called back. */
   callbackAt?: number;
+  /** When they left the number on the form that says staff may answer by WhatsApp or SMS. */
+  consentAt?: number;
 }
 
 export interface ConversationSummary {

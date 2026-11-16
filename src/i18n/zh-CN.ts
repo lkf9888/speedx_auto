@@ -172,7 +172,7 @@ export const zhCN: Dictionary = {
       appointmentTitle: "店里怎么联系您？",
       appointmentIntro: "留下电话，店里好跟您确认预约时间。",
       appointmentSubmit: "提交预约",
-      consent: "继续即表示您同意 SPEEDX AUTO 就本次估价与您联系。您的联系方式不会提供给人工智能服务。",
+      consent: "继续即表示您同意 SPEEDX AUTO 就本次估价通过电话、WhatsApp 或短信与您联系；回复 STOP 可随时退订。您的联系方式不会提供给人工智能服务。",
       invalidName: "请输入您的姓名。",
       invalidPhone: "请输入有效的电话号码（至少 10 位数字）。",
       failed: "暂时无法显示报价，请重试，或通过 WhatsApp 联系我们。",
