@@ -17,6 +17,7 @@ import {
   type CustomPricing,
   type PriceTier,
 } from "@/lib/workbench/price-tier";
+import { orderLine } from "@/lib/workbench/links";
 import { supplierLabel, type StaffQuote } from "@/lib/workbench/quote";
 import { taxOn } from "@/lib/workbench/tax";
 
@@ -102,6 +103,19 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
     "以上为参考价，最终以到店检查为准。",
     `报价编号 ${priced.map((l) => l.chosen!.quote.id).join(" / ")}`,
   ].join("\n");
+  // Parts to order (Kevin, 2026-11-16): the chosen option of each job, grouped by supplier. Staff only: it carries the cost.
+  const orderRows = priced.flatMap((l) => {
+    const o = l.chosen!.option;
+    const q = l.chosen!.quote;
+    return q.kind === "labor" && o.partNumber && o.source !== "used" && !o.outOfStock ? [{ supplier: (supplierLabel(q, o) || "供货商未知").split(" · ")[0], line: orderLine(q, o), job: l.name }] : [];
+  });
+  const orderText = [
+    "【订货单（内部，含进价，别发给客人）】",
+    `车辆：${vehicle}`,
+    ...[...new Set(orderRows.map((r) => r.supplier))].flatMap((supplier) => [`■ ${supplier}`, ...orderRows.filter((r) => r.supplier === supplier).map((r) => `  - ${r.job}：${r.line}`)]),
+    "（在供货商页面搜零件号、加购物车、核对后自己提交；这里不会替你下单。）",
+  ].join("\n");
+  const [orderCopied, setOrderCopied] = useState<"idle" | "done" | "failed">("idle");
   const [pdf, setPdf] = useState<"idle" | "making" | "failed">("idle");
   const [image, setImage] = useState<"idle" | "making" | "failed">("idle");
   const sheetFor = () => ({
@@ -214,6 +228,18 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
         >
           复制报价给客人
         </button>
+        {orderRows.length > 0 && (
+          <button
+            type="button"
+            data-testid="copy-order-list"
+            onClick={() => void navigator.clipboard.writeText(orderText).then(() => setOrderCopied("done"), () => setOrderCopied("failed"))}
+            className="rounded-full border border-amber-600 px-4 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+          >
+            复制订货单（内部，含进价）
+          </button>
+        )}
+        {orderCopied === "done" && <span className="text-xs text-emerald-700">订货单已复制（含进价，别发给客人）</span>}
+        {orderCopied === "failed" && <span className="text-xs text-amber-700">浏览器不让复制订货单</span>}
         <button
           type="button"
           onClick={() => void makePdf()}

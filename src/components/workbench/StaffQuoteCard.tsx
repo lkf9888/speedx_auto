@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { optionLinks, type ProductLink } from "@/lib/workbench/links";
+import { optionLinks, orderLine, type ProductLink } from "@/lib/workbench/links";
 import { finalCustomerText, priceOption, withFinalPrices } from "@/lib/workbench/final-price";
 import { staffName } from "@/lib/workbench/conversation-types";
 import { atTier, describePricing, noFriendPrice, TIER_LABEL, tierLabor, tierMarkup, type CustomPricing, type PriceTier } from "@/lib/workbench/price-tier";
@@ -43,6 +43,25 @@ function ProductLinks({ links }: { links: ProductLink[] }) {
         </a>
       ))}
       {copied && <span className="text-[11px] text-emerald-700">已复制 {copied}，在 speedDIAL 搜索框粘贴</span>}
+    </div>
+  );
+}
+
+/** Copies the one-line order for this part (supplier, car, part number, quantity, cost) for staff to paste where they order. */
+function CopyOrder({ text }: { text: string }) {
+  const [state, setState] = useState<"idle" | "done" | "failed">("idle");
+  return (
+    <div className="mt-1 flex items-center gap-1">
+      <button
+        type="button"
+        data-testid="copy-order"
+        onClick={() => void navigator.clipboard.writeText(text).then(() => setState("done"), () => setState("failed"))}
+        className="rounded-full border border-ink-200 px-2 py-0.5 text-[11px] font-medium text-ink-600 hover:border-brand-400 hover:text-brand-700"
+      >
+        复制订货信息
+      </button>
+      {state === "done" && <span className="text-[11px] text-emerald-700">已复制（内部，含进价）</span>}
+      {state === "failed" && <span className="text-[11px] text-amber-700">浏览器不让复制，请手动选择</span>}
     </div>
   );
 }
@@ -344,6 +363,7 @@ export function StaffQuoteCard({
                     )}
                     {o.core !== null && <div className="text-xs text-amber-700">核心件押金 {money(o.core)}</div>}
                     <ProductLinks links={optionLinks(quote, o)} />
+                    {quote.kind === "labor" && o.partNumber && o.source !== "used" && !o.outOfStock && <CopyOrder text={orderLine(quote, o)} />}
                   </td>
                   <td className="px-3 py-2">{o.quantity}</td>
                   {showCost && <td data-testid="cost-cell" className="px-3 py-2 text-right font-medium text-amber-700">{money(quote.kind === "tires" ? o.unitCost : o.costTotal)}</td>}
