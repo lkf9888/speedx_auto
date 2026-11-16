@@ -139,3 +139,10 @@ describe("narrowing by the deciding detail", () => {
     expect(JSON.stringify(body)).toContain("Body: Coupe");
   });
 });
+
+describe("review fixes for narrowing", () => {
+  it("names the assumed body on the card", async () => {
+    const out = await runTool(engineAndBodyCatalog(), "get_estimate", { vehicle_key: encodeVehicleKey(vehicle()), service_id: 9, position: null }, () => "E-1", "en");
+    expect(cards(out.events).every((c) => /Coupe/.test(c.vehicle))).toBe(true);
+  });
+});

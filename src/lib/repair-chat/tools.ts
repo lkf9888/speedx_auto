@@ -512,6 +512,8 @@ async function estimateEachVariant(
       for (let step = 0; step <= NARROW_STEPS; step += 1) {
         if (Date.now() - started > VARIANT_BUDGET_MS) return null;
         const quote = await laborQuote(api, applied.vehicle, serviceId, position, input);
+        // The catalog may refuse the option and fall back to another: then it isn't this engine's price.
+        if (!describeVehicle(applied.vehicle).includes(option)) return null;
         if (quote.status === "ok") return { option, vehicle: applied.vehicle, quote, assumed };
         if (quote.status !== "need_details") return null;
         // The engine is already set; the rest is the catalog's first offer for each remaining detail.
@@ -533,25 +535,36 @@ async function estimateEachVariant(
     // The label usually names the option already ("… 2.4 L4"); add it when it doesn't.
     return { option: r.option, assumed: r.assumed, card: adjustCard(buildEstimate(label.includes(r.option) ? label : `${label} (${driver.label}: ${r.option})`, r.quote, newEstimateId())) };
   });
-  // The detail doesn't change the price (same hours and parts for every option): one card is enough.
   const same = (c: EstimateCard) => JSON.stringify([c.laborHours, c.partOptions.map((p) => [p.description, p.unitListPrice, p.quantity])]);
   const assumption = [...new Set(cards.flatMap((c) => c.assumed))];
-  const settledNote = assumption.length ? ` The other details (${assumption.join(", ")}) were assumed typical; the team confirms the exact configuration at the shop.` : "";
-  if (new Set(cards.map(({ card }) => same(card))).size === 1) {
-    const card = { ...cards[0].card, vehicle: describeVehicle(vehicle) };
+  const settledNote = assumption.length ? ` The other details (${assumption.join(", ")}) were assumed typical and are named on the card; the team confirms the exact configuration at the shop.` : "";
+  // Options that cost the same share one card, named by what it covers.
+  const groups = new Map<string, typeof cards>();
+  for (const entry of cards) groups.set(same(entry.card), [...(groups.get(same(entry.card)) ?? []), entry]);
+  const merged = [...groups.values()].map((entries) => {
+    const first = entries[0].card;
+    if (entries.length === 1) return { option: entries[0].option, card: first };
+    // Keep the assumed details (body, trim) in the label: the price is for that configuration.
+    const extras = [...new Set(entries.flatMap((e) => e.assumed))];
+    const vehicleLabel = `${describeVehicle(vehicle)} (${[`${driver.label}: ${entries.map((e) => e.option).join(" / ")}`, ...extras].join(", ")})`;
+    return { option: entries.map((e) => e.option).join(" / "), card: { ...first, vehicle: vehicleLabel } };
+  });
+  if (merged.length === 1) {
+    // Same price whichever engine: the card names only what was assumed (body, trim), if anything.
+    const only = { ...merged[0], card: { ...merged[0].card, vehicle: assumption.length ? `${describeVehicle(vehicle)} (${assumption.join(", ")})` : describeVehicle(vehicle) } };
     return ok(
-      { status: "ok", summary: summarizeEstimateForModel(card), note: `The price is the same for every ${driver.label} (${cards.map((c) => c.option).join(", ")}), so there is no need to ask which.${settledNote}` },
-      [{ type: "estimate", estimate: card }],
+      { status: "ok", summary: summarizeEstimateForModel(only.card), note: `The price is the same for every ${driver.label} (${cards.map((c) => c.option).join(", ")}), so there is no need to ask which.${settledNote}` },
+      [{ type: "estimate", estimate: only.card }],
     );
   }
   return ok(
     {
       status: "ok",
       depends_on: driver.label,
-      variants: cards.map(({ option, card }) => ({ [driver.label]: option, summary: summarizeEstimateForModel(card) })),
-      note: `The ${driver.label} isn't known, so each option has its own card. Say the price depends on the ${driver.label}, give each range in one short line, and offer to narrow it to one if they tell you which they have or send the VIN. Don't ask for details first.${settledNote}`,
+      variants: merged.map(({ option, card }) => ({ [driver.label]: option, summary: summarizeEstimateForModel(card) })),
+      note: `The ${driver.label} isn't known, so each different price has its own card. Say the price depends on the ${driver.label}, give each range in one short line, and offer to narrow it to one if they tell you which they have or send the VIN. Don't ask for details first.${settledNote}`,
     },
-    cards.map(({ card }) => ({ type: "estimate", estimate: card })),
+    merged.map(({ card }) => ({ type: "estimate", estimate: card })),
   );
 }
 
