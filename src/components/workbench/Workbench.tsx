@@ -221,8 +221,16 @@ export function Workbench({ email }: { email: string }) {
     }
   }, [email]);
 
+  /** Price moves not yet saved, per conversation: a reload from the cloud must not take the old price back. */
+  const unsavedPrice = useRef(new Map<string, { choice: PriceChoice }>());
   /** Merge the cloud's copy of a conversation into what this page shows. */
   const mergeLoaded = useCallback((id: string, conversation: Conversation) => {
+    const waiting = unsavedPrice.current.get(id);
+    if (waiting) {
+      conversation = { ...conversation, priceTier: waiting.choice.tier };
+      if (waiting.choice.tier === "custom") conversation.pricing = waiting.choice.pricing;
+      else delete conversation.pricing;
+    }
     setLoaded((all) => {
       // Keep thumbnails of files I sent this visit; the cloud copy only has their names.
       const mine = all[id];
@@ -392,7 +400,8 @@ export function Workbench({ email }: { email: string }) {
   }
 
   /** Sliders moved after a price was chosen: the quotes re-price at once, saved a moment after the last move, and the assistant isn't asked again. */
-  const adjustTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const adjustTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const saveChain = useRef(new Map<string, Promise<unknown>>());
   function adjustPriceTier(conversationId: string, choice: PriceChoice) {
     const pricing = choice.tier === "custom" ? choice.pricing : undefined;
     patchLocal(conversationId, (c) => {
@@ -401,14 +410,30 @@ export function Workbench({ email }: { email: string }) {
       else delete next.pricing;
       return next;
     });
-    if (adjustTimer.current) clearTimeout(adjustTimer.current);
-    adjustTimer.current = setTimeout(() => {
-      void fetch(`/api/workbench/conversations/${conversationId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceTier: choice.tier, ...(pricing ? { pricing } : {}) }),
-      }).catch(() => null);
-    }, 400);
+    const mine = { choice };
+    unsavedPrice.current.set(conversationId, mine);
+    const earlier = adjustTimers.current.get(conversationId);
+    if (earlier) clearTimeout(earlier);
+    adjustTimers.current.set(
+      conversationId,
+      setTimeout(() => {
+        adjustTimers.current.delete(conversationId);
+        // One save at a time per conversation, in order, so an older request can't land after a newer one.
+        const previous = saveChain.current.get(conversationId) ?? Promise.resolve();
+        const next = previous
+          .then(() =>
+            fetch(`/api/workbench/conversations/${conversationId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ priceTier: choice.tier, ...(pricing ? { pricing } : {}) }),
+            }).catch(() => null),
+          )
+          .then(() => {
+            if (unsavedPrice.current.get(conversationId) === mine) unsavedPrice.current.delete(conversationId);
+          });
+        saveChain.current.set(conversationId, next);
+      }, 400),
+    );
   }
 
   /** Save a new title; an empty title goes back to the first question. */
@@ -979,8 +1004,7 @@ export function Workbench({ email }: { email: string }) {
                     <PriceChoiceCard
                       current={active.priceTier}
                       currentPricing={active.pricing}
-                      disabled={!currentId}
-                      busy={Boolean(activePending)}
+                      disabled={Boolean(activePending) || !currentId}
                       onChoose={(choice) => void choosePriceTier(active.id, choice, true)}
                       onAdjust={(choice) => adjustPriceTier(active.id, choice)}
                     />

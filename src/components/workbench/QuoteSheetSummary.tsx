@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { withFinalPrices } from "@/lib/workbench/final-price";
 import {
   tierLabor,
@@ -274,7 +274,6 @@ export function PriceChoiceCard({
   onChoose,
   onAdjust,
   disabled,
-  busy,
 }: {
   current?: PriceTier;
   currentPricing?: CustomPricing | null;
@@ -282,10 +281,12 @@ export function PriceChoiceCard({
   /** Once a price is chosen, every slider move or quick button lands here and re-prices the quotes. */
   onAdjust?: (choice: PriceChoice) => void;
   disabled?: boolean;
-  /** The assistant is answering: the confirm button waits, the sliders still move. */
-  busy?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>(() => startingDraft(current, currentPricing));
+  // A price saved elsewhere (a reload, a colleague, the assistant) moves the sliders with it.
+  useEffect(() => {
+    setDraft(startingDraft(current, currentPricing));
+  }, [current, currentPricing?.partsPct, currentPricing?.laborRate]); // eslint-disable-line react-hooks/exhaustive-deps
   const live = Boolean(current) && Boolean(onAdjust);
   const change = (next: Draft) => {
     setDraft(next);
@@ -368,7 +369,7 @@ export function PriceChoiceCard({
         <button
           type="button"
           data-testid="price-confirm"
-          disabled={disabled || busy}
+          disabled={disabled}
           onClick={() => onChoose(draft.preset ? { tier: draft.preset } : { tier: "custom", pricing: { partsPct: draft.partsPct, laborRate: draft.laborRate } })}
           className="rounded-lg bg-sky-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-800 disabled:opacity-50"
         >

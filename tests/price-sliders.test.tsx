@@ -184,10 +184,12 @@ describe("live sliders after confirm", () => {
     expect(screen.getByTestId("price-live")).toBeInTheDocument();
   });
 
-  it("the sliders stay usable while the assistant is answering", () => {
-    render(<PriceChoiceCard current="retail" busy onChoose={() => {}} onAdjust={() => {}} />);
-    expect(screen.getByTestId("labor-slider")).toBeEnabled();
-    expect(screen.getByTestId("price-confirm")).toBeDisabled();
+  it("follows a price saved elsewhere, so the next move keeps the other slider", () => {
+    const onAdjust = vi.fn();
+    const { rerender } = render(<PriceChoiceCard current="retail" onChoose={() => {}} onAdjust={onAdjust} />);
+    rerender(<PriceChoiceCard current="custom" currentPricing={{ partsPct: 40, laborRate: 80 }} onChoose={() => {}} onAdjust={onAdjust} />);
+    fireEvent.change(screen.getByTestId("labor-slider"), { target: { value: "97" } });
+    expect(onAdjust).toHaveBeenLastCalledWith({ tier: "custom", pricing: { partsPct: 40, laborRate: 97 } });
   });
 });
 
