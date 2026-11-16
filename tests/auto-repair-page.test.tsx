@@ -77,6 +77,25 @@ describe("auto repair hub page", () => {
     expect(document.getElementById("estimate")).not.toBeNull();
   });
 
+  it.each(locales)("opens on the phone with a hook, the shop number and the chat only when the assistant is on, in %s", async (locale, dict) => {
+    vi.stubEnv("NEXT_PUBLIC_REPAIR_CHAT_ENABLED", "true");
+    const { view } = await renderPage(locale);
+    const hook = dict.autoRepair.hook!;
+
+    expect(view.container.querySelector("[data-hero-hook]")).toHaveTextContent(`${hook.lead}${hook.accent}`);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(dict.autoRepair.title);
+    expect(view.container.querySelector("[data-hero-phone]")).toHaveAttribute("href", "tel:+17789170710");
+    expect(view.container.querySelector("[data-sticky-phone]")).not.toBeNull();
+    cleanup();
+
+    vi.stubEnv("NEXT_PUBLIC_REPAIR_CHAT_ENABLED", "false");
+    const off = await renderPage(locale);
+    expect(off.view.container.querySelector("[data-hero-hook]")).toBeNull();
+    expect(off.view.container.querySelector("[data-hero-phone]")).toBeNull();
+    expect(off.view.container.querySelector("[data-sticky-phone]")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 }).className).toContain("font-bold");
+  });
+
   it.each(locales)("publishes the same FAQs in %s markup and visible text", async (locale, dict) => {
     const { graph } = await renderPage(locale);
     const faq = graph.find((node) => node["@type"] === "FAQPage");

@@ -20,6 +20,7 @@ export const enAutoRepair: AutoRepairCopy = {
   metaDescription:
     "Richmond auto repair near YVR: brakes, maintenance, diagnostics, suspension and Tesla/EV. Free online estimate in minutes. English, Cantonese, Mandarin.",
   eyebrow: "Auto repair · Richmond, BC",
+  hook: { lead: "Car trouble?", accent: "Ask our AI first" },
   title: "Auto Repair & EV Service in Richmond, BC",
   summary:
     "SPEEDX AUTO is an auto repair shop at 2980 Number 3 Road in Richmond, BC, near YVR. We handle maintenance, brakes, diagnostics, suspension, and electric vehicles, mainly Tesla. Labor is billed by industry-standard labor-guide times, and parts come from WorldPac at list price. We speak English, Cantonese, and Mandarin. Appointments are required.",
@@ -264,6 +265,7 @@ export const zhCNAutoRepair: AutoRepairCopy = {
   metaDescription:
     "列治文修车厂，靠近温哥华机场：保养、刹车、故障诊断、悬挂转向、特斯拉电动车维修。网上免费估价，几分钟出参考价。普通话、粤语、英语服务。",
   eyebrow: "汽车维修 · 列治文",
+  hook: { lead: "车子出问题？", accent: "先问问 AI 助手" },
   title: "列治文汽车与电动车机械维修",
   heroSummary:
     "SPEEDX AUTO 做汽车常规保养、刹车、故障诊断、悬挂转向，也修电动车，以特斯拉为主。店里讲普通话、粤语和英语，需提前预约。",
@@ -460,6 +462,7 @@ const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide" | "landing"> = {
   metaDescription:
     "列治文車房，近溫哥華機場：保養、煞車、故障診斷、避震轉向、Tesla 電動車維修。網上免費估價，幾分鐘有參考價。粵語、普通話、英語服務。",
   eyebrow: "汽車維修 · 列治文",
+  hook: { lead: "車子出問題？", accent: "先問問 AI 助手" },
   title: "列治文汽車與電動車機械維修",
   heroSummary:
     "SPEEDX AUTO 提供汽車定期保養、煞車、故障診斷、避震及轉向維修，亦維修電動車，以 Tesla 為主。店內可說粵語、普通話及英語，須預先預約。",

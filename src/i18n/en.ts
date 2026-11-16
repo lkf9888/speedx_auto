@@ -185,7 +185,7 @@ export const en = {
       button: "Call me back",
       thanks: "Got it. The shop will call you back as soon as possible. During opening hours that's usually soon; outside them, the next business day.",
     },
-    greeting: "Hi! To give you an accurate estimate, please tell me your vehicle's year, make and model (or the 17-character VIN — that's the most precise) and describe the problem: what you hear, feel or see, and when it happens.",
+    greeting: "Hi! Tell me your car's year, make and model and what's going wrong, and I'll give you a ballpark price. A VIN or a photo makes it more exact.",
     assistantStatus: "AI repair assistant",
     demo: {
       label: "Sample estimate",

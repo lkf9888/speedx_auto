@@ -284,10 +284,13 @@ export function RepairChat({
   dict,
   pagePath,
   cardCopies,
+  hero = false,
 }: {
   locale: Locale;
   dict: Dictionary;
   pagePath: string;
+  /** The chat opens the page on a phone: its own heading and intro step aside (the page's h1 leads) and the spacing tightens. */
+  hero?: boolean;
   /** Chat copy in every language, so an estimate card follows the customer's language. */
   cardCopies?: Partial<Record<Locale, ChatCopy>>;
 }) {
@@ -592,17 +595,19 @@ export function RepairChat({
   const noQuestionYet = !turns.some((t) => t.role === "user");
 
   return (
-    <section id="estimate" className="py-10 sm:py-20" aria-labelledby="repair-chat-title">
+    <section id="estimate" className={hero ? "scroll-mt-16 pb-8 pt-3 sm:py-20" : "py-10 sm:py-20"} aria-labelledby="repair-chat-title">
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
-        <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700">
-          {copy.eyebrow}
-        </span>
-        <h2 id="repair-chat-title" className="mt-3 text-2xl font-bold text-ink-900 sm:text-4xl">
-          {copy.title}
-        </h2>
-        <p className="mt-3 leading-7 text-ink-600">{copy.intro}</p>
+        <div className={hero ? "hidden sm:block" : undefined}>
+          <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700">
+            {copy.eyebrow}
+          </span>
+          <h2 id="repair-chat-title" className="mt-3 text-2xl font-bold text-ink-900 sm:text-4xl">
+            {copy.title}
+          </h2>
+          <p className="mt-3 leading-7 text-ink-600">{copy.intro}</p>
+        </div>
 
-        <div className="mt-8 overflow-hidden rounded-2xl border border-ink-200 bg-[#efeae2] shadow-sm">
+        <div className={`${hero ? "mt-0 sm:mt-8" : "mt-8"} overflow-hidden rounded-2xl border border-ink-200 bg-[#efeae2] shadow-sm`}>
           <div className="flex items-center gap-3 bg-[#008069] px-3 py-2 text-white">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -700,7 +705,7 @@ export function RepairChat({
                     {starter}
                   </button>
                 ))}
-                <p className="w-full text-right text-xs text-[#667781]">📷 {copy.photo.tip}</p>
+                <p className={`w-full text-right text-xs text-[#667781] ${hero ? "hidden sm:block" : ""}`}>📷 {copy.photo.tip}</p>
               </div>
             )}
             {awaitingLead && (

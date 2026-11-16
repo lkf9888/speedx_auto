@@ -7,9 +7,10 @@ import { RepairChat } from "@/components/RepairChat";
 import { Container } from "@/components/Container";
 import { FlatPriceTable } from "@/components/FlatPriceTable";
 import { StructuredData } from "@/components/StructuredData";
+import { TrackedContactLink } from "@/components/TrackedContactLink";
 import { isLocale, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/dictionaries";
-import { company } from "@/lib/company";
+import { company, telLink } from "@/lib/company";
 import { buildPageMetadata, repairShareImage } from "@/lib/seo";
 import {
   absoluteRouteUrl,
@@ -73,21 +74,54 @@ export default async function AutoRepairPage({
       />
       <div className="page-compact">
       <section className="bg-hero-gradient">
-        <Container className="py-10 sm:py-24 lg:py-28">
+        <Container className={chatEnabled ? "pb-2 pt-6 sm:py-24 lg:py-28" : "py-10 sm:py-24 lg:py-28"}>
           <div className="max-w-3xl">
-            <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700">
+            <span className={`rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700 ${chatEnabled ? "hidden sm:inline-flex" : "inline-flex"}`}>
               {copy.eyebrow}
             </span>
-            <h1 className="mt-4 text-[1.65rem] font-bold leading-tight tracking-tight text-ink-900 sm:text-5xl lg:text-6xl">
+            {chatEnabled && copy.hook && (
+              <div data-hero-hook aria-hidden className="mt-1 text-[2.3rem] font-extrabold leading-[1.05] tracking-tight text-ink-900 sm:hidden">
+                {copy.hook.lead}
+                <br />
+                <span className="bg-gradient-to-r from-brand-500 to-brand-700 bg-clip-text text-transparent">{copy.hook.accent}</span>
+                <span className="ml-1.5 inline-block text-brand-600 motion-safe:animate-bounce">↓</span>
+              </div>
+            )}
+            <h1 className={!chatEnabled
+              ? "mt-4 text-[1.65rem] font-bold leading-tight tracking-tight text-ink-900 sm:text-5xl lg:text-6xl"
+              : copy.hook
+                ? "mt-2 text-sm font-semibold text-ink-600 sm:mt-4 sm:text-5xl sm:font-bold sm:leading-tight sm:tracking-tight sm:text-ink-900 lg:text-6xl"
+                : "mt-3 text-balance text-[2rem] font-extrabold leading-[1.1] tracking-tight text-ink-900 sm:mt-4 sm:text-5xl sm:font-bold sm:leading-tight lg:text-6xl"}>
               {copy.title}
             </h1>
-            <p data-testid="answer-summary" className="mt-5 leading-7 text-ink-600 sm:mt-6 sm:text-lg sm:leading-8">
+            {/* On a phone with the assistant on the page, the chat itself is the hero: the explanation and contact buttons step aside and the shop number stays one tap away. */}
+            <p data-testid="answer-summary" className={`mt-5 leading-7 text-ink-600 sm:mt-6 sm:block sm:text-lg sm:leading-8 ${chatEnabled ? "hidden" : ""}`}>
               {copy.heroSummary ?? copy.summary}
             </p>
-            <div className="mt-8">
+            {chatEnabled && (
+              <TrackedContactLink
+                href={telLink}
+                method="phone"
+                intent="auto_repair"
+                locale={locale}
+                placement="hero"
+                pagePath={pagePath}
+                data-hero-phone
+                className="mt-4 flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-ink-200 active:bg-ink-50 sm:hidden"
+              >
+                <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3a12 12 0 0 0 3.5.6c.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.5.1.4 0 .8-.3 1.1l-2.2 2.2z" /></svg>
+                </span>
+                <span className="min-w-0 leading-tight">
+                  <span className="block text-xl font-extrabold tabular-nums text-ink-900">{company.phoneDisplay}</span>
+                  <span className="block text-xs text-ink-500">{dict.cta.callNow} · {dict.footer.hoursValue}</span>
+                </span>
+              </TrackedContactLink>
+            )}
+            <div className={`mt-8 ${chatEnabled ? "hidden sm:block" : ""}`}>
               <ContactBar dict={dict} locale={locale} intent="auto_repair" placement="hero" pagePath={pagePath} quoteHref={quoteHref} />
             </div>
-            <p className="mt-3 text-xs font-semibold text-ink-400">{copy.lastUpdated}</p>
+            <p className={`mt-3 text-xs font-semibold text-ink-400 ${chatEnabled ? "hidden sm:block" : ""}`}>{copy.lastUpdated}</p>
           </div>
         </Container>
       </section>
@@ -97,6 +131,7 @@ export default async function AutoRepairPage({
           locale={locale}
           dict={dict}
           pagePath={pagePath}
+          hero
           cardCopies={{
             en: getDictionary("en").repairChat,
             "zh-CN": getDictionary("zh-CN").repairChat,
@@ -281,6 +316,7 @@ export default async function AutoRepairPage({
         placement="sticky_mobile"
         pagePath={pagePath}
         variant="sticky"
+        stickyPhoneFirst={chatEnabled}
       />
     </>
   );

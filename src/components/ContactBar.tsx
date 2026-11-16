@@ -25,6 +25,8 @@ interface ContactBarProps {
   quoteLabel?: string;
   /** Prefilled WhatsApp message, so the shop can tell which page or ad the chat came from. */
   whatsappText?: string;
+  /** Sticky bar only: the shop number leads as the wide button; WhatsApp and WeChat follow as compact ones. */
+  stickyPhoneFirst?: boolean;
 }
 
 export function ContactBar({
@@ -38,6 +40,7 @@ export function ContactBar({
   quoteHref,
   quoteLabel,
   whatsappText,
+  stickyPhoneFirst = false,
 }: ContactBarProps) {
   const whatsappHref = whatsappText
     ? `${whatsappLink}?text=${encodeURIComponent(whatsappText)}`
@@ -100,6 +103,36 @@ export function ContactBar({
               {feedback}
             </p>
           ) : null}
+          {stickyPhoneFirst ? (
+            <div className="flex gap-1.5">
+              <a
+                href={telLink}
+                data-sticky-phone
+                className="flex min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[#00a884] px-3 py-3 text-[0.9rem] font-extrabold tabular-nums text-white shadow-sm active:bg-[#008069]"
+                onClick={() => track("phone")}
+                aria-label={`${dict.cta.callNow}: ${company.phoneDisplay}`}
+              >
+                <PhoneIcon /> {company.phoneDisplay}
+              </a>
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex shrink-0 items-center justify-center gap-1 rounded-full bg-[#e9f8ef] px-3 py-3 text-xs font-semibold text-[#137333]"
+                onClick={() => track("whatsapp")}
+              >
+                <WhatsAppIcon /> {dict.cta.whatsapp}
+              </a>
+              <button
+                type="button"
+                className="flex h-auto w-11 shrink-0 items-center justify-center rounded-full bg-ink-900 text-white"
+                onClick={copyWeChat}
+                aria-label={`${dict.cta.contactWeChat}: ${company.wechatId}`}
+              >
+                <WeChatIcon />
+              </button>
+            </div>
+          ) : (
           <div className="flex gap-1.5">
             <button
               type="button"
@@ -127,6 +160,7 @@ export function ContactBar({
               <PhoneIcon /> {dict.cta.callNow}
             </a>
           </div>
+          )}
         </aside>
       </>
     );

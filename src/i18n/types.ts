@@ -132,6 +132,8 @@ export interface AutoRepairCopy {
   metaTitle: string;
   metaDescription: string;
   eyebrow: string;
+  /** Phone hero hook shown above the h1 when the AI assistant is on the page: the lead in plain ink, the accent in the brand gradient. */
+  hook?: { lead: string; accent: string };
   title: string;
   summary: string;
   /** Plain service name and type for structured data. */
