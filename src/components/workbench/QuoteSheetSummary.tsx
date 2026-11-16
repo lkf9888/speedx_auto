@@ -245,7 +245,7 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
           <div className="mt-1 space-y-1">
             {laborCharged > 0 && (
               <>
-                <p className={kv}><span>零件</span><span className="tabular-nums">{money(cents(total - laborCharged))}</span></p>
+                <p className={kv}><span>{priced.length > withLabor.length ? "零件及其他项目" : "零件"}</span><span className="tabular-nums">{money(cents(total - laborCharged))}</span></p>
                 <p className={kv}><span>工时（$120/h 原价）</span><span className="tabular-nums">{money(laborList)}</span></p>
               </>
             )}
