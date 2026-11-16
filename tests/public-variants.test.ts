@@ -130,13 +130,12 @@ describe("two unknown details at once", () => {
   });
 });
 
-describe("combination fixes from review", () => {
-  it("a price shared by several combinations says which details it covers", async () => {
+describe("narrowing by the deciding detail", () => {
+  it("a card per engine; the body style is settled with the catalog's first offer and said to be assumed", async () => {
     const out = await runTool(engineAndBodyCatalog(), "get_estimate", { vehicle_key: encodeVehicleKey(vehicle()), service_id: 9, position: null }, () => "E-1", "en");
-    const labels = cards(out.events).map((c) => c.vehicle);
-    // Hours differ by engine only, so each card covers both bodies and names only its engine.
-    expect(labels.every((l) => !/Coupe|Sedan/.test(l))).toBe(true);
-    expect(labels.some((l) => l.includes("1.8"))).toBe(true);
-    expect(labels.some((l) => l.includes("2.0"))).toBe(true);
+    const body = JSON.parse(out.content);
+    expect(cards(out.events)).toHaveLength(2);
+    expect(JSON.stringify(body)).toContain("assumed typical");
+    expect(JSON.stringify(body)).toContain("Body: Coupe");
   });
 });

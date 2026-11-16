@@ -474,86 +474,84 @@ async function laborQuote(api: CatalogApi, vehicle: VehicleRef, serviceId: numbe
 }
 
 const MAX_VARIANTS = 3;
-/** Most detail combinations (trim × body × engine…) priced to avoid asking the customer. */
-const MAX_COMBOS = 4;
-/** Longest the combinations may take before the customer is asked instead. */
-const COMBO_BUDGET_MS = 15_000;
+/** Longest the lookups may take before the customer is asked instead. */
+const VARIANT_BUDGET_MS = 15_000;
+/** Steps to settle the remaining details (trim, body…) once the deciding one is picked. */
+const NARROW_STEPS = 4;
 
-/** Every way to pick one option per question. */
-function combinations(questions: Array<{ attribute: string; label: string; options: string[] }>): Array<Array<{ attribute: string; label: string; option: string }>> {
-  return questions.reduce<Array<Array<{ attribute: string; label: string; option: string }>>>(
-    (all, q) => all.flatMap((chosen) => q.options.map((option) => [...chosen, { attribute: q.attribute, label: q.label, option }])),
-    [[]],
-  );
-}
+type Question = { attribute: string; label: string; options: string[] };
 
 /**
- * Details the price depends on are unknown (engine, body, trim, drive type) and each has a few
- * options: estimate every combination instead of asking first, so the customer sees prices
- * straight away (2026-11-16: a 2010 Civic owner who didn't know the engine got five questions
- * and no price). Combinations that cost the same share one card. Null when that isn't possible.
+ * Details the price depends on are unknown (engine, trim, body, drive type): estimate instead of
+ * asking first, so the customer sees prices straight away (2026-11-16: a 2010 Civic owner who
+ * didn't know the engine got five questions and no price). One card per option of the detail
+ * that decides most (the engine when there is one); the remaining details (trim, body) are
+ * settled with the first choice the catalog still offers once the engine is set, which keeps
+ * the lookups to a few calls instead of every combination. Cards with the same price share
+ * one. Null when that isn't possible, and the customer is asked.
  */
 async function estimateEachVariant(
   api: CatalogApi,
   vehicle: VehicleRef,
   serviceId: number,
   position: string | null,
-  questions: Array<{ attribute: string; label: string; options: string[] }>,
+  questions: Question[],
   input: Record<string, unknown>,
   newEstimateId: () => string,
   adjustCard: AdjustCard = keepCard,
 ): Promise<ToolOutcome | null> {
-  if (questions.length < 1 || questions.length > 3 || questions.some((q) => q.options.length < 2 || q.options.length > MAX_COMBOS)) return null;
-  const combos = combinations(questions);
-  if (combos.length > MAX_COMBOS) return null;
+  if (questions.length < 1 || questions.length > 4) return null;
+  const driver = questions.find((q) => q.attribute === "EngineBase") ?? questions.reduce((best, q) => (q.options.length < best.options.length ? q : best));
+  if (driver.options.length < 2 || driver.options.length > MAX_VARIANTS) return null;
   const started = Date.now();
-  const cards: Array<{ combo: Array<{ attribute: string; label: string; option: string }>; card: EstimateCard }> = [];
-  for (const combo of combos) {
-    if (Date.now() - started > COMBO_BUDGET_MS) return null;
-    const applied = await applyVehicleDetails(api, vehicle, combo.map(({ attribute, option }) => ({ attribute, option })));
-    // A combination the catalog doesn't know (a coupe with a sedan-only engine) simply doesn't exist.
-    if (applied.status !== "ok" && applied.status !== "needs_details") continue;
-    const quote = await laborQuote(api, applied.vehicle, serviceId, position, input);
-    // No labor time for this combination (a coupe with a sedan-only engine): it doesn't exist, so it isn't offered.
-    if (quote.status !== "ok") continue;
-    const label = describeVehicle(applied.vehicle);
-    // The label usually names the option already ("… 2.4 L4"); add what it doesn't.
-    const missing = combo.filter((c) => !label.includes(c.option)).map((c) => `${c.label}: ${c.option}`);
-    cards.push({ combo, card: adjustCard(buildEstimate(missing.length ? `${label} (${missing.join(", ")})` : label, quote, newEstimateId())) });
-  }
-  if (cards.length === 0) return null;
-  // Every option the customer might have must be covered by some priced combination: cards for only some engines mislead a customer whose engine is the missing one.
-  if (questions.some((q) => q.options.some((option) => !cards.some((c) => c.combo.some((x) => x.attribute === q.attribute && x.option === option))))) return null;
-  // The details don't change the price (same hours and parts for every combination): one card is enough.
+  const settled = await Promise.all(
+    driver.options.map(async (option) => {
+      let applied = await applyVehicleDetails(api, vehicle, [{ attribute: driver.attribute, option }]);
+      if (applied.status !== "ok" && applied.status !== "needs_details") return null;
+      const assumed: string[] = [];
+      for (let step = 0; step <= NARROW_STEPS; step += 1) {
+        if (Date.now() - started > VARIANT_BUDGET_MS) return null;
+        const quote = await laborQuote(api, applied.vehicle, serviceId, position, input);
+        if (quote.status === "ok") return { option, vehicle: applied.vehicle, quote, assumed };
+        if (quote.status !== "need_details") return null;
+        // The engine is already set; the rest is the catalog's first offer for each remaining detail.
+        const picks = quote.questions.filter((q) => q.attribute !== driver.attribute && q.options.length > 0).map((q) => ({ attribute: q.attribute, label: q.label, option: q.options[0] }));
+        if (picks.length === 0) return null;
+        const next = await applyVehicleDetails(api, applied.vehicle, picks.map(({ attribute, option: o }) => ({ attribute, option: o })));
+        if (next.status !== "ok" && next.status !== "needs_details") return null;
+        assumed.push(...picks.map((p) => `${p.label}: ${p.option}`));
+        applied = next;
+      }
+      return null;
+    }),
+  );
+  // Every option priced, or none: cards for only some engines mislead a customer whose engine is the missing one.
+  if (settled.some((r) => r === null)) return null;
+  const results = settled as NonNullable<(typeof settled)[number]>[];
+  const cards = results.map((r) => {
+    const label = describeVehicle(r.vehicle);
+    // The label usually names the option already ("… 2.4 L4"); add it when it doesn't.
+    return { option: r.option, assumed: r.assumed, card: adjustCard(buildEstimate(label.includes(r.option) ? label : `${label} (${driver.label}: ${r.option})`, r.quote, newEstimateId())) };
+  });
+  // The detail doesn't change the price (same hours and parts for every option): one card is enough.
   const same = (c: EstimateCard) => JSON.stringify([c.laborHours, c.partOptions.map((p) => [p.description, p.unitListPrice, p.quantity])]);
-  const groups = new Map<string, typeof cards>();
-  for (const entry of cards) groups.set(same(entry.card), [...(groups.get(same(entry.card)) ?? []), entry]);
-  const labelText = questions.map((q) => q.label).join(" / ");
-  const optionText = (entries: typeof cards) => entries.map((e) => e.combo.map((c) => c.option).join(", ")).join("; ");
-  if (groups.size === 1) {
+  const assumption = [...new Set(cards.flatMap((c) => c.assumed))];
+  const settledNote = assumption.length ? ` The other details (${assumption.join(", ")}) were assumed typical; the team confirms the exact configuration at the shop.` : "";
+  if (new Set(cards.map(({ card }) => same(card))).size === 1) {
     const card = { ...cards[0].card, vehicle: describeVehicle(vehicle) };
     return ok(
-      { status: "ok", summary: summarizeEstimateForModel(card), note: `The price is the same for every ${labelText} (${optionText(cards)}), so there is no need to ask which.` },
+      { status: "ok", summary: summarizeEstimateForModel(card), note: `The price is the same for every ${driver.label} (${cards.map((c) => c.option).join(", ")}), so there is no need to ask which.${settledNote}` },
       [{ type: "estimate", estimate: card }],
     );
   }
-  if (groups.size > MAX_VARIANTS) return null;
-  // One card per price. A card covers every combination that costs the same: the vehicle line names only the details that differ.
-  const variants = [...groups.values()].map((entries) => {
-    const differing = questions.filter((q) => new Set(entries.map((e) => e.combo.find((c) => c.attribute === q.attribute)?.option)).size < q.options.length);
-    const detail = differing.map((q) => `${q.label}: ${[...new Set(entries.map((e) => e.combo.find((c) => c.attribute === q.attribute)?.option))].join(" / ")}`);
-    const first = entries[0].card;
-    const card = entries.length === 1 || detail.length === 0 ? first : { ...first, vehicle: `${describeVehicle(vehicle)} (${detail.join(", ")})` };
-    return { option: optionText(entries), card };
-  });
   return ok(
     {
       status: "ok",
-      depends_on: labelText,
-      variants: variants.map(({ option, card }) => ({ [labelText]: option, summary: summarizeEstimateForModel(card) })),
-      note: `The ${labelText} isn't known, so each different price has its own card. Say the price depends on it, give each range in one short line, and offer to narrow it to one if they tell you which they have or send the VIN. Don't ask for details first.`,
+      depends_on: driver.label,
+      variants: cards.map(({ option, card }) => ({ [driver.label]: option, summary: summarizeEstimateForModel(card) })),
+      note: `The ${driver.label} isn't known, so each option has its own card. Say the price depends on the ${driver.label}, give each range in one short line, and offer to narrow it to one if they tell you which they have or send the VIN. Don't ask for details first.${settledNote}`,
     },
-    variants.map(({ card }) => ({ type: "estimate", estimate: card })),
+    cards.map(({ card }) => ({ type: "estimate", estimate: card })),
   );
 }
 
