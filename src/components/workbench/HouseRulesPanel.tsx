@@ -32,6 +32,8 @@ const TARGET: Record<HouseRule["appliesTo"], string> = {
   oil_change: "换机油",
   tire_change: "换胎（客人自带轮胎）",
   ac_recharge: "空调加雪种",
+  inspection: "车辆快速检查",
+  tire_repair: "补胎",
   new_tires: "买新轮胎",
 };
 

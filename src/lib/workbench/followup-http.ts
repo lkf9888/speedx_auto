@@ -171,7 +171,7 @@ function discountRule(c: Conversation, card: EstimateCard, offer: FollowUpOffer)
   if (phone.replace(/\D/g, "").length < 10) return null;
   const target =
     card.kind === "flat" && card.flatService
-      ? { appliesTo: card.flatService === "inspection" || card.flatService === "tire_repair" ? ("all" as const) : card.flatService, serviceKeyword: "" }
+      ? { appliesTo: card.flatService, serviceKeyword: "" }
       : card.kind === "tires"
         ? { appliesTo: "new_tires" as const, serviceKeyword: "" }
         : { appliesTo: "labor_jobs" as const, serviceKeyword: card.service.replace(/\s*\b(R&R|Replace|Replacement)\b.*$/i, "").trim().slice(0, 40) || card.service.slice(0, 40) };

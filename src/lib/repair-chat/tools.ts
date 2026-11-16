@@ -210,7 +210,7 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "get_shop_service_price",
     description:
-      "Shop flat price for a quick vehicle inspection ($80, waived if the customer has the repair done at the shop) or a tire puncture repair / patch ($20 per tire, $30 per tire for AT tires). The same for every vehicle, so no vehicle is needed. The result is shown to the customer as a card. For tire_repair leave tire_kind null unless the customer said the tire is an AT (all-terrain) tire, and tire_count null for one tire. Use it when the customer asks for an inspection, a check-up, or a flat/punctured tire repair.",
+      "Shop flat price for a quick vehicle inspection ($80, waived if the customer has the repair done at the shop) or a tire puncture repair / patch ($20 per tire, $30 per tire for AT tires). The same for every vehicle, so no vehicle is needed. The result is shown to the customer as a card. For tire_repair omit tire_kind unless the customer said the tire is an AT (all-terrain) tire, and omit tire_count for one tire. Use it when the customer asks for an inspection, a check-up, or a flat/punctured tire repair.",
     input_schema: {
       type: "object",
       properties: {
@@ -677,8 +677,9 @@ export async function runTool(
       if (!service) return fail("Unknown service.");
       const decoded = readVehicle(input);
       const kind = pick<PatchKind>(input.tire_kind, ["standard", "at"]);
-      const count = Number(input.tire_count);
-      const quote = quoteShopService(service, kind, Number.isInteger(count) ? count : null);
+      const count = input.tire_count === undefined || input.tire_count === null ? 1 : Number(input.tire_count);
+      if (!Number.isInteger(count) || count < 1 || count > 6) return fail("Tire count must be a whole number from 1 to 6; ask the customer how many.");
+      const quote = quoteShopService(service, kind, count);
       const card = adjustCard(buildFlatEstimate(decoded ? describeVehicle(decoded) : "—", quote, locale, newEstimateId()));
       return ok({ status: "ok", summary: summarizeEstimateForModel(card) }, [{ type: "estimate", estimate: card }]);
     }

@@ -43,7 +43,7 @@ const TOOL: Anthropic.Beta.BetaTool = {
             kind: { type: "string", enum: [...HOUSE_RULE_KINDS] },
             title: { type: "string", description: "Short Chinese name for the list, e.g. 11 月换胎优惠." },
             text: { type: "string", description: "note: the instruction for the website assistant, in English, clear and specific. closed: the reason in a few English words customers may be told (e.g. Christmas), or empty. discount / price: an optional remark for staff, or empty." },
-            applies_to: { type: "string", enum: [...DISCOUNT_TARGETS], description: "discount: which estimates. all; labor_jobs (labor-guide repairs); oil_change; tire_change (mounting the customer's tires); ac_recharge; new_tires. note: all." },
+            applies_to: { type: "string", enum: [...DISCOUNT_TARGETS], description: "discount: which estimates. all; labor_jobs (labor-guide repairs); oil_change; tire_change (mounting the customer's tires); ac_recharge; inspection (the quick inspection); tire_repair (tire patch); new_tires. note: all." },
             service_keyword: { type: "string", description: "discount: only services whose English name contains this, e.g. brake; empty for any." },
             percent: { type: "number", description: "discount: percent off (e.g. 10); 0 when the discount is a dollar amount." },
             amount: { type: "number", description: "discount: dollars off per estimate (e.g. 20); 0 when it's a percentage." },

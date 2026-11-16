@@ -23,7 +23,7 @@ export function customerText(quote: Omit<StaffQuote, "customerText">): string {
     options.forEach((o, i) => {
       const name = [o.brand, o.label].filter(Boolean).join(" ");
       const each =
-        quote.kind === "tires" ? `，每条 ${dollars(o.unitPrice)} × ${o.quantity}` : quote.kind === "labor" && o.quantity > 1 ? ` × ${o.quantity}` : "";
+        quote.kind === "tires" ? `，每条 ${dollars(o.unitPrice)} × ${o.quantity}` : quote.kind === "labor" && o.quantity > 1 ? ` × ${o.quantity}` : quote.kind === "flat" && o.quantity > 1 ? `，每条 ${dollars(o.unitPrice)} × ${o.quantity}` : "";
       lines.push(`${i + 1}. ${name}${each}：${dollars(o.customerTotal)}${o.source === "used" ? "（二手件，质保以卖家陈述为准）" : ""}${o.eta ? `（需调货，${o.eta}）` : ""}（税后 ${dollars(taxOn(o.customerTotal).total)}）`);
     });
   }

@@ -18,8 +18,8 @@ import type { CardDiscount, EstimateCard } from "./pricing";
 
 export type HouseRuleKind = "note" | "discount" | "price" | "closed";
 export const HOUSE_RULE_KINDS: readonly HouseRuleKind[] = ["note", "discount", "price", "closed"];
-export type DiscountTarget = "all" | "labor_jobs" | "oil_change" | "tire_change" | "ac_recharge" | "new_tires";
-export const DISCOUNT_TARGETS: readonly DiscountTarget[] = ["all", "labor_jobs", "oil_change", "tire_change", "ac_recharge", "new_tires"];
+export type DiscountTarget = "all" | "labor_jobs" | "oil_change" | "tire_change" | "ac_recharge" | "inspection" | "tire_repair" | "new_tires";
+export const DISCOUNT_TARGETS: readonly DiscountTarget[] = ["all", "labor_jobs", "oil_change", "tire_change", "ac_recharge", "inspection", "tire_repair", "new_tires"];
 
 export interface HouseRule {
   id: string;

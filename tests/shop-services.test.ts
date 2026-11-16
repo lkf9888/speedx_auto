@@ -61,3 +61,32 @@ describe("in the workbench", () => {
     expect(patch.options.map((o) => [o.unitPrice, o.quantity, o.customerTotal])).toEqual([[30, 3, 90]]);
   });
 });
+
+describe("review fixes", () => {
+  it("defaults to one tire in the workbench and refuses bad counts everywhere", async () => {
+    const one = quotes((await runWorkbenchTool(api, "get_shop_service_price", { service: "tire_repair", tire_kind: "standard" }, () => "W-3", null)).events)[0];
+    expect(one.options[0]).toMatchObject({ quantity: 1, customerTotal: 20 });
+    const nulled = quotes((await runWorkbenchTool(api, "get_shop_service_price", { service: "tire_repair", tire_kind: "standard", tire_count: null }, () => "W-4", null)).events)[0];
+    expect(nulled.options[0].customerTotal).toBe(20);
+    expect((await runWorkbenchTool(api, "get_shop_service_price", { service: "tire_repair", tire_count: 21 }, () => "W-5", null)).isError).toBe(true);
+    expect((await runTool(api, "get_shop_service_price", { service: "tire_repair", tire_count: 8 }, () => "E-5", "en")).isError).toBe(true);
+    expect(cards((await runTool(api, "get_shop_service_price", { service: "tire_repair", tire_kind: "standard" }, () => "E-6", "en")).events)[0].totalLow).toBe(20);
+  });
+
+  it("the copy for the customer says how many tires the price is for", async () => {
+    const { customerText } = await import("@/lib/workbench/customer-text");
+    const patch = quotes((await runWorkbenchTool(api, "get_shop_service_price", { service: "tire_repair", tire_kind: "standard", tire_count: 3 }, () => "W-6", null)).events)[0];
+    expect(customerText(patch)).toContain("每条 $20.00 × 3：$60.00");
+  });
+
+  it("a follow-up offer on an inspection applies to inspections only", async () => {
+    const { DISCOUNT_TARGETS } = await import("@/lib/repair-chat/house-rules");
+    expect(DISCOUNT_TARGETS).toContain("inspection");
+    expect(DISCOUNT_TARGETS).toContain("tire_repair");
+  });
+
+  it("the workbench prompt points the new services at the right tool", async () => {
+    const { WORKBENCH_PROMPT } = await import("@/lib/workbench/assistant");
+    expect(WORKBENCH_PROMPT).toContain("get_shop_service_price");
+  });
+});
