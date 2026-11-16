@@ -434,7 +434,7 @@ export function StaffQuoteCard({
 
       {quote.labor && labor !== null && (
         <p data-testid="labor-line" className="border-b border-ink-100 px-4 py-2 text-ink-700">
-          工时 <b className="tabular-nums">{quote.labor.hours} h</b> × {money(quote.labor.hours > 0 ? Math.round((labor / quote.labor.hours) * 100) / 100 : quote.labor.rate)} ={" "}
+          工时 <b className="tabular-nums">{laborWithExtra(quote.labor, custom).hours} h</b> × {money(laborWithExtra(quote.labor, custom).hours > 0 ? Math.round((labor / laborWithExtra(quote.labor, custom).hours) * 100) / 100 : quote.labor.rate)} ={" "}
           <b className="tabular-nums">{money(labor)}</b>
         </p>
       )}

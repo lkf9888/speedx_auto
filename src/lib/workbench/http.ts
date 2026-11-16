@@ -18,7 +18,7 @@ import { getConversationStore, newTurnId, type ConversationStore } from "./conve
 import { ASSISTANT, type Turn, type Vehicle } from "./conversation-types";
 import type { AlldataDraft } from "./alldata-draft";
 import type { MemoryProposal } from "./assistant";
-import type { PriceTier } from "./price-tier";
+import { extraPctOf, PRESET_PRICING, type PriceTier } from "./price-tier";
 import type { StaffQuote } from "./quote";
 import { withFinalPrices } from "./final-price";
 
@@ -261,7 +261,11 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
           if (!answer.text && reply.priceChoice) answer.text = "按哪个价报？";
           if (!answer.text && !answer.quotes.length && !answer.drafts && !answer.memories) answer.text = REPLY_ERRORS.empty;
           try {
-            if (reply.tier) await store.setPriceTier(conversationId, user.email, reply.tier);
+            if (reply.tier) {
+              // Naming the price in words keeps the extra labor hours staff already set.
+              const extra = extraPctOf(stored?.pricing);
+              await store.setPriceTier(conversationId, user.email, reply.tier, extra > 0 && reply.tier !== "custom" ? { ...PRESET_PRICING[reply.tier], laborExtraPct: extra } : undefined);
+            }
             await store.append(conversationId, user.email, [answer], reply.vehicle);
             send({ type: "saved", turns: [userTurn, answer] });
           } catch (error) {

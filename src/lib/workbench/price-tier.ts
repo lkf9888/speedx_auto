@@ -103,16 +103,21 @@ function baseLabor(quote: Pick<StaffQuote, "labor">, tier: PriceTier, custom?: C
   return tier === "retail" || tier === "custom" ? quote.labor.walkIn : quote.labor.referral;
 }
 
+/** The labor hours once the extra is in, to 0.01 h so that hours × rate is exactly what is charged. */
+const hoursAt = (hours: number, extraPct: number): number => (extraPct > 0 ? money(hours * (1 + extraPct / 100)) : hours);
+
 /** The extra hours at this price, in dollars (0 when none, or the quote has no labor). */
 function extraLabor(quote: Pick<StaffQuote, "labor">, tier: PriceTier, custom?: CustomPricing | null): number {
   const base = baseLabor(quote, tier, custom);
-  return base === null ? 0 : money((base * extraPctOf(custom)) / 100);
+  const extra = extraPctOf(custom);
+  if (base === null || extra === 0 || !quote.labor || quote.labor.hours <= 0) return 0;
+  return money((hoursAt(quote.labor.hours, extra) * base) / quote.labor.hours - base);
 }
 
 /** The labor hours and their list value ($120/h) once the extra hours are in. */
 export function laborWithExtra(labor: { hours: number; walkIn: number }, custom?: CustomPricing | null): { hours: number; list: number } {
-  const factor = 1 + extraPctOf(custom) / 100;
-  return { hours: money(labor.hours * factor), list: money(labor.walkIn * factor) };
+  const hours = hoursAt(labor.hours, extraPctOf(custom));
+  return { hours, list: labor.hours > 0 ? money((hours * labor.walkIn) / labor.hours) : labor.walkIn };
 }
 
 /** The option's total at the sliders' positions; options without a cost keep the retail parts price. */
@@ -125,7 +130,7 @@ export function customTotal(quote: Pick<StaffQuote, "kind" | "labor">, option: S
     const retail = Math.max(option.unitPrice - eco - mounting, option.unitCost);
     return money((option.unitCost + (retail - option.unitCost) * share + eco + mounting) * option.quantity);
   }
-  const hours = (quote.labor?.hours ?? 0) * (1 + extraPctOf(pricing) / 100);
+  const hours = hoursAt(quote.labor?.hours ?? 0, extraPctOf(pricing));
   const list = option.unitPrice * option.quantity;
   const low = option.costTotal === null ? list : Math.min(option.costTotal, list);
   const high = option.costTotal === null ? list : Math.max(option.costTotal, list);
@@ -135,6 +140,10 @@ export function customTotal(quote: Pick<StaffQuote, "kind" | "labor">, option: S
 /** The option's total at the chosen price, extra hours included. */
 export function totalAt(quote: Pick<StaffQuote, "kind" | "labor">, option: StaffQuoteOption, tier: PriceTier, custom?: CustomPricing | null): number {
   const sliders = sliderPricing(tier, custom);
+  if (tier === "cost" && quote.kind !== "tires" && option.costTotal !== null) {
+    // Parts at the purchase cost exactly, even where the list price is below it.
+    return money(option.costTotal + (quote.labor ? hoursAt(quote.labor.hours, extraPctOf(custom)) * PRESET_PRICING.cost.laborRate : 0));
+  }
   if (sliders) return customTotal(quote, option, { ...sliders, laborExtraPct: custom?.laborExtraPct });
   return money(tierTotal(option, tier) + extraLabor(quote, tier, custom));
 }

@@ -10,7 +10,9 @@ import type { Turn } from "@/lib/workbench/conversation-types";
 import { memoryKv } from "@/lib/workbench/kv";
 import { atTier, laborWithExtra, snapPricing, TIER_LABEL, tierLabor, tierMarkup, totalAt } from "@/lib/workbench/price-tier";
 import { buildLaborQuote } from "@/lib/workbench/quote";
-import type { StaffPartOption } from "@/lib/worldpac/catalog";
+import { RateLimiter } from "@/lib/repair-chat/rate-limit";
+import { handleWorkbenchChat } from "@/lib/workbench/http";
+import type { CatalogApi, StaffPartOption } from "@/lib/worldpac/catalog";
 
 // Kevin, 2026-11-16: the prices were renamed (原价, 原价+8折人工, 基础价+8折人工), a fourth one was added
 // (成本价+8折人工: parts at purchase cost, labor at $96/h) and the labor hours can be extended by 0-100% in 10% steps.
@@ -55,6 +57,22 @@ describe("the cost price and extra labor hours", () => {
   it("the card names the price and the extra hours", () => {
     render(<StaffQuoteCard quote={q} tier="cost" custom={{ partsPct: 0, laborRate: 96, laborExtraPct: 20 }} />);
     expect(screen.getByTestId("quote-tier")).toHaveTextContent("按成本价+8折人工（工时加时 20%）");
+  });
+
+  it("cost price is the purchase cost exactly, even when the list price is below it", () => {
+    const odd = buildLaborQuote("2019 Toyota Camry", { serviceName: "Brake Rotor R&R", position: "Front", laborHours: 1, laborNote: "", primaryPartName: "Brake Disc", otherPartNames: [], partsNote: "", partOptions: [{ ...part, listPrice: 80, quantity: 1, prices: { unitPrice: 100 } }] }, "W-2", env);
+    expect(totalAt(odd, odd.options[0], "cost")).toBe(100 + 96);
+    expect(tierMarkup(odd, odd.options[0], "cost")).toBe(0);
+  });
+
+  it("extended hours are rounded to 0.01 h first, so hours × rate is exactly what is charged", () => {
+    const short = buildLaborQuote("2019 Toyota Camry", { serviceName: "Cabin Filter", position: "", laborHours: 0.25, laborNote: "", primaryPartName: "Filter", otherPartNames: [], partsNote: "", partOptions: [{ ...part, listPrice: 20, quantity: 1, prices: { unitPrice: 10 } }] }, "W-3", env);
+    const extra = { partsPct: 100, laborRate: 96, laborExtraPct: 10 };
+    const { hours, list } = laborWithExtra(short.labor!, extra);
+    expect(hours).toBe(0.28);
+    expect(list).toBe(33.6);
+    expect(tierLabor(short, "referral", extra)).toBe(26.88);
+    expect(totalAt(short, short.options[0], "referral", extra)).toBeCloseTo(short.options[0].referralTotal + 26.88 - short.labor!.referral, 2);
   });
 
   it("tells the assistant about the cost price and the extra hours", () => {
@@ -115,5 +133,24 @@ describe("saving the extra hours", () => {
     expect((await store.get("cabc1234"))?.pricing).toBeUndefined();
     expect((await patch(store, { priceTier: "referral", pricing: { partsPct: 100, laborRate: 96 } })).status).toBe(200);
     expect((await store.get("cabc1234"))?.pricing).toBeUndefined();
+  });
+});
+
+describe("naming the price in chat", () => {
+  it("keeps the extra hours already set", async () => {
+    const store = new ConversationStore(memoryKv());
+    const turn = (role: "user" | "assistant", text: string): Turn => ({ id: newTurnId(), role, text, author: role === "user" ? "kevin@x" : "assistant", at: Date.now(), quotes: [] });
+    await store.append("cabc1234", "kevin@x", [turn("user", "q"), turn("assistant", "按哪个价报？")], undefined, "x");
+    await store.setPriceTier("cabc1234", "kevin@x", "referral", { partsPct: 100, laborRate: 96, laborExtraPct: 50 });
+    const replies = [
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t", name: "set_price_tier", input: { tier: "friend" } }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "好的。" }] },
+    ];
+    const response = await handleWorkbenchChat(
+      new Request("https://repair.speedxrental.com/api/workbench/chat", { method: "POST", body: JSON.stringify({ conversationId: "cabc1234", message: "客户是朋友", vehicleKey: null }) }),
+      { user: async () => ({ email: "kevin@x" }), configured: () => true, limiter: new RateLimiter(), log: () => {}, catalog: () => ({}) as CatalogApi, client: () => ({ beta: { messages: { create: (async () => replies.shift()) as never } } }), conversations: () => store },
+    );
+    await response.text();
+    expect(await store.get("cabc1234")).toMatchObject({ priceTier: "friend", pricing: { partsPct: 0, laborRate: 96, laborExtraPct: 50 } });
   });
 });
