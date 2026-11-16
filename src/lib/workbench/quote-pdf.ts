@@ -265,8 +265,8 @@ export function quoteImageName(quote: Pick<PricedQuote, "id">): string {
   return `SPEEDX-Estimate-${quote.id}.png`;
 }
 
-/** Lays the page out off-screen, draws it, and hands the canvas to `use`. */
-async function withPageCanvas<T>(quote: PricedQuote, now: Date, sheet: SheetPdf | undefined, labor: PdfLabor | null | undefined, use: (canvas: HTMLCanvasElement) => T | Promise<T>): Promise<T> {
+/** Lays the page out off-screen, draws it, and hands the canvas to `draw`. */
+async function withPageCanvas<T>(quote: PricedQuote, now: Date, sheet: SheetPdf | undefined, labor: PdfLabor | null | undefined, draw: (canvas: HTMLCanvasElement) => T | Promise<T>): Promise<T> {
   const { default: html2canvas } = await import("html2canvas-pro");
   const page = buildQuotePage(quote, now, undefined, sheet, labor);
   const holder = el("div", { position: "fixed", left: "-10000px", top: "0" }, undefined, [page]);
@@ -274,7 +274,7 @@ async function withPageCanvas<T>(quote: PricedQuote, now: Date, sheet: SheetPdf 
   try {
     await Promise.all([...page.querySelectorAll("img")].map((img) => img.decode().catch(() => undefined)));
     const canvas = await html2canvas(page, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
-    return await use(canvas);
+    return await draw(canvas);
   } finally {
     holder.remove();
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { withFinalPrices } from "@/lib/workbench/final-price";
 import {
   tierLabor,
@@ -283,10 +283,14 @@ export function PriceChoiceCard({
   disabled?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>(() => startingDraft(current, currentPricing));
-  // A price saved elsewhere (a reload, a colleague, the assistant) moves the sliders with it.
-  useEffect(() => {
+  // A price saved elsewhere (a reload, a colleague, the assistant) moves the sliders with it:
+  // the draft is rebuilt during render when the saved price changes.
+  const saved = `${current ?? ""}|${currentPricing?.partsPct ?? ""}|${currentPricing?.laborRate ?? ""}`;
+  const [seen, setSeen] = useState(saved);
+  if (seen !== saved) {
+    setSeen(saved);
     setDraft(startingDraft(current, currentPricing));
-  }, [current, currentPricing?.partsPct, currentPricing?.laborRate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
   const live = Boolean(current) && Boolean(onAdjust);
   const change = (next: Draft) => {
     setDraft(next);
