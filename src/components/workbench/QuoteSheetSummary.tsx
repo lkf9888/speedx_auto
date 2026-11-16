@@ -166,109 +166,131 @@ export function QuoteSheetSummary({ quotes, tier, custom }: { quotes: StaffQuote
     }
   }
 
+  // The sums on the side panel: parts, labor at the $120/h list price (with any extra hours) and what the price charges for it.
+  const withLabor = lines.flatMap((l) => {
+    const labor = l.chosen?.quote.labor;
+    if (!l.chosen || !labor || l.chosen.option.originalTotal != null) return [];
+    const charged = tierLabor(l.chosen.quote, tier, custom) ?? labor.walkIn;
+    return l.chosen.option.customerTotal >= charged ? [{ list: laborWithExtra(labor, custom).list, charged }] : [];
+  });
+  const laborList = cents(withLabor.reduce((sum, l) => sum + l.list, 0));
+  const laborCharged = cents(withLabor.reduce((sum, l) => sum + l.charged, 0));
+  const kv = "flex items-baseline justify-between gap-3 text-[13px] text-slate-200";
+  const asideBtn = "rounded-lg border border-slate-500 bg-[#2b3648] px-3 py-2 text-center text-xs font-semibold text-white hover:bg-[#364258] disabled:opacity-50";
+
   return (
-    <article data-testid="quote-sheet" className="rounded-xl border-2 border-brand-200 bg-white text-sm shadow-sm">
-      <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-ink-100 px-4 py-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">报价单 · 按{TIER_LABEL[tier]}{tier === "custom" && custom ? `（${describePricing(custom)}）` : ""}{pending.length ? ` · ${pending.length} 项待补价` : ""}</p>
-          <p className="text-xs text-ink-500">{vehicle}</p>
-        </div>
-        <p className="text-lg font-semibold tabular-nums text-ink-900" data-testid="quote-sheet-total">
-          {pending.length ? "已报价合计" : "合计"} {money(total)}
-        </p>
-        <p data-testid="quote-sheet-after-tax" className="basis-full text-xs text-ink-600">
-          GST 5% {money(taxed.gst)} · PST 7% {money(taxed.pst)} · <span className="font-semibold text-ink-900">税后 {money(taxed.total)}</span>
-        </p>
-        {discountTotal > 0 && (
-          <p data-testid="labor-discount-total" className="basis-full text-xs font-semibold text-emerald-800">
-            工时按 $120/h 原价，已优惠 −{money(discountTotal)}
-          </p>
-        )}
-      </header>
-      <ul className="divide-y divide-ink-100">
-        {lines.map(({ key, name, options, chosen }) => (
-          <li key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
-            <span className="basis-full font-medium text-ink-900">{name}</span>
-            {options.length === 0 ? (
-              <span className="font-semibold text-amber-800">待补价（WorldPac 本地和调货都没有，先不计入合计）</span>
-            ) : (
-              <>
-                {options.length > 1 ? (
-                  <select
-                    aria-label={`${name} 选哪个零件`}
-                    value={chosen?.key}
-                    onChange={(e) => setPicked((p) => ({ ...p, [key]: e.target.value }))}
-                    className="min-w-0 max-w-full flex-1 rounded-md border border-ink-200 bg-[#fff] px-2 py-1 text-xs text-[#111b21]"
-                  >
-                    {options.map((o) => (
-                      <option key={o.key} value={o.key}>
-                        {o.note ? `${o.note} · ` : ""}
-                        {optionName(o.option)} · {supplierLabel(o.quote, o.option) || ""} · {money(o.option.customerTotal)}
-                      </option>
-                    ))}
-                  </select>
+    <article data-testid="quote-sheet" className="overflow-hidden rounded-xl border-2 border-brand-200 bg-white text-sm shadow-sm">
+      <div className="grid md:grid-cols-[minmax(0,1fr)_16.5rem]">
+        <div className="min-w-0">
+          <header className="px-4 py-3">
+            <p className="text-base font-semibold text-ink-900">{vehicle}</p>
+            <p className="mt-1 text-xs text-ink-600">
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-900">报价单 · 按{TIER_LABEL[tier]}{tier === "custom" && custom ? `（${describePricing(custom)}）` : ""}</span>
+              {pending.length ? <span className="ml-2 font-semibold text-amber-800">{pending.length} 项待补价</span> : null}
+            </p>
+          </header>
+          <ul className="divide-y divide-ink-100 border-t border-ink-100">
+            {lines.map(({ key, name, options, chosen }) => (
+              <li key={key} className="px-4 py-2.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="font-semibold text-ink-900">{name}</span>
+                  <span className="shrink-0 text-right text-base font-semibold tabular-nums text-ink-900">{chosen ? money(chosen.option.customerTotal) : "—"}</span>
+                </div>
+                {options.length === 0 ? (
+                  <p className="mt-0.5 font-semibold text-amber-800">待补价（WorldPac 本地和调货都没有，先不计入合计）</p>
                 ) : (
-                  <span data-testid="sheet-supplier" className="min-w-0 flex-1 truncate text-xs text-ink-600">{optionName(options[0].option)} · {supplierLabel(options[0].quote, options[0].option)}</span>
+                  <>
+                    {options.length > 1 ? (
+                      <select
+                        aria-label={`${name} 选哪个零件`}
+                        value={chosen?.key}
+                        onChange={(e) => setPicked((p) => ({ ...p, [key]: e.target.value }))}
+                        className="mt-1 block w-full min-w-0 rounded-md border border-ink-200 bg-[#fff] px-2 py-1 text-xs text-[#111b21]"
+                      >
+                        {options.map((o) => (
+                          <option key={o.key} value={o.key}>
+                            {o.note ? `${o.note} · ` : ""}
+                            {optionName(o.option)} · {supplierLabel(o.quote, o.option) || ""} · {money(o.option.customerTotal)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p data-testid="sheet-supplier" className="mt-0.5 truncate text-xs text-ink-600">{optionName(options[0].option)} · {supplierLabel(options[0].quote, options[0].option)}</p>
+                    )}
+                    <div className="mt-0.5 flex flex-wrap items-center justify-between gap-x-3 text-xs">
+                      {(() => {
+                        const l = laborOf({ key, name, options, chosen });
+                        return l ? (
+                          <span data-testid="labor-discount" className="text-emerald-800">
+                            工时 {l.hours}h 原价 {money(l.list)} → 优惠 −{money(l.discount)}（{l.pct}% off）→ {money(l.charged)}
+                          </span>
+                        ) : (
+                          <span />
+                        );
+                      })()}
+                      {chosen?.option.eta && <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-900">本地没货，调货 · {chosen.option.eta}</span>}
+                    </div>
+                  </>
                 )}
-                <span className="w-24 shrink-0 text-right font-semibold tabular-nums text-ink-900">{chosen ? money(chosen.option.customerTotal) : "—"}</span>
-                {(() => {
-                  const l = laborOf({ key, name, options, chosen });
-                  return l ? (
-                    <span data-testid="labor-discount" className="basis-full text-xs text-emerald-800">
-                      工时 {l.hours}h 原价 {money(l.list)} → 优惠 −{money(l.discount)}（{l.pct}% off）→ {money(l.charged)}
-                    </span>
-                  ) : null;
-                })()}
-                {chosen?.option.eta && <span className="basis-full text-xs font-semibold text-amber-800">本地没货，调货 · {chosen.option.eta}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <aside className="flex flex-col gap-1.5 bg-[#1c2430] p-4 text-slate-100">
+          <p data-testid="quote-sheet-total">
+            <span className="block text-xs text-slate-300">{pending.length ? "已报价合计" : "合计"}</span>{" "}
+            <span className="text-3xl font-extrabold tabular-nums text-white">{money(total)}</span>
+          </p>
+          <p className="text-[11px] text-slate-400">税前</p>
+          <div className="mt-1 space-y-1">
+            {laborCharged > 0 && (
+              <>
+                <p className={kv}><span>零件</span><span className="tabular-nums">{money(cents(total - laborCharged))}</span></p>
+                <p className={kv}><span>工时（$120/h 原价）</span><span className="tabular-nums">{money(laborList)}</span></p>
               </>
             )}
-          </li>
-        ))}
-      </ul>
-      <footer className="flex flex-wrap items-center gap-2 border-t border-ink-100 px-4 py-3">
-        <button
-          type="button"
-          onClick={() => void copy()}
-          disabled={priced.length === 0}
-          className="rounded-full bg-ink-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
-        >
-          复制报价给客人
-        </button>
-        {orderRows.length > 0 && (
-          <button
-            type="button"
-            data-testid="copy-order-list"
-            onClick={() => void navigator.clipboard.writeText(orderText).then(() => setOrderCopied("done"), () => setOrderCopied("failed"))}
-            className="rounded-full border border-amber-600 px-4 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50"
-          >
-            复制订货单（内部，含进价）
-          </button>
-        )}
-        {orderCopied === "done" && <span className="text-xs text-emerald-700">订货单已复制（含进价，别发给客人）</span>}
-        {orderCopied === "failed" && <span className="text-xs text-amber-700">浏览器不让复制订货单</span>}
-        <button
-          type="button"
-          onClick={() => void makePdf()}
-          disabled={priced.length === 0 || pdf === "making"}
-          className="rounded-full border border-ink-900 px-4 py-1.5 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
-        >
-          {pdf === "making" ? "正在生成 PDF…" : "下载 PDF 报价单"}
-        </button>
-        <button
-          type="button"
-          onClick={() => void makeImage()}
-          disabled={priced.length === 0 || image === "making"}
-          className="rounded-full border border-ink-900 px-4 py-1.5 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
-        >
-          {image === "making" ? "正在生成图片…" : "下载图片报价单"}
-        </button>
-        {image === "failed" && <span className="text-xs text-amber-700">图片生成失败，请再试一次</span>}
-        {pdf === "failed" && <span className="text-xs text-amber-700">PDF 生成失败，请再试一次</span>}
-        {copied === "done" && <span className="text-xs text-emerald-700">已复制（不含进价）</span>}
-        {copied === "failed" && <span className="text-xs text-amber-700">浏览器不允许复制，请手动选择下面的文字</span>}
-        <span className="text-xs text-ink-500">这是要发给客人的报价单；要改价时展开下面的“各项明细”。</span>
-      </footer>
-      {copied === "failed" && <pre className="mx-4 mb-3 whitespace-pre-wrap rounded-lg bg-ink-50 p-3 text-xs">{text}</pre>}
+            {discountTotal > 0 && (
+              <p data-testid="labor-discount-total" className={`${kv} font-semibold text-emerald-300!`}>
+                <span>工时优惠</span><span className="tabular-nums">−{money(discountTotal)}</span>
+              </p>
+            )}
+          </div>
+          <div data-testid="quote-sheet-after-tax" className="mt-1 space-y-1 border-t border-slate-600 pt-2">
+            <p className={kv}><span>GST 5%</span><span className="tabular-nums">{money(taxed.gst)}</span></p>
+            <p className={kv}><span>PST 7%</span><span className="tabular-nums">{money(taxed.pst)}</span></p>
+            <p className={`${kv} text-white! font-bold`}><span>税后</span><span className="tabular-nums">{money(taxed.total)}</span></p>
+          </div>
+          <div className="mt-2 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => void copy()}
+              disabled={priced.length === 0}
+              className="rounded-lg bg-[#f7b900] px-3 py-2 text-xs font-bold text-[#1c2430] hover:bg-[#e0a800] disabled:opacity-50"
+            >
+              复制报价给客人
+            </button>
+            {orderRows.length > 0 && (
+              <button type="button" data-testid="copy-order-list" onClick={() => void navigator.clipboard.writeText(orderText).then(() => setOrderCopied("done"), () => setOrderCopied("failed"))} className={asideBtn}>
+                复制订货单（内部，含进价）
+              </button>
+            )}
+            <button type="button" onClick={() => void makePdf()} disabled={priced.length === 0 || pdf === "making"} className={asideBtn}>
+              {pdf === "making" ? "正在生成 PDF…" : "下载 PDF 报价单"}
+            </button>
+            <button type="button" onClick={() => void makeImage()} disabled={priced.length === 0 || image === "making"} className={asideBtn}>
+              {image === "making" ? "正在生成图片…" : "下载图片报价单"}
+            </button>
+          </div>
+          {orderCopied === "done" && <p className="text-xs text-emerald-300">订货单已复制（含进价，别发给客人）</p>}
+          {orderCopied === "failed" && <p className="text-xs text-amber-300">浏览器不让复制订货单</p>}
+          {image === "failed" && <p className="text-xs text-amber-300">图片生成失败，请再试一次</p>}
+          {pdf === "failed" && <p className="text-xs text-amber-300">PDF 生成失败，请再试一次</p>}
+          {copied === "done" && <p className="text-xs text-emerald-300">已复制（不含进价）</p>}
+          {copied === "failed" && <p className="text-xs text-amber-300">浏览器不允许复制，请手动选择下面的文字</p>}
+          <p className="mt-1 text-[11px] leading-4 text-slate-400">这是要发给客人的报价单；要改价时展开下面的“各项明细”。</p>
+        </aside>
+      </div>
+      {copied === "failed" && <pre className="mx-4 my-3 whitespace-pre-wrap rounded-lg bg-ink-50 p-3 text-xs">{text}</pre>}
     </article>
   );
 }
