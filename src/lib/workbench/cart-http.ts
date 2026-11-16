@@ -34,9 +34,9 @@ export async function handleWorldpacCart(request: Request, deps: CartDeps = defa
   const category = typeof body?.categoryCode === "string" ? body.categoryCode : "";
   const items = Array.isArray(body?.items) ? body.items : [];
   const clean = items.flatMap((item) => {
-    const { partNumber, qty } = (item ?? {}) as { partNumber?: unknown; qty?: unknown };
+    const { partNumber, qty, brand } = (item ?? {}) as { partNumber?: unknown; qty?: unknown; brand?: unknown };
     return typeof partNumber === "string" && PART.test(partNumber.trim()) && Number.isInteger(qty) && (qty as number) >= 1 && (qty as number) <= 20
-      ? [{ partNumber: partNumber.trim(), qty: qty as number }]
+      ? [{ partNumber: partNumber.trim(), qty: qty as number, ...(typeof brand === "string" && brand.trim() ? { brand: brand.trim().slice(0, 60) } : {}) }]
       : [];
   });
   // Every item must be valid: a part that was dropped quietly would leave the cart short.
@@ -45,7 +45,10 @@ export async function handleWorldpacCart(request: Request, deps: CartDeps = defa
     const result = await addToWorldpacCart(deps.catalog(), vehicle, category, clean, deps.now?.());
     deps.log({ action: "worldpac_cart", email: user.email, status: result.status, lines: clean.length });
     if (result.status === "ok") return json({ orderNumber: result.orderNumber, created: result.created });
-    return json({ error: result.status === "part_not_found" ? "part_not_found" : "failed", ...(result.status === "part_not_found" ? { partNumber: result.partNumber } : {}) }, result.status === "part_not_found" ? 404 : 502);
+    if (result.status === "part_not_found") return json({ error: "part_not_found", partNumber: result.partNumber }, 404);
+    if (result.status === "not_enough_stock") return json({ error: "not_enough_stock", partNumber: result.partNumber, available: result.available }, 409);
+    if (result.status === "just_added") return json({ error: "just_added" }, 409);
+    return json({ error: "failed", reason: result.reason }, 502);
   } catch (error) {
     console.error("worldpac cart failed", error instanceof Error ? error.name : "unknown");
     return json({ error: "upstream" }, 502);

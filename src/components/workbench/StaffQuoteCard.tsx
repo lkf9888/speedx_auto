@@ -153,7 +153,9 @@ function CartButton({
 
 const WORLDPAC_CART_NOTE: Record<string, string> = {
   part_not_found: "WorldPac 现在查不到这个零件（可能刚卖完或下架了），没有加进购物车。",
-  failed: "speedDIAL 没有接受这次加购物车，没有加进去。",
+  not_enough_stock: "WorldPac 现在的库存不够这个数量，没有加进购物车。",
+  just_added: "这个零件两分钟内刚加过，请先到 speedDIAL 购物车看一眼，免得加两遍。",
+  failed: "speedDIAL 没有接受这次加购物车，或加完后读回来对不上。请到 speedDIAL 购物车看一眼再决定要不要重试。",
   bad_request: "零件、数量或车型不完整，没有加进购物车。",
   unauthorized: "登录已失效，请刷新工作台重新登录。",
   upstream: "speedDIAL 暂时没有回应，请稍后再试。",
@@ -206,7 +208,7 @@ function AddToCart({ quote, option, vehicleKey }: { quote: StaffQuote; option: S
           const response = await fetch("/api/workbench/cart/worldpac", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ vehicleKey, categoryCode: category, items: parts.map((partNumber) => ({ partNumber, qty: option.quantity })) }),
+            body: JSON.stringify({ vehicleKey, categoryCode: category, items: parts.map((partNumber) => ({ partNumber, qty: option.quantity, ...(option.brand ? { brand: option.brand } : {}) })) }),
           });
           const data = (await response.json().catch(() => null)) as { orderNumber?: string; error?: string; created?: boolean } | null;
           if (response.ok && data?.orderNumber) {

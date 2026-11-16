@@ -1087,7 +1087,7 @@ export interface StaffPartOption extends PartOption {
 }
 
 export const PART_NUMBER_FIELDS = ["manufacturerPart", "partNumber", "partNo", "productNumber", "itemNumber", "mfgPartNumber", "catalogNumber"];
-const BRAND_FIELDS = ["brandName", "brand", "manufacturerName", "manufacturer", "lineDescription", "mfgName"];
+export const BRAND_FIELDS = ["brandName", "brand", "manufacturerName", "manufacturer", "lineDescription", "mfgName"];
 
 function firstString(q: Record<string, unknown>, keys: string[]): string {
   for (const key of keys) {

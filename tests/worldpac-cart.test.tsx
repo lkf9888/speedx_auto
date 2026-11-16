@@ -14,6 +14,7 @@ const vehicle: VehicleRef = { baseVehicleId: 123, label: "2021 Porsche Cayenne G
 const key = encodeVehicleKey(vehicle);
 const productQuote = (partNumber: string, extra: Record<string, unknown> = {}) => ({
   manufacturerPart: partNumber,
+  brandName: "SHW Performance",
   productID: { key: `N1000-${partNumber}   SHG`, brandCode: "SHG" },
   warehouseID: "176",
   appID: "6231099167",
@@ -25,30 +26,45 @@ const productQuote = (partNumber: string, extra: Record<string, unknown> = {}) =
   ...extra,
 });
 
-function fakeApi(cartOnHand: string | null = null) {
+function fakeApi(cartOnHand: string | null = null, options: { dropWrites?: boolean; historyError?: boolean } = {}) {
   const calls: Array<{ path: string; data: unknown; extra?: Record<string, unknown> }> = [];
+  const lines = new Map<string, number>(cartOnHand ? [[cartOnHand, 1]] : []);
   const api: CatalogApi = {
-    async get() {
-      throw new Error("unused");
+    async get<T>(path: string) {
+      const n = path.replace("order/", "");
+      return { order: { orderLines: Array.from({ length: lines.get(n) ?? 0 }) } } as T;
     },
     async post<T>(path: string, data: unknown, extra?: Record<string, unknown>) {
       calls.push({ path, data, extra });
-      if (path === "pna360_cat") return { quotes: [{ PnARequestID: 999, productQuotes: [productQuote("PFL47533"), productQuote("PFR47534"), productQuote("PFL47533", { availability: "Wednesday", qtyAvailable: 0, warehouseID: "999" })] }] } as T;
-      if (path === "order/history") {
-        return { orders: cartOnHand ? [{ orderHeader: { orderNumber: cartOnHand, orderStatusDescription: "In shopping cart", modifiedTimeMS: 5 } }, { orderHeader: { orderNumber: "1", orderStatusDescription: "Delivered", modifiedTimeMS: 9 } }] : [{ orderHeader: { orderNumber: "1", orderStatusDescription: "Delivered" } }] } as T;
+      if (path === "pna360_cat") {
+        return { quotes: [{ PnARequestID: 999, productQuotes: [productQuote("PFL47533", { unitPrice: 342 }), productQuote("PFR47534"), productQuote("PFL47533", { availability: "Wednesday", qtyAvailable: 0, warehouseID: "999" }), productQuote("PFL47533", { warehouseID: "177", unitPrice: 300, brandName: "Other" })] }] } as T;
       }
-      if (path === "createorder") return { status: { code: 200 }, order: { orderHeader: { orderNumber: "4463000" } } } as T;
-      if (path === "order/addlines") return { status: { code: 200 } } as T;
+      if (path === "order/history") {
+        if (options.historyError) return { status: { code: 400 } } as T;
+        return { status: { code: 200 }, orders: cartOnHand ? [{ orderHeader: { orderNumber: cartOnHand, orderStatusDescription: "In shopping cart", modifiedTimeMS: 5 } }, { orderHeader: { orderNumber: "1", orderStatusDescription: "Delivered", modifiedTimeMS: 9 } }] : [{ orderHeader: { orderNumber: "1", orderStatusDescription: "Delivered" } }] } as T;
+      }
+      if (path === "createorder") {
+        if (!options.dropWrites) lines.set("4463000", (data as unknown[]).length);
+        return { status: { code: 200 }, order: { orderHeader: { orderNumber: "4463000" } } } as T;
+      }
+      if (path === "order/addlines") {
+        if (!options.dropWrites) lines.set(String(extra?.orderNumber), (lines.get(String(extra?.orderNumber)) ?? 0) + (data as unknown[]).length);
+        return { status: { code: 200 } } as T;
+      }
       throw new Error(path);
     },
   };
   return { api, calls };
 }
 
+let clock = Date.UTC(2026, 10, 16, 18);
+/** Each call a few minutes later, so the "just added" guard of an earlier test doesn't apply. */
+const later = () => new Date((clock += 10 * 60_000));
+
 describe("the speedDIAL cart", () => {
   it("creates a cart order with a line built the way speedDIAL's own page builds it", async () => {
     const { api, calls } = fakeApi();
-    const result = await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "pfl47533", qty: 2 }]);
+    const result = await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "pfl47533", qty: 2, brand: "" }], later());
     expect(result).toEqual({ status: "ok", orderNumber: "4463000", created: true });
     const create = calls.find((c) => c.path === "createorder")!;
     expect(create.extra).toEqual({ orderType: "ST" });
@@ -58,7 +74,7 @@ describe("the speedDIAL cart", () => {
         brandId: "SHG",
         carrierID: "",
         carrierDescription: "WORLDPAC Delivery",
-        warehouseId: "176",
+        warehouseId: "177",
         applicationId: "6231099167",
         requestedQuantity: "2",
         catalogID: "N1000",
@@ -71,7 +87,7 @@ describe("the speedDIAL cart", () => {
 
   it("takes the local warehouse row, and adds to the cart that is already open", async () => {
     const { api, calls } = fakeApi("4462999");
-    const result = await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "PFL47533", qty: 1 }, { partNumber: "PFR47534", qty: 1 }]);
+    const result = await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "PFL47533", qty: 1, brand: "SHW" }, { partNumber: "PFR47534", qty: 1 }], later());
     expect(result).toEqual({ status: "ok", orderNumber: "4462999", created: false });
     const add = calls.find((c) => c.path === "order/addlines")!;
     expect(add.extra).toEqual({ orderNumber: "4462999" });
@@ -81,13 +97,41 @@ describe("the speedDIAL cart", () => {
 
   it("says when a part isn't there any more and sends nothing", async () => {
     const { api, calls } = fakeApi();
-    expect(await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "NOPE", qty: 1 }])).toEqual({ status: "part_not_found", partNumber: "NOPE" });
+    expect(await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "NOPE", qty: 1 }], later())).toEqual({ status: "part_not_found", partNumber: "NOPE" });
     expect(calls.map((c) => c.path)).toEqual(["pna360_cat"]);
+  });
+
+  it("takes the cheaper local row, the brand staff were quoted, and refuses a quantity the stock can't cover", async () => {
+    const { api } = fakeApi();
+    const wrongBrand = await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "PFL47533", qty: 1, brand: "Nobody" }], later());
+    expect(wrongBrand.status).toBe("part_not_found");
+    const tooMany = await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "PFL47533", qty: 9 }], later());
+    expect(tooMany).toEqual({ status: "not_enough_stock", partNumber: "PFL47533", available: 3 });
+  });
+
+  it("refuses the same part twice within two minutes, so a retry can't add it twice", async () => {
+    const { api, calls } = fakeApi();
+    const at = later();
+    expect((await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "PFR47534", qty: 1 }], at)).status).toBe("ok");
+    expect(await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "PFR47534", qty: 1 }], new Date(at.getTime() + 30_000))).toEqual({ status: "just_added" });
+    expect(calls.filter((c) => c.path === "createorder")).toHaveLength(1);
+  });
+
+  it("reads the cart back and says so when the lines didn't arrive", async () => {
+    const { api } = fakeApi(null, { dropWrites: true });
+    expect(await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "PFR47534", qty: 1 }], later())).toEqual({ status: "failed", reason: "unverified" });
+  });
+
+  it("doesn't guess a cart when the order list can't be read", async () => {
+    const { api, calls } = fakeApi(null, { historyError: true });
+    const result = await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "PFR47534", qty: 1 }], later());
+    expect(result.status).toBe("failed");
+    expect(calls.some((c) => c.path === "createorder" || c.path === "order/addlines")).toBe(false);
   });
 
   it("never calls anything that submits an order", async () => {
     const { api, calls } = fakeApi();
-    await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "PFL47533", qty: 1 }]);
+    await addToWorldpacCart(api, vehicle, "N1000", [{ partNumber: "PFL47533", qty: 1 }], later());
     expect(calls.map((c) => c.path).filter((p) => /submit/i.test(p))).toEqual([]);
   });
 });
@@ -106,7 +150,7 @@ describe("the cart route", () => {
   });
 
   it("answers with the cart order number", async () => {
-    const response = await handleWorldpacCart(post({ vehicleKey: key, categoryCode: "N1000", items: [{ partNumber: "PFL47533", qty: 1 }, { partNumber: "PFR47534", qty: 1 }] }), deps());
+    const response = await handleWorldpacCart(post({ vehicleKey: key, categoryCode: "N1000", items: [{ partNumber: "PFL47533", qty: 1 }, { partNumber: "PFR47534", qty: 1 }] }), { ...deps(), now: later });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ orderNumber: "4463000", created: true });
     const missing = await handleWorldpacCart(post({ vehicleKey: key, categoryCode: "N1000", items: [{ partNumber: "NOPE", qty: 1 }] }), deps());
@@ -132,7 +176,7 @@ describe("the button on a WorldPac part", () => {
     await waitFor(() => expect(screen.getByTestId("cart-done")).toBeInTheDocument());
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/workbench/cart/worldpac");
-    expect(JSON.parse(init.body as string)).toEqual({ vehicleKey: key, categoryCode: "N1000", items: [{ partNumber: "PFL47533", qty: 1 }, { partNumber: "PFR47534", qty: 1 }] });
+    expect(JSON.parse(init.body as string)).toEqual({ vehicleKey: key, categoryCode: "N1000", items: [{ partNumber: "PFL47533", qty: 1, brand: "SHW" }, { partNumber: "PFR47534", qty: 1, brand: "SHW" }] });
     expect(screen.getByTestId("cart-done")).toHaveTextContent("订单 4463000");
     expect(screen.getByRole("link", { name: /打开 speedDIAL/ })).toHaveAttribute("href", "https://speeddial.worldpac.com/#/order/4463000");
   });
