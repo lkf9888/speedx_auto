@@ -293,7 +293,8 @@ export async function handleLead(
   if (!known) deps.sessions.seed(session.id, readHistory(raw?.history));
   const firstTime = !session.lead || session.id !== sessionId;
   deps.sessions.attachLead(session.id, lead);
-  await deps.inbox?.()?.contact(session.thread, { ...lead, locale, ...(callback ? { callback: true } : {}) });
+  // Whether a held reply really goes out to the customer now (a session lost to a restart has none).
+  await deps.inbox?.()?.contact(session.thread, { ...lead, locale, ...(callback ? { callback: true } : {}) }, Boolean(session.pending));
   if (firstTime) {
     await deps.notify({ type: "lead_started", lead, locale, at });
     await Promise.all(session.estimates.map((card) => deps.notify(estimateLeadEvent(lead, locale, card))));

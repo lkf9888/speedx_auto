@@ -34,6 +34,33 @@ const card = {
   partsNote: "",
 } as never;
 
+describe("review fixes", () => {
+  it("a name in styled letters inside a normal line stays, and a reply is never emptied", () => {
+    expect(toPlainText("𝐌𝐢𝐜𝐡𝐚𝐞𝐥, 您的报价 $216–$311。")).toBe("𝐌𝐢𝐜𝐡𝐚𝐞𝐥, 您的报价 $216–$311。");
+    const onlyStyled = "𝑩𝒐𝒏𝒏𝒆 𝒇𝒐𝒓𝒎𝒂𝒕 𝒂𝒃𝒐𝒗𝒆 𝒊𝒔 𝒏𝒐𝒕 𝒖𝒔𝒆𝒅.";
+    expect(toPlainText(onlyStyled)).toBe(onlyStyled);
+  });
+
+  it("the link's snapshot keeps the log lines and still drops error turns", async () => {
+    const { snapshot } = await import("@/lib/workbench/shares");
+    const turn = (id: string, extra: object) => ({ id, role: "assistant", text: id, author: "assistant", at: 1, quotes: [], ...extra });
+    const copy = snapshot({ id: "w", title: "", updatedAt: 1, createdAt: 1, turns: [turn("event", { event: true, localOnly: true }), turn("error", { localOnly: true }), turn("reply", {})] } as unknown as Conversation);
+    expect(copy.turns.map((t) => t.id)).toEqual(["event", "reply"]);
+  });
+
+  it("after a restart the held reply was lost: the marker stays and the log says so, once", async () => {
+    const store = new ConversationStore(memoryKv());
+    const inbox = new WebsiteInbox(store);
+    const thread = "r".repeat(32);
+    await inbox.exchange({ thread, contact: { name: "", phone: "", locale: "zh-CN" }, question: "q", photos: [], reply: "a", estimates: [], held: true });
+    await inbox.contact(thread, { name: "", phone: "604-555-0182", locale: "zh-CN" }, false);
+    await inbox.contact(thread, { name: "", phone: "604-555-0182", locale: "zh-CN" }, false);
+    const c = (await store.get(websiteConversationId(thread)))!;
+    expect(c.turns.some((t) => t.held)).toBe(true);
+    expect(c.turns.filter((t) => t.event).map((t) => t.text)).toEqual(["客人留了联系方式，但被扣住的回复在服务重启时丢了，客人没有看到"]);
+  });
+});
+
 describe("the plain-text reply", () => {
   it("drops a stray line written in styled letters, and nothing else", () => {
     const stray = "𝑩𝒐𝒏𝒏𝒆 𝒇𝒐𝒓𝒎𝒂𝒕 𝒂𝒃𝒐𝒗𝒆 𝒊𝒔 𝒏𝒐𝒕 𝒖𝒔𝒆𝒅; 𝒘𝒓𝒊𝒕𝒊𝒏𝒈 𝒑𝒍𝒂𝒊𝒏 𝒕𝒆𝒙𝒕 𝒃𝒆𝒍𝒐𝒘.";

@@ -125,14 +125,24 @@ export class WebsiteInbox {
       .catch(log);
   }
 
-  /** The customer left name and phone, or booked a time: held replies are now seen. Never throws. */
-  async contact(thread: string, contact: WebsiteContact): Promise<void> {
+  /**
+   * The customer left contact details, or booked a time. `released`: the server really had a held reply and sent it to
+   * them now (not so after a restart, which loses it). Never throws.
+   */
+  async contact(thread: string, contact: WebsiteContact, released = true): Promise<void> {
     await this.store
       .change(websiteConversationId(thread), WEBSITE_CUSTOMER, (c) => {
         c.website = visitor(contact, c.website, this.now());
-        const released = c.turns.some((turn) => turn.held);
-        for (const turn of c.turns) delete turn.held;
-        if (released) c.turns.push({ id: newTurnId(), role: "assistant", text: "客人留了联系方式，上面被扣住的回复和报价客人现在已经看到", author: ASSISTANT, at: this.now(), quotes: [], source: "website", event: true, localOnly: true });
+        const hadHeld = c.turns.some((turn) => turn.held);
+        const note = (text: string): Turn => ({ id: newTurnId(), role: "assistant", text, author: ASSISTANT, at: this.now(), quotes: [], source: "website", event: true, localOnly: true });
+        if (released) {
+          for (const turn of c.turns) delete turn.held;
+          if (hadHeld) c.turns.push(note("客人留了联系方式，上面被扣住的回复和报价客人现在已经看到"));
+        } else if (hadHeld) {
+          // The held reply is gone (a restart); the customer never saw it, so the marker stays.
+          const lost = "客人留了联系方式，但被扣住的回复在服务重启时丢了，客人没有看到";
+          if (!c.turns.some((turn) => turn.event && turn.text === lost)) c.turns.push(note(lost));
+        }
         delete c.archived;
       })
       .catch((error) => {

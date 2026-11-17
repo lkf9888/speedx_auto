@@ -46,7 +46,8 @@ export function snapshot(conversation: Conversation): Conversation {
   const copy = structuredClone(conversation);
   delete copy.shares;
   copy.turns = copy.turns
-    .filter((t) => !t.localOnly)
+    // Log lines about what the customer saw are kept; error turns aren't.
+    .filter((t) => !t.localOnly || t.event)
     .map((t) => {
       const turn = { ...t };
       delete turn.memories;

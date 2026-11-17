@@ -208,19 +208,24 @@ const SAFE_LABEL = /[^A-Za-z0-9 .,/()+-]/g;
 /** A line the model wrote in "mathematical" styled letters (U+1D400 and up): a stray note about its own formatting, not something to show. */
 const isStyledNote = (line: string): boolean => {
   const letters = [...line].filter((ch) => /\p{L}/u.test(ch));
-  return letters.length >= 6 && letters.filter((ch) => (ch.codePointAt(0) ?? 0) >= 0x1d400 && (ch.codePointAt(0) ?? 0) <= 0x1d7ff).length / letters.length > 0.5;
+  // Every letter styled, and a sentence's worth of them: a name in styled letters inside a normal line stays.
+  return letters.length >= 12 && letters.filter((ch) => (ch.codePointAt(0) ?? 0) >= 0x1d400 && (ch.codePointAt(0) ?? 0) <= 0x1d7ff).length / letters.length >= 0.95;
 };
 
 export function toPlainText(text: string): string {
-  return text
+  const plain = text
     .replace(/\*\*(.+?)\*\*/g, "$1")
     .replace(/__(.+?)__/g, "$1")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/`([^`]+)`/g, "$1")
+    .trim();
+  const cleaned = plain
     .split("\n")
     .filter((line) => !isStyledNote(line))
     .join("\n")
     .trim();
+  // Never turn a reply into nothing.
+  return cleaned || plain;
 }
 
 /** Only server-shaped vehicle data reaches the system message. */
