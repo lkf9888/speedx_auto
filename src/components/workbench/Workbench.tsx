@@ -30,7 +30,7 @@ import { StaffQuoteCard } from "./StaffQuoteCard";
 import { bridgeErrorText, callAlldata, BridgeError } from "@/lib/workbench/alldata-bridge";
 import type { ChannelsReady } from "@/lib/messaging/plan";
 import { ChannelBadge, CustomerMessageBox } from "./CustomerMessageBox";
-import { WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
+import { HeldNotice, LogEvent, WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
 
 type Turn = SharedTurn;
 
@@ -1015,7 +1015,9 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
 
             {/* Kevin, 2026-11-14: the customer on the left; the AI and every staff member on the right. */}
             {active.turns.map((turn, index) =>
-              turn.role === "user" && turn.author === WEBSITE_CUSTOMER ? (
+              turn.event ? (
+                <LogEvent key={turn.id ?? index} text={turn.text} at={turn.at} />
+              ) : turn.role === "user" && turn.author === WEBSITE_CUSTOMER ? (
                 <div key={turn.id ?? index} className="flex justify-start" data-side="left">
                   <div className="wa-bubble wa-bubble-in max-w-[85%] sm:max-w-[70%]" data-testid="customer-message">
                     <p className="text-xs font-semibold text-[#c2410c]">🌐 {active.website?.name || "网站客人"}</p>
@@ -1060,18 +1062,14 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
                   {turn.text && (
                     <div className="wa-bubble wa-bubble-out wa-bubble-ai ml-auto max-w-[92%] sm:max-w-[75%]" data-testid="ai-message">
                       <p className="text-xs font-semibold text-[color:var(--wa-ai-name,#027eb5)]">🤖 {turn.source === "website" ? "网站 AI 客服" : "AI 助手"}</p>
-                      {turn.held && (
-                        <p data-testid="held-notice" className="-mx-1 mb-1 rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
-                          ⚠ 客人没看到这条回复和报价：要先留姓名电话才能看，客人还没留
-                        </p>
-                      )}
+                      {turn.held && <HeldNotice />}
                       <p className="whitespace-pre-wrap">{turn.text}</p>
                       <Meta at={turn.at} />
                     </div>
                   )}
                   {turn.estimates?.map((card) => (
                     <div key={card.id} className="ml-auto w-full max-w-xl">
-                      <WebsiteEstimateCard card={card} />
+                      <WebsiteEstimateCard card={card} held={turn.held} />
                     </div>
                   ))}
                   {turn.priceChoice && (

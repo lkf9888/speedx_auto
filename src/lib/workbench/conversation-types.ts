@@ -42,6 +42,8 @@ export interface Turn {
   delivery?: Delivery;
   /** The assistant asked which price to quote; the card shows the choices. */
   priceChoice?: boolean;
+  /** A log line about what the website customer saw or did (a form shown, contact details left); not a message, never sent to the assistant. */
+  event?: boolean;
 }
 
 export type MessageChannel = "whatsapp" | "sms";

@@ -205,12 +205,21 @@ export const PUBLIC_PROFILE: ChatProfile<ChatEvent> = {
 const SAFE_LABEL = /[^A-Za-z0-9 .,/()+-]/g;
 
 /** The chat renders plain text: strip markdown the model sometimes adds. */
+/** A line the model wrote in "mathematical" styled letters (U+1D400 and up): a stray note about its own formatting, not something to show. */
+const isStyledNote = (line: string): boolean => {
+  const letters = [...line].filter((ch) => /\p{L}/u.test(ch));
+  return letters.length >= 6 && letters.filter((ch) => (ch.codePointAt(0) ?? 0) >= 0x1d400 && (ch.codePointAt(0) ?? 0) <= 0x1d7ff).length / letters.length > 0.5;
+};
+
 export function toPlainText(text: string): string {
   return text
     .replace(/\*\*(.+?)\*\*/g, "$1")
     .replace(/__(.+?)__/g, "$1")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/`([^`]+)`/g, "$1")
+    .split("\n")
+    .filter((line) => !isStyledNote(line))
+    .join("\n")
     .trim();
 }
 

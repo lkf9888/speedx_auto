@@ -5,7 +5,7 @@ import { priceLabel } from "@/lib/workbench/price-tier";
 import type { SharedConversation } from "@/lib/workbench/shares";
 import { distinctJobs, QuoteSheetSummary } from "./QuoteSheetSummary";
 import { StaffQuoteCard } from "./StaffQuoteCard";
-import { WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
+import { HeldNotice, LogEvent, WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
 
 const when = (at: number) =>
   new Date(at).toLocaleString("zh-CN", { timeZone: "America/Vancouver", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
@@ -50,9 +50,11 @@ export function SharedConversationView({ shared }: { shared: SharedConversation 
         {c.website && <WebsiteVisitorBar visitor={c.website} />}
         <main className="wb-chat space-y-2 px-3 py-4 sm:px-6" data-testid="shared-turns">
           {c.turns
-            .filter((t) => !t.localOnly)
+            .filter((t) => !t.localOnly || t.event)
             .map((turn) =>
-              turn.role === "user" ? (
+              turn.event ? (
+                <LogEvent key={turn.id} text={turn.text} at={turn.at} />
+              ) : turn.role === "user" ? (
                 <div key={turn.id} className={turn.author === WEBSITE_CUSTOMER ? "flex justify-start" : "flex justify-end"}>
                   <div className={`wa-bubble ${turn.author === WEBSITE_CUSTOMER ? "wa-bubble-in" : "wa-bubble-out"} max-w-[85%] sm:max-w-[70%]`}>
                     <p className="text-xs font-semibold text-[#027eb5]">{turn.author === WEBSITE_CUSTOMER ? `🌐 ${c.website?.name || "网站客人"}` : staffName(turn.author)}</p>
@@ -66,13 +68,14 @@ export function SharedConversationView({ shared }: { shared: SharedConversation 
                   {turn.text && (
                     <div className="wa-bubble wa-bubble-out wa-bubble-ai ml-auto max-w-[92%] sm:max-w-[75%]">
                       <p className="text-xs font-semibold text-[#027eb5]">🤖 {turn.source === "website" ? "网站 AI 客服" : turn.author === ASSISTANT ? "AI 助手" : "AI"}</p>
+                      {turn.held && <HeldNotice />}
                       <p className="whitespace-pre-wrap">{turn.text}</p>
                       <Meta at={turn.at} />
                     </div>
                   )}
                   {turn.estimates?.map((card) => (
                     <div key={card.id} className="ml-auto w-full max-w-xl">
-                      <WebsiteEstimateCard card={card} />
+                      <WebsiteEstimateCard card={card} held={turn.held} />
                     </div>
                   ))}
                   {distinctJobs(turn.quotes) > 1 && <QuoteSheetSummary quotes={turn.quotes} tier={tier} custom={c.pricing} />}

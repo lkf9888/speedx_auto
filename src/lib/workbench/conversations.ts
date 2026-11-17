@@ -42,7 +42,7 @@ function isConversation(value: unknown): value is Conversation {
 }
 
 export function summarize(c: Conversation): ConversationSummary {
-  const last = c.turns[c.turns.length - 1];
+  const last = [...c.turns].reverse().find((t) => !t.event);
   const lastText = last ? last.text.trim() || (last.attachments?.length ? `📎 ${last.attachments[0].name}` : "") : "";
   return {
     id: c.id,

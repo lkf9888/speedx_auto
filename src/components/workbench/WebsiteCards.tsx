@@ -1,6 +1,6 @@
 "use client";
 
-import { estimateRanges, type EstimateCard } from "@/lib/repair-chat/pricing";
+import { estimateRanges, forCustomer, type EstimateCard } from "@/lib/repair-chat/pricing";
 import type { WebsiteVisitor } from "@/lib/workbench/conversation-types";
 
 const LANGUAGE: Record<string, string> = { en: "英文", "zh-CN": "简体中文", "zh-TW": "繁体中文" };
@@ -56,13 +56,34 @@ export function WebsiteVisitorBar({ visitor, onFollowUp }: { visitor: WebsiteVis
   );
 }
 
-/** An estimate card as the website customer saw it: customer prices only. */
-export function WebsiteEstimateCard({ card }: { card: EstimateCard }) {
+/** The note on a reply the customer hasn't seen: it waits behind the contact form. */
+export function HeldNotice() {
+  return (
+    <p data-testid="held-notice" className="-mx-1 mb-1 rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
+      ⚠ 客人没看到这条回复和报价：要先留电话或邮箱才能看，客人还没留
+    </p>
+  );
+}
+
+/** A line in the log about what the customer saw or did, not a message. */
+export function LogEvent({ text, at }: { text: string; at?: number }) {
+  const time = at ? new Date(at).toLocaleString("zh-CN", { timeZone: "America/Vancouver", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+  return (
+    <p data-testid="log-event" className="mx-auto max-w-[90%] rounded-full bg-black/10 px-3 py-1 text-center text-[11px] text-[color:var(--wb-muted)]">
+      {text}
+      {time ? ` · ${time}` : ""}
+    </p>
+  );
+}
+
+/** An estimate card as the website customer saw it (or will see it once they leave contact details): customer prices only, without the hours and rate the shop keeps to itself. */
+export function WebsiteEstimateCard({ card: stored, held = false }: { card: EstimateCard; held?: boolean }) {
+  const card = forCustomer(stored);
   const { totalLow, totalHigh } = estimateRanges(card);
   const labor = (card.kind ?? "labor") === "labor";
   return (
     <article data-testid="website-estimate" className="max-w-xl rounded-lg border border-[color:var(--wb-line)] bg-white px-4 py-3 text-sm shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
-      <p className="text-xs font-semibold text-[color:var(--wb-muted)]">客人看到的报价卡 · {card.id}</p>
+      <p className="text-xs font-semibold text-[color:var(--wb-muted)]">{held ? "报价卡（客人留了联系方式才会看到）" : "客人看到的报价卡"} · {card.id}</p>
       <p className="mt-1 font-medium text-[color:var(--wb-text)]">{[card.service, card.position].filter(Boolean).join(" · ")}</p>
       {card.vehicle && card.vehicle !== "—" && <p className="text-xs text-[color:var(--wb-muted)]">{card.vehicle}</p>}
       {card.kind === "team_quote" ? (

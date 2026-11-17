@@ -428,6 +428,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
       const held: EstimateCard[] = [];
       // Cards for jobs with no online price: sent once the turn is over, so they travel with the priced cards if those are held back.
       const teamCards: EstimateCard[] = [];
+      let contactOfferedNow = false;
       const shown: EstimateCard[] = [];
       let vehicle: { key: string; label: string } | undefined;
       let appointmentHeld = false;
@@ -442,6 +443,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
             reply,
             estimates: shown,
             held: held.length > 0 || appointmentHeld,
+            contactOffered: contactOfferedNow,
             vehicle,
             failed,
           }),
@@ -520,6 +522,7 @@ export async function handleChat(request: Request, deps: RouteDeps): Promise<Res
           const onlyTeamQuotes = shown.length > 0 && shown.every((card) => card.kind === "team_quote");
           if ((askForContact && shown.length === 0) || (onlyTeamQuotes && !session.lead)) {
             sessions.markContactOffered(session.id);
+            contactOfferedNow = true;
             send({ type: "contact_offer" });
           }
           send({ type: "message", text: result.text });

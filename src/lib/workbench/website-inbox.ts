@@ -40,6 +40,8 @@ export interface WebsiteExchange {
   estimates: EstimateCard[];
   /** The reply waits for name and phone. */
   held: boolean;
+  /** The page opened its contact form under the reply (no price to show, so the team follows up). */
+  contactOffered?: boolean;
   /** The car the public assistant settled on, when it found one this turn. */
   vehicle?: Vehicle;
   failed?: boolean;
@@ -103,12 +105,16 @@ export class WebsiteInbox {
       ...(entry.estimates.length ? { estimates: entry.estimates } : {}),
       ...(entry.held ? { held: true } : {}),
     };
+    // What the customer was shown besides the reply, for the staff reading the log (Kevin, 2026-11-17).
+    const notes: Turn[] = entry.contactOffered
+      ? [{ id: newTurnId(), role: "assistant", text: "已向客人弹出留联系方式的表单（这单暂时没有价格，要店里报价）", author: ASSISTANT, at: at + 2, quotes: [], source: "website", event: true, localOnly: true }]
+      : [];
     await this.store
       .change(
         id,
         WEBSITE_CUSTOMER,
         (c) => {
-          c.turns.push(question, answer);
+          c.turns.push(question, answer, ...notes);
           c.website = visitor(entry.contact, c.website, this.now());
           if (entry.vehicle) c.vehicle = entry.vehicle;
           if (!c.title) c.title = entry.question.replace(/\s+/g, " ").trim().slice(0, TITLE_LENGTH);
@@ -124,7 +130,9 @@ export class WebsiteInbox {
     await this.store
       .change(websiteConversationId(thread), WEBSITE_CUSTOMER, (c) => {
         c.website = visitor(contact, c.website, this.now());
+        const released = c.turns.some((turn) => turn.held);
         for (const turn of c.turns) delete turn.held;
+        if (released) c.turns.push({ id: newTurnId(), role: "assistant", text: "客人留了联系方式，上面被扣住的回复和报价客人现在已经看到", author: ASSISTANT, at: this.now(), quotes: [], source: "website", event: true, localOnly: true });
         delete c.archived;
       })
       .catch((error) => {
