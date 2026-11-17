@@ -475,6 +475,22 @@ describe("ALLDATA in the workbench", () => {
     installFakeExtension({
       searchCustomers: { customers: [{ customerId: 55, name: "Test Person", phone: "604-555-0100", vehicles: [{ customerVehicleId: 901, description: "2019 Toyota Camry 2.5L", vin: "" }] }] },
       createEstimate: { documentId: 444, estimateNumber: 954, customerAttached: true },
+      readDocument: {
+        documentId: 444,
+        version: 3,
+        state: "Estimate",
+        documentNumber: 954,
+        customerAttached: true,
+        mileageIn: 82000,
+        technician: "Jason",
+        serviceWriter: "Kevin",
+        shopNote: "工作台 D-1",
+        lines: [
+          { lineTypeId: 5, description: "Front brake pads", partNumber: "ACT2076", quantityOrHours: 1, priceRate: 129.99, cost: 78.86, total: 129.99, taxable: true },
+          { lineTypeId: 6, description: "Replace front pads", partNumber: "", quantityOrHours: 1.3, priceRate: 120, cost: 156, total: 156, taxable: true },
+        ],
+        totals: { parts: 129.99, labor: 156, flatFee: 0, discount: 0, subTotal: 285.99, gst: 14.3, pst: 0, hst: 0, tax: 14.3, total: 300.29 },
+      },
       openPdf: { opened: true },
     });
     const view = render(<Workbench email="staff@example.com" />);
@@ -485,8 +501,12 @@ describe("ALLDATA in the workbench", () => {
 
     await userEvent.click(within(card).getByRole("button", { name: "查找" }));
     await userEvent.click(await within(card).findByRole("radio", { name: /Test Person 604-555-0100 · 2019 Toyota Camry/ }));
-    await userEvent.click(within(card).getByRole("button", { name: "在 ALLDATA 创建估价单" }));
+    const estimateButton = within(card).getByRole("button", { name: "在 ALLDATA 创建估价单" });
+    expect(estimateButton).toBeDisabled();
+    await userEvent.click(within(card).getByRole("radio", { name: /不收/ }));
+    await userEvent.click(estimateButton);
     expect(await within(card).findByText(/已在 ALLDATA 建好 Estimate #954/)).toBeInTheDocument();
+    expect(await within(card).findByTestId("alldata-readback")).toHaveTextContent("全部一致");
 
     const create = requests.find((r) => r.op === "createEstimate")!;
     expect(create.args).toMatchObject({ customerId: 55, customerVehicleId: 901, mileageIn: 82000 });
@@ -501,6 +521,80 @@ describe("ALLDATA in the workbench", () => {
     render(<Workbench email="staff@example.com" />);
     expect(await screen.findByText(/已在 ALLDATA 建好 Estimate #954/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "在 ALLDATA 创建估价单" })).not.toBeInTheDocument();
+  });
+
+  it("creates only a draft after PST is chosen, reads it back and shows the check result", async () => {
+    installFakeExtension({
+      searchCustomers: { customers: [{ customerId: 55, name: "Test Person", phone: "604-555-0100", vehicles: [{ customerVehicleId: 901, description: "2019 Toyota Camry 2.5L", vin: "" }] }] },
+      createDraft: { documentId: 445, estimateNumber: 0, customerAttached: true },
+      readDocument: {
+        documentId: 445,
+        version: 2,
+        state: "Draft",
+        documentNumber: 0,
+        customerAttached: true,
+        mileageIn: 82000,
+        technician: "Jason",
+        serviceWriter: "Kevin",
+        shopNote: "工作台 D-1",
+        lines: [
+          { lineTypeId: 5, description: "Front brake pads", partNumber: "ACT2076", quantityOrHours: 1, priceRate: 129.99, cost: 78.86, total: 129.99, taxable: true },
+          { lineTypeId: 6, description: "Replace front pads", partNumber: "", quantityOrHours: 1.3, priceRate: 120, cost: 156, total: 156, taxable: true },
+        ],
+        totals: { parts: 129.99, labor: 156, flatFee: 0, discount: 0, subTotal: 285.99, gst: 14.3, pst: 20.02, hst: 0, tax: 34.32, total: 320.31 },
+      },
+    });
+    render(<Workbench email="staff@example.com" />);
+    await ask("开 ALLDATA 估价单");
+    const card = await screen.findByTestId("alldata-draft");
+    await userEvent.click(within(card).getByRole("button", { name: "查找" }));
+    await userEvent.click(await within(card).findByRole("radio", { name: /Test Person 604-555-0100 · 2019 Toyota Camry/ }));
+
+    const draftButton = within(card).getByRole("button", { name: "在 ALLDATA 创建草稿并核对" });
+    expect(draftButton).toBeDisabled();
+    await userEvent.click(within(card).getByRole("radio", { name: "收 PST" }));
+    await userEvent.click(draftButton);
+
+    const readback = await within(card).findByTestId("alldata-readback");
+    expect(readback).toHaveTextContent("全部一致");
+    expect(within(card).getByText(/已在 ALLDATA 建好草稿（Draft）/)).toBeInTheDocument();
+    expect(requests.map((r) => r.op)).toEqual(expect.arrayContaining(["createDraft", "readDocument"]));
+    expect(requests.some((r) => r.op === "createEstimate")).toBe(false);
+    expect(requests.find((r) => r.op === "createDraft")!.args).toMatchObject({ customerId: 55, customerVehicleId: 901, mileageIn: 82000, shopNote: "工作台 D-1" });
+    // A draft has no PDF yet.
+    expect(within(card).queryByRole("button", { name: "打开 PDF（打印 / 下载）" })).not.toBeInTheDocument();
+  });
+
+  it("warns, and keeps the draft, when ALLDATA did not save a part's markup; the PST choice is locked while creating", async () => {
+    installFakeExtension({
+      createDraft: { documentId: 446, estimateNumber: 0, customerAttached: false, markupSaved: false },
+      readDocument: {
+        documentId: 446,
+        version: 1,
+        state: "Draft",
+        documentNumber: 0,
+        customerAttached: false,
+        mileageIn: 82000,
+        technician: "Jason",
+        serviceWriter: "Kevin",
+        shopNote: "工作台 D-1",
+        lines: [
+          { lineTypeId: 5, description: "Front brake pads", partNumber: "ACT2076", quantityOrHours: 1, priceRate: 78.86, cost: 78.86, total: 78.86, taxable: true },
+          { lineTypeId: 6, description: "Replace front pads", partNumber: "", quantityOrHours: 1.3, priceRate: 120, cost: 156, total: 156, taxable: true },
+        ],
+        totals: { parts: 78.86, labor: 156, flatFee: 0, discount: 0, subTotal: 234.86, gst: 11.74, pst: 0, hst: 0, tax: 11.74, total: 246.6 },
+      },
+    });
+    render(<Workbench email="staff@example.com" />);
+    await ask("开 ALLDATA 估价单");
+    const card = await screen.findByTestId("alldata-draft");
+    await userEvent.click(within(card).getByRole("radio", { name: /不关联客户/ }));
+    await userEvent.click(within(card).getByRole("radio", { name: /不收/ }));
+    await userEvent.click(within(card).getByRole("button", { name: "在 ALLDATA 创建草稿并核对" }));
+    expect(await within(card).findByText(/零件的加价没有保存成功/)).toBeInTheDocument();
+    const readback = await within(card).findByTestId("alldata-readback");
+    expect(readback).toHaveTextContent("项不一致");
+    expect(readback).toHaveTextContent("第 1 行 单价");
   });
 
   it("tells staff to install the extension when it is missing", async () => {

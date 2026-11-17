@@ -315,7 +315,15 @@ function checkDatalines(lines) {
   return lines;
 }
 
-async function createEstimate(args) {
+/**
+ * Saves the document as a Draft (no document number is taken yet). Shared by
+ * createDraft and createEstimate.
+ *
+ * ALLDATA prices a Custom Part as cost + markupAmount and ignores a markup on
+ * the first save, so parts that carry a markup are saved a second time with
+ * the whole document, the way Shop Manager saves an edited row.
+ */
+async function createDocument(args) {
   const datalines = checkDatalines(args.datalines);
   const customerId = positiveInt(args.customerId);
   const customerVehicleId = positiveInt(args.customerVehicleId);
@@ -334,31 +342,117 @@ async function createEstimate(args) {
     if (saved) vehicle = vehicleInformation(saved);
   }
 
-  const document = (withCustomer) => ({
+  const document = (withCustomer, lines) => ({
     customer: withCustomer ? customer : null,
     vehicleInformation: withCustomer ? vehicle : {},
-    mileageIn: String(withCustomer ? mileage : 0),
+    mileageIn: String(mileage),
     mileageOut: "0",
     serviceTag: null,
-    datalines,
+    datalines: lines,
     technicianId: DEFAULT_TECHNICIAN_ID,
     serviceWriterId: DEFAULT_SERVICE_WRITER_ID,
     proposedCompletionDate: null,
     shopNote: text(args.shopNote, 500) || null,
   });
 
-  let created = await request("POST", `${SHOPMGR}documents?is_draft=true`, document(Boolean(customer)));
+  let created = await request("POST", `${SHOPMGR}documents?is_draft=true`, document(Boolean(customer), datalines));
   let customerAttached = Boolean(customer);
   if (customer && (created.status < 200 || created.status >= 300)) {
-    // ALLDATA refused the customer block: create the estimate without it; staff add the customer in ALLDATA.
-    created = await request("POST", `${SHOPMGR}documents?is_draft=true`, document(false));
+    // ALLDATA refused the customer block: create the document without it; staff add the customer in ALLDATA.
+    created = await request("POST", `${SHOPMGR}documents?is_draft=true`, document(false, datalines));
     customerAttached = false;
   }
   const draft = ok(created, "create");
   const documentId = draft.documentId;
-  const converted = await request("PUT", `${SHOPMGR}documents/${documentId}/state`, "estimate", "text/plain");
-  const estimate = converted.status >= 200 && converted.status < 300 ? converted.json : null;
-  return { documentId, estimateNumber: (estimate && estimate.estimateNumber) || 0, customerAttached };
+
+  // The draft exists now. A failed markup save must not throw: the caller would lose the document id
+  // and a retry would make a second draft. It reports markupSaved: false and the readback shows the difference.
+  let markupSaved = true;
+  if (datalines.some((l) => l.lineTypeId === 5 && l.markupAmount > 0)) {
+    markupSaved = false;
+    try {
+      // Second save with the saved lines' ids so ALLDATA applies each markup.
+      const stored = draft.datalines && draft.datalines.length ? draft : ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read draft");
+      const saved = (stored.datalines || []).slice().sort((x, y) => x.lineNumber - y.lineNumber);
+      const again = datalines.map((line, i) => ({
+        ...line,
+        datalineId: (saved[i] && saved[i].datalineId) || null,
+        hidden: false,
+        children: [],
+        details: null,
+        nxDetails: null,
+        adComponentId: null,
+        datalineType: saved[i] && saved[i].datalineType,
+      }));
+      if (!again.some((l) => !l.datalineId) && saved.length === datalines.length) {
+        const updated = await request("PUT", `${SHOPMGR}documents/${documentId}`, document(customerAttached, again));
+        markupSaved = updated.status >= 200 && updated.status < 300;
+      }
+    } catch {
+      markupSaved = false;
+    }
+  }
+  return { documentId, customerAttached, markupSaved };
+}
+
+async function createDraft(args) {
+  const { documentId, customerAttached, markupSaved } = await createDocument(args);
+  return { documentId, estimateNumber: 0, customerAttached, markupSaved };
+}
+
+async function createEstimate(args) {
+  const { documentId, customerAttached, markupSaved } = await createDocument(args);
+  // Never turn a document with unsaved markups into an estimate: it stays a Draft for staff to fix.
+  if (!markupSaved) return { documentId, estimateNumber: 0, customerAttached, markupSaved };
+  let estimate = null;
+  try {
+    const converted = await request("PUT", `${SHOPMGR}documents/${documentId}/state`, "estimate", "text/plain");
+    estimate = converted.status >= 200 && converted.status < 300 ? converted.json : null;
+  } catch {
+    // The draft exists; keep its id so staff aren't asked to create it again. The workbench's readback shows its real state.
+  }
+  return { documentId, estimateNumber: (estimate && estimate.estimateNumber) || 0, customerAttached, markupSaved };
+}
+
+/** One document as the workbench's readback compare needs it: no customer details, only whether one is attached. */
+async function readDocument(args) {
+  const documentId = positiveInt(args.documentId);
+  if (!documentId) throw new BridgeError("bad_request", "bad document");
+  const d = ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read");
+  const n = (value) => (Number.isFinite(value) ? value : 0);
+  return {
+    documentId: d.documentId,
+    version: n(d.documentVersion),
+    state: text(d.state, 30),
+    documentNumber: n(d.estimateNumber),
+    customerAttached: Boolean(d.customer),
+    mileageIn: n(d.mileageIn),
+    technician: text(d.technician && d.technician.name, 60),
+    serviceWriter: text(d.serviceWriter && d.serviceWriter.name, 60),
+    shopNote: text(d.shopNote, 500),
+    lines: (d.datalines || []).map((l) => ({
+      lineTypeId: l.datalineType ? l.datalineType.datalineTypeId : 0,
+      description: text(l.description, 200),
+      partNumber: text(l.partNumber, 60),
+      quantityOrHours: Number.isFinite(l.quantityOrHours) ? l.quantityOrHours : null,
+      priceRate: n(l.priceRate),
+      cost: n(l.cost),
+      total: n(l.total),
+      taxable: Boolean(l.taxable),
+    })),
+    totals: {
+      parts: n(d.partsTotal),
+      labor: n(d.laborTotal),
+      flatFee: n(d.flatFeeTotal),
+      discount: n(d.totalDiscount),
+      subTotal: n(d.subTotal),
+      gst: n(d.gstTax),
+      pst: n(d.pstTax),
+      hst: n(d.hstTax),
+      tax: n(d.tax),
+      total: n(d.total),
+    },
+  };
 }
 
 async function openPdf(args) {
@@ -604,4 +698,4 @@ async function cartAddNow(args) {
   }
 }
 
-const OPS = { status, searchDocuments, searchCustomers, createEstimate, openPdf, westcanSearch, cartAdd };
+const OPS = { status, searchDocuments, searchCustomers, createEstimate, createDraft, readDocument, openPdf, westcanSearch, cartAdd };

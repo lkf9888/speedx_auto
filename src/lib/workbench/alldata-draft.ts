@@ -47,8 +47,11 @@ export interface AlldataDraft {
 /** What ALLDATA gave back once the estimate was created. */
 export interface AlldataCreated {
   documentId: number;
+  /** 0 for a Draft (ALLDATA hands out the number when it becomes an estimate). */
   estimateNumber: number;
   customerAttached: boolean;
+  /** False when ALLDATA kept a part at its cost because the markup save failed; the document is still a Draft to fix. */
+  markupSaved?: boolean;
 }
 
 export const MAX_DRAFT_LINES = 40;
@@ -131,8 +134,30 @@ export function draftTotals(draft: Pick<AlldataDraft, "lines">): { parts: number
 }
 
 /**
+ * What ALLDATA's Custom Part row stores. Shop Manager prices a custom part as
+ * cost + markup (markupAmount, a flat amount per unit): the server ignores
+ * priceRate and recomputes it. So the customer price must be carried as the
+ * markup over the shop's cost, or as the cost itself when no cost is known
+ * (the shop's habit: the price goes into Cost with $0 markup). Verified on a
+ * TEST draft on 2026-11-17: cost 6 + priceRate 10 and no markup gave a price of 6.
+ */
+export function partCostAndMarkup(line: Pick<DraftLine, "unitPrice" | "unitCost">): { cost: number; markup: number } {
+  const { unitPrice, unitCost } = line;
+  if (unitCost !== null && unitCost >= 0 && unitCost < unitPrice) return { cost: unitCost, markup: money(unitPrice - unitCost) };
+  // No cost, or a cost at or above the price (a markup can't go below zero): book the price as the cost.
+  return { cost: unitPrice, markup: 0 };
+}
+
+/** Whether creating these lines needs a second save (ALLDATA only applies a markup on an update, not on the first save). */
+export function needsMarkupSave(lines: DraftLine[]): boolean {
+  return lines.some((l) => l.kind === "part" && partCostAndMarkup(l).markup > 0);
+}
+
+/**
  * Line items in the shape ALLDATA Shop Manager's own "Custom Part" and
- * "Custom Labor" entries send (captured from its web app).
+ * "Custom Labor" entries send (captured from its web app). Parts carry their
+ * markup in markupAmount; ALLDATA only applies it when the document is saved
+ * again (see needsMarkupSave and the extension's createDocument).
  */
 export function toAlldataDatalines(lines: DraftLine[]): Record<string, unknown>[] {
   return lines.map((line, index) => {
@@ -165,6 +190,7 @@ export function toAlldataDatalines(lines: DraftLine[]): Record<string, unknown>[
         cost: line.unitPrice,
       };
     }
+    const { cost, markup } = partCostAndMarkup(line);
     return {
       ...common,
       itemName: "Part",
@@ -172,7 +198,11 @@ export function toAlldataDatalines(lines: DraftLine[]): Record<string, unknown>[
       partNumber: line.partNumber || "—",
       laborRate: null,
       laborRateId: null,
-      cost: line.unitCost ?? 0,
+      cost,
+      // The shop's cost is what the row's price starts from; the markup lifts it to the customer price.
+      priceRate: cost,
+      markupAmount: markup > 0 ? markup : null,
+      manualPriceRate: markup > 0,
     };
   });
 }

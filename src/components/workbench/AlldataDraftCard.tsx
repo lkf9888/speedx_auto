@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { bridgeErrorText, callAlldata, type AlldataCustomerRow } from "@/lib/workbench/alldata-bridge";
 import { draftTotals, lineTotal, toAlldataDatalines, type AlldataCreated, type AlldataDraft } from "@/lib/workbench/alldata-draft";
+import { checkReadback, expectedTotals, type ReadbackCheck } from "@/lib/workbench/alldata-readback";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 const money = (value: number) => usd.format(value);
@@ -18,9 +19,12 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
   const [search, setSearch] = useState(draft.customer?.phone || draft.customer?.name || "");
   const [customers, setCustomers] = useState<AlldataCustomerRow[] | null>(null);
   const [pick, setPick] = useState<Pick>(null);
-  const [busy, setBusy] = useState<"search" | "create" | "pdf" | null>(null);
+  const [busy, setBusy] = useState<"search" | "create" | "draft" | "pdf" | null>(null);
   const [error, setError] = useState("");
+  const [pst, setPst] = useState<"charge" | "exempt" | null>(null);
+  const [checks, setChecks] = useState<{ ok: boolean; checks: ReadbackCheck[] } | null>(null);
   const totals = draftTotals(draft);
+  const preview = expectedTotals(draft, pst === "charge");
   const created = draft.created;
 
   async function findCustomer(event: FormEvent) {
@@ -38,19 +42,38 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
     }
   }
 
-  async function create() {
-    if (!pick) return;
-    setBusy("create");
+  /** Creates the document (a Draft, or an estimate that takes a document number), then reads it back and compares it with this card. */
+  async function submit(kind: "draft" | "estimate") {
+    if (!pick || !pst) return;
+    const chargePst = pst === "charge";
+    setBusy(kind === "draft" ? "draft" : "create");
     setError("");
+    setChecks(null);
     try {
-      const result = await callAlldata("createEstimate", {
+      const shopNote = [draft.note, `工作台 ${draft.id}`].filter(Boolean).join(" · ");
+      const args = {
         customerId: pick === "none" ? null : pick.customerId,
         customerVehicleId: pick === "none" ? null : pick.customerVehicleId,
         mileageIn: draft.mileage,
-        shopNote: [draft.note, `工作台 ${draft.id}`].filter(Boolean).join(" · "),
+        shopNote,
         datalines: toAlldataDatalines(draft.lines),
-      });
+      };
+      const result = kind === "draft" ? await callAlldata("createDraft", args) : await callAlldata("createEstimate", args);
       onCreated(result);
+      try {
+        const doc = await callAlldata("readDocument", { documentId: result.documentId });
+        setChecks(
+          checkReadback(draft, doc, {
+            shopNote,
+            mileage: draft.mileage,
+            customerAttached: result.customerAttached,
+            chargePst,
+            state: result.estimateNumber > 0 ? "Estimate" : "Draft",
+          }),
+        );
+      } catch (e) {
+        setError(`单据已建好，但回读核对没有完成：${bridgeErrorText(e)}`);
+      }
     } catch (e) {
       setError(bridgeErrorText(e));
     } finally {
@@ -124,7 +147,10 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
           </tfoot>
         </table>
       </div>
-      <p className="px-4 pt-2 text-xs text-ink-500">GST / PST 由 ALLDATA 按店里的税率自动加。</p>
+      <p className="px-4 pt-2 text-xs text-ink-500">
+        GST / PST 由 ALLDATA 按店里的税率自动加。税额预览（仅供参考，以 ALLDATA 回读为准）：GST {money(preview.gst)}
+        {pst === "charge" ? ` · PST ${money(preview.pst)}` : pst === "exempt" ? " · 不收 PST" : " · PST 待选"} · 含税合计 {money(preview.total)}
+      </p>
 
       <div className="space-y-3 px-4 py-3">
         {created ? (
@@ -133,14 +159,21 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
               已在 ALLDATA 建好{created.estimateNumber ? ` Estimate #${created.estimateNumber}` : "草稿（Draft）"}
               {!created.customerAttached && "，还没有关联客户，请在 ALLDATA 里点“+ Customer”添加"}
             </p>
-            <button
-              type="button"
-              onClick={() => void openPdf()}
-              disabled={busy !== null}
-              className="rounded-full bg-emerald-700 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-40"
-            >
-              {busy === "pdf" ? "正在打开…" : "打开 PDF（打印 / 下载）"}
-            </button>
+            {created.markupSaved === false && (
+              <p role="alert" className="w-full font-medium text-amber-800">
+                零件的加价没有保存成功，零件现在按进价入账（单据保持草稿，没有转估价单）。请在 ALLDATA 里打开这张草稿检查零件价格，不要重复创建。
+              </p>
+            )}
+            {created.estimateNumber > 0 && (
+              <button
+                type="button"
+                onClick={() => void openPdf()}
+                disabled={busy !== null}
+                className="rounded-full bg-emerald-700 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-40"
+              >
+                {busy === "pdf" ? "正在打开…" : "打开 PDF（打印 / 下载）"}
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -188,15 +221,55 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
               </label>
             </fieldset>
 
-            <button
-              type="button"
-              onClick={() => void create()}
-              disabled={busy !== null || pick === null}
-              className="rounded-full bg-ink-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
-            >
-              {busy === "create" ? "正在 ALLDATA 建单…" : "在 ALLDATA 创建估价单"}
-            </button>
+            <fieldset className="flex flex-wrap items-center gap-3">
+              <legend className="sr-only">PST</legend>
+              <span className="text-xs font-medium text-ink-600">PST（必选，用于预览和核对）</span>
+              <label className="flex items-center gap-1 text-sm">
+                <input type="radio" name={`pst-${draft.id}`} checked={pst === "charge"} disabled={busy !== null} onChange={() => setPst("charge")} />收 PST
+              </label>
+              <label className="flex items-center gap-1 text-sm">
+                <input type="radio" name={`pst-${draft.id}`} checked={pst === "exempt"} disabled={busy !== null} onChange={() => setPst("exempt")} />不收（如公司客户有 PST#）
+              </label>
+            </fieldset>
+            <p className="text-xs text-ink-500">草稿只存在 ALLDATA 里，不发给客人、不收款、不占单号；建好后会读回来逐项核对。工作台不改 ALLDATA 的税设置：如果这里选了“收 PST”而 ALLDATA 没收，核对会标出来，请在 ALLDATA 里处理。</p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void submit("draft")}
+                disabled={busy !== null || pick === null || pst === null}
+                className="rounded-full bg-ink-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
+              >
+                {busy === "draft" ? "正在 ALLDATA 建草稿…" : "在 ALLDATA 创建草稿并核对"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void submit("estimate")}
+                disabled={busy !== null || pick === null || pst === null}
+                className="rounded-full border border-ink-300 px-4 py-2 text-sm font-semibold text-ink-700 hover:border-ink-500 disabled:opacity-40"
+              >
+                {busy === "create" ? "正在 ALLDATA 建单…" : "在 ALLDATA 创建估价单"}
+              </button>
+            </div>
           </>
+        )}
+        {checks && (
+          <div data-testid="alldata-readback" className={`rounded-lg px-3 py-2 text-xs ${checks.ok ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}>
+            <p className="font-semibold">
+              {checks.ok ? `回读核对：${checks.checks.length} 项全部一致` : `回读核对：${checks.checks.filter((c) => !c.ok).length} 项不一致，请在 ALLDATA 里检查这张草稿`}
+            </p>
+            {!checks.ok && (
+              <ul className="mt-1 space-y-0.5">
+                {checks.checks
+                  .filter((c) => !c.ok)
+                  .map((c) => (
+                    <li key={c.field}>
+                      {c.field}：卡上 {c.expected}，ALLDATA {c.actual}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
         )}
         {error && (
           <p role="alert" className="text-sm text-red-700">

@@ -6,6 +6,7 @@
  */
 
 import type { WestcanLookup } from "@/lib/westcan/nexpart";
+import type { AlldataReadback } from "./alldata-readback";
 
 export const BRIDGE_CHANNEL = "speedx-alldata";
 
@@ -54,20 +55,23 @@ export type WestcanSearchResult =
   | { status: "ok"; vehicle: string; rows: WestcanRow[] }
   | { status: "need_engine" | "no_vehicle"; engines: string[] };
 
+export interface CreateDocumentArgs {
+  customerId: number | null;
+  customerVehicleId: number | null;
+  mileageIn: number | null;
+  shopNote: string;
+  datalines: Record<string, unknown>[];
+}
+
 export interface BridgeOps {
   status: { args: Record<string, never>; result: { version: string; signedIn: boolean } };
   searchDocuments: { args: { search: string }; result: { documents: AlldataDocumentRow[] } };
   searchCustomers: { args: { search: string }; result: { customers: AlldataCustomerRow[] } };
-  createEstimate: {
-    args: {
-      customerId: number | null;
-      customerVehicleId: number | null;
-      mileageIn: number | null;
-      shopNote: string;
-      datalines: Record<string, unknown>[];
-    };
-    result: { documentId: number; estimateNumber: number; customerAttached: boolean };
-  };
+  createEstimate: { args: CreateDocumentArgs; result: { documentId: number; estimateNumber: number; customerAttached: boolean; markupSaved?: boolean } };
+  /** Saves a Draft only (document number 0, no number taken); the staff member decides later whether it becomes an estimate. */
+  createDraft: { args: CreateDocumentArgs; result: { documentId: number; estimateNumber: 0; customerAttached: boolean; markupSaved?: boolean } };
+  /** One document as ALLDATA has it now, without customer details; used to check what was created. */
+  readDocument: { args: { documentId: number }; result: AlldataReadback };
   openPdf: { args: { documentId: number; documentType: AlldataDocumentType }; result: { opened: true } };
   westcanSearch: { args: WestcanLookup; result: WestcanSearchResult };
   /** Westcan or Lordco: one part into the seller's Nexpart cart (never an order). */
