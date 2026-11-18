@@ -4,6 +4,7 @@
  * says who sent it (like a WhatsApp group). Types only, safe for the browser.
  */
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
+import type { AlldataChangeRequest } from "./alldata-change";
 import type { AlldataDraft } from "./alldata-draft";
 import type { MemoryProposal } from "./assistant";
 import type { FollowUpRecord } from "./followup";
@@ -26,6 +27,8 @@ export interface Turn {
   at: number;
   quotes: StaffQuote[];
   drafts?: AlldataDraft[];
+  /** Proposed changes to ALLDATA documents (cards); `applied` is set once staff applied one. */
+  changes?: AlldataChangeRequest[];
   memories?: Array<MemoryProposal & { saved?: boolean }>;
   attachments?: SentFile[];
   /** Shown but not sent back to the assistant (errors). */

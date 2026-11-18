@@ -243,7 +243,7 @@ export class ConversationStore {
   async markCard(
     id: string,
     by: string,
-    card: { kind: "draft"; itemId: string; created: unknown } | { kind: "memory"; itemId: string } | { kind: "quote"; itemId: string; totals: unknown },
+    card: { kind: "draft"; itemId: string; created: unknown } | { kind: "change"; itemId: string; applied: unknown } | { kind: "memory"; itemId: string } | { kind: "quote"; itemId: string; totals: unknown },
   ): Promise<Conversation> {
     return this.change(id, by, (c) => {
       if (card.kind === "quote") {
@@ -261,6 +261,9 @@ export class ConversationStore {
       for (const turn of c.turns) {
         if (card.kind === "draft" && turn.drafts?.some((d) => d.id === card.itemId)) {
           turn.drafts = turn.drafts.map((d) => (d.id === card.itemId ? { ...d, created: card.created as never } : d));
+        }
+        if (card.kind === "change" && turn.changes?.some((d) => d.id === card.itemId)) {
+          turn.changes = turn.changes.map((d) => (d.id === card.itemId ? { ...d, applied: card.applied as never } : d));
         }
         if (card.kind === "memory" && turn.memories?.some((m) => m.id === card.itemId)) {
           turn.memories = turn.memories.map((m) => (m.id === card.itemId ? { ...m, saved: true } : m));
@@ -301,6 +304,7 @@ export class ConversationStore {
         at: typeof t.at === "number" ? t.at : (c.updatedAt as number) || this.now(),
         quotes: Array.isArray(t.quotes) ? t.quotes : [],
         ...(t.drafts ? { drafts: t.drafts } : {}),
+        ...(t.changes ? { changes: t.changes } : {}),
         ...(t.memories ? { memories: t.memories } : {}),
         ...(t.attachments ? { attachments: t.attachments.map(({ name, mediaType }) => ({ name, mediaType })) } : {}),
         ...(t.localOnly ? { localOnly: true } : {}),

@@ -7,6 +7,7 @@
 
 import type { WestcanLookup } from "@/lib/westcan/nexpart";
 import type { AlldataReadback } from "./alldata-readback";
+import type { Taxes, SaveEdits } from "./alldata-change";
 
 export const BRIDGE_CHANNEL = "speedx-alldata";
 
@@ -72,6 +73,22 @@ export interface BridgeOps {
   createDraft: { args: CreateDocumentArgs; result: { documentId: number; estimateNumber: 0; customerAttached: boolean; markupSaved?: boolean } };
   /** One document as ALLDATA has it now, without customer details; used to check what was created. */
   readDocument: { args: { documentId: number }; result: AlldataReadback };
+  /** The tax switches in ALLDATA Settings (PST is turned on and off there by staff, and every save is taxed by them). */
+  readTaxSettings: { args: Record<string, never>; result: Taxes };
+  /**
+   * Saves changes to a Draft or an Estimate. Refused when the document is an invoice, voided, or changed since expectedVersion,
+   * or when the tax switches in ALLDATA Settings are no longer the ones the change was measured with (expectedTaxes).
+   * customerId changes the customer (and vehicle) the document is filed under.
+   */
+  saveDocument: {
+    args: { documentId: number; expectedVersion: number; expectedTaxes: Taxes; edits: SaveEdits; customerId?: number; customerVehicleId?: number | null };
+    result: { documentId: number; version: number; markupSaved: boolean };
+  };
+  /** Draft → estimate (takes a document number), or → invoice, which only works with confirm = `invoice:<id>:<version>` and can never be undone. */
+  convertDocument: {
+    args: { documentId: number; expectedVersion: number; to: "estimate" | "invoice"; confirm?: string };
+    result: { documentId: number; state: string; documentNumber: number };
+  };
   openPdf: { args: { documentId: number; documentType: AlldataDocumentType }; result: { opened: true } };
   westcanSearch: { args: WestcanLookup; result: WestcanSearchResult };
   /** Westcan or Lordco: one part into the seller's Nexpart cart (never an order). */
@@ -89,7 +106,7 @@ export const CART_URLS: Record<CartSupplier, string> = {
   lordco: "https://1000027.nexpart.com/cart.php",
 };
 
-export type BridgeErrorCode = "not_installed" | "not_signed_in" | "timeout" | "alldata_error" | "bad_request" | "westcan_not_signed_in" | "westcan_error" | "nexpart_error";
+export type BridgeErrorCode = "document_locked" | "document_changed" | "not_installed" | "not_signed_in" | "timeout" | "alldata_error" | "bad_request" | "westcan_not_signed_in" | "westcan_error" | "nexpart_error";
 
 export class BridgeError extends Error {
   constructor(readonly code: BridgeErrorCode, message: string = code) {
@@ -99,6 +116,8 @@ export class BridgeError extends Error {
 }
 
 export const BRIDGE_ERRORS: Record<BridgeErrorCode, string> = {
+  document_locked: "这张单在 ALLDATA 里已经锁定（发票或已作废），不能修改。",
+  document_changed: "这张单在你查看之后被别人改过了，请重新打开再改。",
   not_installed: "这台电脑还没装 SPEEDX ALLDATA 扩展，或扩展没启用。",
   not_signed_in: "这台电脑的 Chrome 没登录 ALLDATA，请先打开 my.alldata.com 登录。",
   timeout: "ALLDATA 没有回应，请确认 ALLDATA 页面能正常打开后再试。",

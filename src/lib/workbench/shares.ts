@@ -51,6 +51,8 @@ export function snapshot(conversation: Conversation): Conversation {
     .map((t) => {
       const turn = { ...t };
       delete turn.memories;
+      // A proposed change to a real ALLDATA document (ids, what was altered) is for staff only.
+      delete turn.changes;
       if (turn.drafts) turn.drafts = turn.drafts.map((d) => ({ id: d.id, created: d.created }) as typeof d);
       return turn;
     });

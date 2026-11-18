@@ -18,18 +18,27 @@ export interface AlldataReadback {
   version: number;
   state: string;
   documentNumber: number;
+  /** A Draft or an Estimate that isn't voided: the only documents ALLDATA lets anyone change (invoices are read-only). */
+  editable: boolean;
+  voided: boolean;
+  /** History events such as "Created" and "Printed"; null when ALLDATA didn't give them. */
+  events: string[] | null;
   customerAttached: boolean;
+  /** The attached customer's ALLDATA id (not their details), to check a change of customer. */
+  customerId: number | null;
   mileageIn: number;
   technician: string;
   serviceWriter: string;
   shopNote: string;
   lines: Array<{
+    datalineId: number | null;
     lineTypeId: number;
     description: string;
     partNumber: string;
     quantityOrHours: number | null;
     priceRate: number;
     cost: number;
+    markupAmount: number;
     total: number;
     taxable: boolean;
   }>;
@@ -51,13 +60,13 @@ export interface ExpectedTotals {
  * and labor only, so ALLDATA's quirk of taxing a non-taxable discount at its
  * pre-discount price doesn't come into play yet.
  */
-export function expectedTotals(draft: Pick<AlldataDraft, "lines">, chargePst: boolean): ExpectedTotals {
+export function expectedTotals(draft: Pick<AlldataDraft, "lines">, chargePst: boolean, rates: { gst: number; pst: number } = { gst: GST_RATE, pst: PST_RATE }): ExpectedTotals {
   const parts = money(draft.lines.filter((l) => l.kind === "part").reduce((sum, l) => sum + lineTotal(l), 0));
   const labor = money(draft.lines.filter((l) => l.kind === "labor").reduce((sum, l) => sum + lineTotal(l), 0));
   const taxable = draft.lines.filter((l) => l.taxable).reduce((sum, l) => sum + lineTotal(l), 0);
   const subTotal = money(parts + labor);
-  const gst = money(taxable * GST_RATE);
-  const pst = chargePst ? money(taxable * PST_RATE) : 0;
+  const gst = money(taxable * rates.gst);
+  const pst = chargePst ? money(taxable * rates.pst) : 0;
   return { parts, labor, subTotal, gst, pst, total: money(subTotal + gst + pst) };
 }
 
@@ -78,6 +87,8 @@ export interface ReadbackOptions {
   serviceWriter?: string;
   /** Expected document state: "Draft" for a draft, "Estimate" once converted. */
   state?: string;
+  /** The rates switched on in ALLDATA Settings when known; defaults to 5% GST and 7% PST. */
+  rates?: { gst: number; pst: number };
 }
 
 const same = (a: number, b: number, tolerance = 0.011) => Math.abs(a - b) <= tolerance;
@@ -121,7 +132,7 @@ export function checkReadback(draft: Pick<AlldataDraft, "lines">, doc: AlldataRe
     }
   });
 
-  const want = expectedTotals(draft, options.chargePst);
+  const want = expectedTotals(draft, options.chargePst, options.rates);
   const t = doc.totals;
   add("零件合计", usd(want.parts), usd(t.parts), same(want.parts, t.parts));
   add("工时合计", usd(want.labor), usd(t.labor), same(want.labor, t.labor));

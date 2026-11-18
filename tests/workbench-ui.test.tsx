@@ -68,6 +68,7 @@ function cloud(options: CloudOptions = {}) {
         text,
         quotes: [],
         ...(extra.some((e) => (e as { type: string }).type === "alldata_draft") ? { drafts: extra.filter((e) => (e as { type: string }).type === "alldata_draft").map((e) => (e as { draft: never }).draft) } : {}),
+        ...(extra.some((e) => (e as { type: string }).type === "alldata_change") ? { changes: extra.filter((e) => (e as { type: string }).type === "alldata_change").map((e) => (e as { change: never }).change) } : {}),
         ...(extra.some((e) => (e as { type: string }).type === "memory_proposal") ? { memories: extra.filter((e) => (e as { type: string }).type === "memory_proposal").map((e) => (e as { proposal: never }).proposal) } : {}),
       };
       await store.append(body.conversationId, asker, [answer], vehicle);
@@ -434,7 +435,8 @@ describe("ALLDATA in the workbench", () => {
       if (data.direction === "ping") answer({ direction: "pong", version: "1.0.0" });
       if (data.direction === "request") {
         requests.push({ op: data.op!, args: data.args! });
-        answer({ direction: "response", ok: true, result: answers[data.op!] });
+        const given = answers[data.op!];
+        answer({ direction: "response", ok: true, result: typeof given === "function" ? (given as (args: Record<string, unknown>) => unknown)(data.args!) : given });
       }
     };
     window.addEventListener("message", fakeExtension);
@@ -595,6 +597,162 @@ describe("ALLDATA in the workbench", () => {
     const readback = await within(card).findByTestId("alldata-readback");
     expect(readback).toHaveTextContent("项不一致");
     expect(readback).toHaveTextContent("第 1 行 单价");
+  });
+
+  describe("changing an existing ALLDATA document", () => {
+    const line = (id: number, typeId: number, description: string, qty: number, price: number, total: number) => ({
+      datalineId: id,
+      lineTypeId: typeId,
+      description,
+      partNumber: typeId === 5 ? `P${id}` : "",
+      quantityOrHours: qty,
+      priceRate: price,
+      cost: price,
+      markupAmount: 0,
+      total,
+      taxable: true,
+    });
+    const doc = (over: Record<string, unknown> = {}) => ({
+      documentId: 900,
+      version: 3,
+      state: "Draft",
+      documentNumber: 0,
+      editable: true,
+      voided: false,
+      events: ["Created"],
+      customerAttached: false,
+      customerId: null,
+      mileageIn: 1000,
+      technician: "Jason",
+      serviceWriter: "Kevin",
+      shopNote: "TEST",
+      lines: [line(11, 5, "Front pads", 1, 100, 100), line(13, 6, "Replace pads", 1, 120, 120)],
+      totals: { parts: 100, labor: 120, flatFee: 0, discount: 0, subTotal: 220, gst: 11, pst: 0, hst: 0, tax: 11, total: 231 },
+      ...over,
+    });
+    const taxes = { gst: { apply: true, rate: 5 }, pst: { apply: false, rate: 7 }, hst: { apply: false, rate: 0 } };
+    const change = (ops: unknown[]) => ({ type: "alldata_change", change: { id: "C-1", document: { documentId: 900, query: "" }, ops, reason: "客人要改", createdAt: "2026-11-17T20:00:00Z" } });
+
+    function cloudWith(ops: unknown[]) {
+      vi.stubGlobal("fetch", cloud({ events: () => [change(ops)] }).fetchImpl);
+    }
+
+    it("shows what would change, saves only when applied, and checks the saved document", async () => {
+      let saved = false;
+      installFakeExtension({
+        readTaxSettings: taxes,
+        readDocument: () =>
+          saved
+            ? doc({ version: 4, lines: [line(11, 5, "Front pads", 1, 105, 105), line(13, 6, "Replace pads", 1, 120, 120)], totals: { parts: 105, labor: 120, flatFee: 0, discount: 0, subTotal: 225, gst: 11.25, pst: 0, hst: 0, tax: 11.25, total: 236.25 } })
+            : doc(),
+        saveDocument: () => {
+          saved = true;
+          return { documentId: 900, version: 4, markupSaved: true };
+        },
+      });
+      cloudWith([{ op: "set_line", ref: { contains: "pads" , line: 1 }, unitPrice: 105 }]);
+      render(<Workbench email="staff@example.com" />);
+      await ask("把前刹车片改成 105");
+      const card = await screen.findByTestId("alldata-change");
+      expect(await within(card).findByText(/单价 \$100.00/)).toBeInTheDocument();
+      expect(within(within(card).getByRole("region", { name: "将要修改的内容" })).getByText(/含税合计/)).toHaveTextContent("$231.00 → $236.25");
+      expect(requests.some((r) => r.op === "saveDocument")).toBe(false);
+      // Under the $50 / 10% gate: no extra confirmation is asked for.
+      expect(within(card).queryByText(/需要老板确认/)).not.toBeInTheDocument();
+
+      await userEvent.click(within(card).getByRole("button", { name: "在 ALLDATA 应用修改" }));
+      expect(await within(card).findByTestId("alldata-change-result")).toHaveTextContent("全部一致");
+      const save = requests.find((r) => r.op === "saveDocument")!;
+      expect(save.args).toMatchObject({ documentId: 900, expectedVersion: 3, expectedTaxes: taxes, edits: { updates: [{ datalineId: 11, unitPrice: 105 }], removes: [], adds: [] } });
+    });
+
+    it("needs the owner's tick before a change of $50 or 10% or more goes through", async () => {
+      installFakeExtension({ readTaxSettings: taxes, readDocument: doc(), saveDocument: { documentId: 900, version: 4, markupSaved: true } });
+      cloudWith([{ op: "set_line", ref: { line: 2 }, quantity: 2 }]);
+      render(<Workbench email="staff@example.com" />);
+      await ask("工时改成 2 小时");
+      const card = await screen.findByTestId("alldata-change");
+      expect(await within(card).findByText(/金额变动超过阈值/)).toBeInTheDocument();
+      const apply = within(card).getByRole("button", { name: "在 ALLDATA 应用修改" });
+      expect(apply).toBeDisabled();
+      await userEvent.click(within(card).getByRole("checkbox", { name: /老板已确认/ }));
+      expect(apply).toBeEnabled();
+      // Unticking takes the confirmation back.
+      await userEvent.click(within(card).getByRole("checkbox", { name: /老板已确认/ }));
+      expect(apply).toBeDisabled();
+    });
+
+    it("refuses to change an invoice and says why", async () => {
+      installFakeExtension({ readTaxSettings: taxes, readDocument: doc({ state: "Invoice", editable: false, documentNumber: 1074 }) });
+      cloudWith([{ op: "set_line", ref: { line: 1 }, unitPrice: 90 }]);
+      render(<Workbench email="staff@example.com" />);
+      await ask("改发票");
+      const card = await screen.findByTestId("alldata-change");
+      expect(await within(card).findByText(/发票和已锁定的单据不能修改/)).toBeInTheDocument();
+      expect(within(card).getByRole("button", { name: "在 ALLDATA 应用修改" })).toBeDisabled();
+      expect(within(card).queryByText("转成发票（不可撤销）")).not.toBeInTheDocument();
+    });
+
+    it("offers no conversion while a change of customer is waiting, and the owner's tick follows the customer chosen", async () => {
+      installFakeExtension({
+        readTaxSettings: taxes,
+        readDocument: doc(),
+        searchCustomers: { customers: [{ customerId: 55, name: "A Person", phone: "604-555-0100", vehicles: [] }, { customerId: 56, name: "B Person", phone: "604-555-0101", vehicles: [] }] },
+      });
+      cloudWith([{ op: "set_customer", search: "Person" }]);
+      render(<Workbench email="staff@example.com" />);
+      await ask("改客户");
+      const card = await screen.findByTestId("alldata-change");
+      await within(card).findByText(/需要老板确认：更换客户/);
+      expect(within(card).queryByRole("button", { name: "转成发票（不可撤销）" })).not.toBeInTheDocument();
+      await userEvent.click(within(card).getByRole("button", { name: /查找客户/ }));
+      await userEvent.click(await within(card).findByRole("radio", { name: /A Person/ }));
+      await userEvent.click(within(card).getByRole("checkbox", { name: /老板已确认/ }));
+      expect(within(card).getByRole("button", { name: "在 ALLDATA 应用修改" })).toBeEnabled();
+      await userEvent.click(within(card).getByRole("radio", { name: /B Person/ }));
+      expect(within(card).getByRole("checkbox", { name: /老板已确认/ })).not.toBeChecked();
+      expect(within(card).getByRole("button", { name: "在 ALLDATA 应用修改" })).toBeDisabled();
+    });
+
+    it("offers no conversion while a change couldn't be placed", async () => {
+      installFakeExtension({ readTaxSettings: taxes, readDocument: doc() });
+      cloudWith([{ op: "set_line", ref: { contains: "missing pads" }, unitPrice: 200 }]);
+      render(<Workbench email="staff@example.com" />);
+      await ask("改一个不存在的行");
+      const card = await screen.findByTestId("alldata-change");
+      await within(card).findByText(/No line matches/);
+      expect(within(card).queryByRole("button", { name: "转成发票（不可撤销）" })).not.toBeInTheDocument();
+    });
+
+    it("turns a draft into an invoice only after the typed confirmation, for that exact version", async () => {
+      installFakeExtension({ readTaxSettings: taxes, readDocument: doc(), convertDocument: { documentId: 900, state: "Invoice", documentNumber: 1080 } });
+      cloudWith([]);
+      render(<Workbench email="staff@example.com" />);
+      await ask("看看这张单");
+      const card = await screen.findByTestId("alldata-change");
+      await userEvent.click(await within(card).findByRole("button", { name: "转成发票（不可撤销）" }));
+      const confirm = within(card).getByRole("button", { name: "确认开发票" });
+      expect(confirm).toBeDisabled();
+      await userEvent.type(within(card).getByLabelText("输入开发票确认"), "开发票");
+      await userEvent.click(confirm);
+      await vi.waitFor(() => expect(requests.some((r) => r.op === "convertDocument")).toBe(true));
+      expect(requests.find((r) => r.op === "convertDocument")!.args).toEqual({ documentId: 900, expectedVersion: 3, to: "invoice", confirm: "invoice:900:3" });
+    });
+
+    it("searches when the document isn't known and lets staff pick one", async () => {
+      installFakeExtension({
+        searchDocuments: { documents: [{ documentId: 900, number: 1062, state: "Estimate", voided: false, customerName: "Test", vehicle: "GL350", updatedOn: 0, printable: [] }, { documentId: 901, number: 1063, state: "Estimate", voided: false, customerName: "Other", vehicle: "Q7", updatedOn: 0, printable: [] }] },
+        readTaxSettings: taxes,
+        readDocument: doc({ documentNumber: 1062, state: "Estimate" }),
+      });
+      vi.stubGlobal("fetch", cloud({ events: () => [{ type: "alldata_change", change: { id: "C-2", document: { documentId: null, query: "1062" }, ops: [], reason: "", createdAt: "2026-11-17T20:00:00Z" } }] }).fetchImpl);
+      render(<Workbench email="staff@example.com" />);
+      await ask("查 1062");
+      const card = await screen.findByTestId("alldata-change");
+      await userEvent.click(await within(card).findByRole("button", { name: /#1062 · Estimate · Test/ }));
+      expect(await within(card).findByText(/#1062 · Estimate/, { selector: "h3" })).toBeInTheDocument();
+      expect(requests.find((r) => r.op === "searchDocuments")!.args).toEqual({ search: "1062" });
+    });
   });
 
   it("tells staff to install the extension when it is missing", async () => {

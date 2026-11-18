@@ -15,6 +15,7 @@ const ALLOWED_PAGES = [/^https:\/\/repair\.speedxrental\.com\//, /^http:\/\/loca
 const DEFAULT_TECHNICIAN_ID = 270227;
 const DEFAULT_SERVICE_WRITER_ID = 276708;
 const PDF_TYPES = ["Estimate", "RepairOrder", "Invoice"];
+const EDITABLE_STATES = ["Draft", "Estimate"];
 const MAX_LINES = 40;
 
 class BridgeError extends Error {
@@ -315,6 +316,28 @@ function checkDatalines(lines) {
   return lines;
 }
 
+/** Whether two readings of ALLDATA's tax switches (which taxes are on, and at what rate) are the same. */
+function sameTaxes(a, b) {
+  return ["gst", "pst", "hst"].every((k) => a[k].apply === Boolean(b[k] && b[k].apply) && (!a[k].apply || a[k].rate === b[k].rate));
+}
+
+/**
+ * The second save (markups of parts added in the first): only when nobody changed the document in between, because
+ * a PUT replaces all lines and would otherwise delete what someone else just added. Returns the new version or null.
+ */
+async function secondSave(documentId, savedDoc, lines, body, expectedTaxes = null) {
+  const savedLines = (savedDoc.datalines || []).slice().sort((x, y) => x.lineNumber - y.lineNumber);
+  if (savedLines.length !== lines.length) return null;
+  const current = await request("GET", `${SHOPMGR}documents/${documentId}`);
+  if (current.status < 200 || current.status >= 300 || !current.json || current.json.documentVersion !== savedDoc.documentVersion) return null;
+  // The second save is taxed by the Settings switches too: if they moved since the first, leave the markups unsaved rather than re-tax.
+  if (expectedTaxes && !sameTaxes(await readTaxSettings(), expectedTaxes)) return null;
+  // Each line goes back with the price ALLDATA stored for it: ALLDATA keeps a changed priceRate as a hand-typed price.
+  const again = lines.map((l, i) => ({ ...l, datalineId: savedLines[i].datalineId, datalineType: savedLines[i].datalineType, priceRate: savedLines[i].priceRate }));
+  const second = await request("PUT", `${SHOPMGR}documents/${documentId}`, body(again));
+  return second.status >= 200 && second.status < 300 ? (second.json && second.json.documentVersion) || savedDoc.documentVersion : null;
+}
+
 /**
  * Saves the document as a Draft (no document number is taken yet). Shared by
  * createDraft and createEstimate.
@@ -371,23 +394,8 @@ async function createDocument(args) {
   if (datalines.some((l) => l.lineTypeId === 5 && l.markupAmount > 0)) {
     markupSaved = false;
     try {
-      // Second save with the saved lines' ids so ALLDATA applies each markup.
       const stored = draft.datalines && draft.datalines.length ? draft : ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read draft");
-      const saved = (stored.datalines || []).slice().sort((x, y) => x.lineNumber - y.lineNumber);
-      const again = datalines.map((line, i) => ({
-        ...line,
-        datalineId: (saved[i] && saved[i].datalineId) || null,
-        hidden: false,
-        children: [],
-        details: null,
-        nxDetails: null,
-        adComponentId: null,
-        datalineType: saved[i] && saved[i].datalineType,
-      }));
-      if (!again.some((l) => !l.datalineId) && saved.length === datalines.length) {
-        const updated = await request("PUT", `${SHOPMGR}documents/${documentId}`, document(customerAttached, again));
-        markupSaved = updated.status >= 200 && updated.status < 300;
-      }
+      markupSaved = (await secondSave(documentId, stored, datalines, (list) => document(customerAttached, list))) !== null;
     } catch {
       markupSaved = false;
     }
@@ -420,23 +428,39 @@ async function readDocument(args) {
   if (!documentId) throw new BridgeError("bad_request", "bad document");
   const d = ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read");
   const n = (value) => (Number.isFinite(value) ? value : 0);
+  const states = d.documentStates || {};
+  const voided = Boolean((states.estimate && states.estimate.voided) || (states.invoice && states.invoice.isVoided) || (states.repairOrder && states.repairOrder.voided));
+  // Print / email events tell us whether the customer may already have seen the document. Not fatal if unavailable.
+  let events = null;
+  try {
+    const history = await request("GET", `${SHOPMGR}documents/${documentId}/history`);
+    if (history.status >= 200 && history.status < 300 && Array.isArray(history.json)) events = history.json.map((e) => text(e && e.eventType, 30)).filter(Boolean);
+  } catch {
+    events = null;
+  }
   return {
     documentId: d.documentId,
     version: n(d.documentVersion),
     state: text(d.state, 30),
     documentNumber: n(d.estimateNumber),
+    editable: EDITABLE_STATES.includes(d.state) && !voided,
+    voided,
+    events,
     customerAttached: Boolean(d.customer),
+    customerId: d.customer && Number.isInteger(d.customer.customerId) ? d.customer.customerId : null,
     mileageIn: n(d.mileageIn),
     technician: text(d.technician && d.technician.name, 60),
     serviceWriter: text(d.serviceWriter && d.serviceWriter.name, 60),
     shopNote: text(d.shopNote, 500),
     lines: (d.datalines || []).map((l) => ({
+      datalineId: Number.isInteger(l.datalineId) ? l.datalineId : null,
       lineTypeId: l.datalineType ? l.datalineType.datalineTypeId : 0,
       description: text(l.description, 200),
       partNumber: text(l.partNumber, 60),
       quantityOrHours: Number.isFinite(l.quantityOrHours) ? l.quantityOrHours : null,
       priceRate: n(l.priceRate),
       cost: n(l.cost),
+      markupAmount: n(l.markupAmount),
       total: n(l.total),
       taxable: Boolean(l.taxable),
     })),
@@ -453,6 +477,286 @@ async function readDocument(args) {
       total: n(d.total),
     },
   };
+}
+
+/** The shop-wide tax switches in ALLDATA Settings. PST is turned on and off there by staff, so every document is taxed by whatever is set when it is saved. */
+async function readTaxSettings() {
+  const s = ok(await request("GET", `${SHOPMGR}settings/rates_taxes_discounts`), "tax settings");
+  const find = (name) => {
+    const t = ((s && s.taxRates) || []).find((x) => x && x.name === name);
+    return { apply: Boolean(t && t.apply), rate: t && Number.isFinite(t.amount) ? t.amount : 0 };
+  };
+  return { gst: find("GST"), pst: find("PST"), hst: find("HST") };
+}
+
+// ------------------------------------------------------------------ editing a draft or an estimate
+
+const EDITABLE_TYPES = [5, 6, 7, 18]; // custom part, custom labor, flat fee, discount (on labor)
+const DISCOUNT_ON_LABOR = 18;
+const money = (value) => Math.round(value * 100) / 100;
+
+/** The customer block and saved vehicle for a document, as Shop Manager sends them (shared by create and edit). */
+async function customerBlock(customerId, customerVehicleId) {
+  const full = ok(await request("GET", `${SHOPMGR}customers/${customerId}`), "customer lookup");
+  const saved = await findSavedVehicle(customerId, full, customerVehicleId);
+  const customer = { ...full };
+  delete customer.vehicles;
+  delete customer._links;
+  delete customer._embedded;
+  return { customer, vehicle: saved ? vehicleInformation(saved) : {} };
+}
+
+/** A part's price is cost + markup: keep the shop's cost when the price is above it, else book the price as the cost. */
+function partPricing(unitPrice, currentCost) {
+  const cost = Number.isFinite(currentCost) && currentCost >= 0 && currentCost < unitPrice ? currentCost : unitPrice;
+  return { cost: money(cost), markup: money(unitPrice - cost) };
+}
+
+/** A saved line in the shape Shop Manager sends it back on a save. */
+function putLine(raw, index) {
+  return {
+    articleUrl: raw.articleUrl || "Not found",
+    cost: raw.cost,
+    description: raw.description,
+    itemId: index + 1,
+    laborRate: raw.laborRate ? raw.laborRate.name || raw.laborRate : null,
+    laborRateId: raw.laborRate ? raw.laborRate.laborRateId || raw.laborRateId || null : raw.laborRateId || null,
+    itemName: raw.itemName,
+    lineNumber: index + 1,
+    lineTypeId: raw.datalineType ? raw.datalineType.datalineTypeId : raw.lineTypeId,
+    partNumber: raw.partNumber,
+    priceRate: raw.priceRate,
+    total: raw.total,
+    quantityOrHours: raw.quantityOrHours,
+    skill: raw.skill,
+    taxable: raw.taxable,
+    manualPriceRate: raw.manualPriceRate,
+    markedUpHours: raw.markedUpHours,
+    markupAmount: raw.markupAmount,
+    markupCalcMethodRefCd: raw.markupCalcMethodRefCd,
+    markupTypeRefCd: raw.markupTypeRefCd,
+    datalineId: raw.datalineId,
+    children: raw.children || [],
+    hidden: Boolean(raw.hidden),
+    details: raw.details || null,
+    nxDetails: raw.nxDetails || null,
+    adComponentId: raw.adComponentId || null,
+    datalineType: raw.datalineType,
+  };
+}
+
+function newLine(add, index) {
+  const base = {
+    articleUrl: "Not found",
+    itemId: index + 1,
+    lineNumber: index + 1,
+    skill: "No Skill",
+    markedUpHours: null,
+    markupAmount: null,
+    markupCalcMethodRefCd: null,
+    markupTypeRefCd: null,
+    datalineId: null,
+    children: [],
+    hidden: false,
+    details: null,
+    nxDetails: null,
+    adComponentId: null,
+    description: add.description,
+    taxable: add.taxable !== false,
+    manualPriceRate: false,
+  };
+  const total = money(add.quantity * add.unitPrice);
+  if (add.kind === "labor") {
+    return { ...base, itemName: "Labor", lineTypeId: 6, partNumber: "Basic Labor", laborRate: "Basic Labor", laborRateId: 238899, cost: add.unitPrice, quantityOrHours: add.quantity, priceRate: add.unitPrice, total };
+  }
+  if (add.kind === "flat_fee") {
+    return { ...base, skill: null, itemName: "Flat Fee", lineTypeId: 7, partNumber: null, laborRate: null, laborRateId: null, cost: 0, quantityOrHours: null, priceRate: add.unitPrice, total: add.unitPrice };
+  }
+  if (add.kind === "discount") {
+    const amount = -Math.abs(add.unitPrice);
+    return { ...base, skill: null, itemName: "Discount", lineTypeId: DISCOUNT_ON_LABOR, partNumber: null, laborRate: null, laborRateId: null, cost: amount, quantityOrHours: null, priceRate: amount, total: amount, taxable: add.taxable === true };
+  }
+  const { cost, markup } = partPricing(add.unitPrice, add.unitCost);
+  return {
+    ...base,
+    itemName: "Part",
+    lineTypeId: 5,
+    partNumber: add.partNumber || "—",
+    laborRate: null,
+    laborRateId: null,
+    cost,
+    quantityOrHours: add.quantity,
+    priceRate: cost,
+    total,
+    markupAmount: markup > 0 ? markup : null,
+    manualPriceRate: markup > 0,
+  };
+}
+
+function checkEdits(edits) {
+  const e = edits && typeof edits === "object" ? edits : {};
+  const list = (v) => (Array.isArray(v) ? v : []);
+  const updates = list(e.updates);
+  const removes = list(e.removes);
+  const adds = list(e.adds);
+  if (updates.length + removes.length + adds.length > 60) throw new BridgeError("bad_request", "too many edits");
+  for (const u of updates) {
+    if (!u || !Number.isInteger(u.datalineId)) throw new BridgeError("bad_request", "bad update");
+    if (u.quantity !== undefined && !(Number.isFinite(u.quantity) && u.quantity > 0 && u.quantity <= 999)) throw new BridgeError("bad_request", "bad quantity");
+    if (u.unitPrice !== undefined && !(Number.isFinite(u.unitPrice) && u.unitPrice >= 0 && u.unitPrice <= 100000)) throw new BridgeError("bad_request", "bad price");
+  }
+  for (const r of removes) if (!Number.isInteger(r)) throw new BridgeError("bad_request", "bad remove");
+  const touched = [...updates.map((u) => u.datalineId), ...removes];
+  if (new Set(touched).size !== touched.length) throw new BridgeError("bad_request", "a line can be changed only once per save");
+  for (const a of adds) {
+    const kinds = ["part", "labor", "flat_fee", "discount"];
+    const fine =
+      a &&
+      kinds.includes(a.kind) &&
+      typeof a.description === "string" &&
+      a.description.trim() &&
+      Number.isFinite(a.unitPrice) &&
+      a.unitPrice >= 0 &&
+      a.unitPrice <= 100000 &&
+      (a.kind === "flat_fee" || a.kind === "discount" || (Number.isFinite(a.quantity) && a.quantity > 0 && a.quantity <= 999));
+    if (!fine) throw new BridgeError("bad_request", "bad new line");
+  }
+  const header = e.header && typeof e.header === "object" ? e.header : {};
+  return { updates, removes, adds, header };
+}
+
+/**
+ * Edits a Draft or an Estimate the way Shop Manager does: one save of the whole document. Refuses invoices,
+ * voided documents and a document that changed since the workbench read it (expectedVersion).
+ * A part added in this save only gets its markup on a second save, once ALLDATA has given it an id.
+ */
+async function saveDocument(args) {
+  const documentId = positiveInt(args.documentId);
+  if (!documentId || !Number.isInteger(args.expectedVersion)) throw new BridgeError("bad_request", "bad document");
+  const { updates, removes, adds, header } = checkEdits(args.edits);
+  const expected = args.expectedTaxes;
+  if (!expected || ["gst", "pst", "hst"].some((k) => !expected[k] || typeof expected[k].apply !== "boolean" || !Number.isFinite(expected[k].rate))) throw new BridgeError("bad_request", "tax settings missing");
+  const raw = ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read");
+  const states = raw.documentStates || {};
+  const voided = Boolean((states.estimate && states.estimate.voided) || (states.invoice && states.invoice.isVoided));
+  if (!EDITABLE_STATES.includes(raw.state) || voided) throw new BridgeError("document_locked", `document is ${voided ? "voided" : raw.state}`);
+  if (raw.documentVersion !== args.expectedVersion) throw new BridgeError("document_changed", "document changed since it was read");
+
+  const byId = new Map((raw.datalines || []).map((l) => [l.datalineId, l]));
+  for (const u of updates) {
+    const line = byId.get(u.datalineId);
+    if (!line || !EDITABLE_TYPES.includes(line.datalineType.datalineTypeId)) throw new BridgeError("bad_request", "that line can't be edited here");
+  }
+  for (const id of removes) if (!byId.has(id)) throw new BridgeError("bad_request", "unknown line");
+
+  const lines = [];
+  for (const raw1 of raw.datalines || []) {
+    if (removes.includes(raw1.datalineId)) continue;
+    const line = putLine(raw1, lines.length);
+    const u = updates.find((x) => x.datalineId === raw1.datalineId);
+    if (u) {
+      const typeId = line.lineTypeId;
+      if (typeof u.description === "string" && u.description.trim()) line.description = text(u.description, 200);
+      if (typeof u.partNumber === "string" && typeId === 5) line.partNumber = text(u.partNumber, 60) || "—";
+      if (typeof u.taxable === "boolean") line.taxable = u.taxable;
+      if (u.quantity !== undefined && typeId !== 7 && typeId !== 18) line.quantityOrHours = u.quantity;
+      if (u.unitPrice !== undefined) {
+        if (typeId === 5) {
+          // ALLDATA recomputes price = cost + markup, but treats a priceRate that differs from the stored one as a
+          // price typed by hand and keeps that. So the stored priceRate goes back unchanged; only cost and markup move.
+          const { cost, markup } = partPricing(u.unitPrice, raw1.cost);
+          line.cost = cost;
+          line.markupAmount = markup > 0 ? markup : null;
+          line.manualPriceRate = markup > 0;
+        } else if (typeId === 18) {
+          line.priceRate = -Math.abs(u.unitPrice);
+          line.cost = line.priceRate;
+        } else {
+          line.priceRate = u.unitPrice;
+          if (typeId === 6) line.cost = u.unitPrice;
+        }
+      }
+      const qty = typeId === 7 || typeId === 18 ? 1 : line.quantityOrHours;
+      line.total = typeId === 7 || typeId === 18 ? line.priceRate : money(qty * (typeId === 5 ? money(line.cost + (line.markupAmount || 0)) : line.priceRate));
+    }
+    lines.push(line);
+  }
+  const firstNew = lines.length;
+  for (const add of adds) lines.push(newLine(add, lines.length));
+  if (lines.length > MAX_LINES) throw new BridgeError("bad_request", "bad line count");
+  if (lines.length === 0) throw new BridgeError("bad_request", "a document needs at least one line");
+
+  let customer = raw.customer ? { ...raw.customer } : null;
+  if (customer) {
+    delete customer.vehicles;
+    delete customer._links;
+    delete customer._embedded;
+  }
+  let vehicle = raw.customerVehicle ? vehicleInformation(raw.customerVehicle) : {};
+  const newCustomerId = positiveInt(args.customerId);
+  if (newCustomerId) ({ customer, vehicle } = await customerBlock(newCustomerId, positiveInt(args.customerVehicleId)));
+
+  const mileage = Number.isFinite(header.mileageIn) && header.mileageIn >= 0 ? Math.round(header.mileageIn) : raw.mileageIn;
+  const body = (list) => ({
+    customer,
+    vehicleInformation: vehicle,
+    mileageIn: String(mileage),
+    mileageOut: String(raw.mileageOut || 0),
+    serviceTag: raw.serviceTag || null,
+    datalines: list,
+    technicianId: positiveInt(header.technicianId) || (raw.technician && raw.technician.technicianId) || DEFAULT_TECHNICIAN_ID,
+    serviceWriterId: positiveInt(header.serviceWriterId) || (raw.serviceWriter && raw.serviceWriter.serviceWriterId) || DEFAULT_SERVICE_WRITER_ID,
+    proposedCompletionDate: raw.proposedCompletionDate || null,
+    shopNote: typeof header.shopNote === "string" ? text(header.shopNote, 500) || null : raw.shopNote || null,
+  });
+
+  // Every save is taxed by the switches in ALLDATA Settings as they are now. If staff flipped one since the workbench
+  // read them, the change it showed (and the owner's gate it was measured against) no longer holds.
+  const taxes = await readTaxSettings();
+  if (!sameTaxes(taxes, expected)) throw new BridgeError("document_changed", "tax settings changed");
+
+  const saved = ok(await request("PUT", `${SHOPMGR}documents/${documentId}`, body(lines)), "save");
+
+  // Added parts get their markup on a second save, now that ALLDATA has given them ids.
+  let markupSaved = true;
+  const needSecond = lines.slice(firstNew).some((l) => l.lineTypeId === 5 && l.markupAmount > 0);
+  let version = saved.documentVersion;
+  if (needSecond) {
+    markupSaved = false;
+    try {
+      const next = await secondSave(documentId, saved, lines, body, expected);
+      if (next !== null) {
+        markupSaved = true;
+        version = next;
+      }
+    } catch {
+      markupSaved = false;
+    }
+  }
+  return { documentId, version, markupSaved };
+}
+
+/**
+ * Moves a document to its next state. A draft becomes an estimate (takes a document number). An estimate or a draft
+ * becomes an invoice only when the caller passes the confirmation string for exactly this document version:
+ * Shop Manager says an invoice can never be changed or deleted.
+ */
+async function convertDocument(args) {
+  const documentId = positiveInt(args.documentId);
+  if (!documentId || !Number.isInteger(args.expectedVersion) || !["estimate", "invoice"].includes(args.to)) throw new BridgeError("bad_request", "bad document");
+  const raw = ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read");
+  const states = raw.documentStates || {};
+  const voided = Boolean((states.estimate && states.estimate.voided) || (states.invoice && states.invoice.isVoided));
+  if (!EDITABLE_STATES.includes(raw.state) || voided) throw new BridgeError("document_locked", `document is ${voided ? "voided" : raw.state}`);
+  if (raw.documentVersion !== args.expectedVersion) throw new BridgeError("document_changed", "document changed since it was read");
+  if (args.to === "estimate") {
+    if (raw.state !== "Draft") throw new BridgeError("bad_request", "only a draft becomes an estimate");
+    const converted = ok(await request("PUT", `${SHOPMGR}documents/${documentId}/state`, "estimate", "text/plain"), "to estimate");
+    return { documentId, state: text(converted && converted.state, 30) || "Estimate", documentNumber: (converted && converted.estimateNumber) || 0 };
+  }
+  if (args.confirm !== `invoice:${documentId}:${raw.documentVersion}`) throw new BridgeError("bad_request", "invoice needs the confirmation for this exact version");
+  const made = ok(await request("POST", `${SHOPMGR}documents/${documentId}/invoice`), "to invoice");
+  return { documentId, state: text(made && made.state, 30) || "Invoice", documentNumber: (made && made.estimateNumber) || raw.estimateNumber || 0 };
 }
 
 async function openPdf(args) {
@@ -698,4 +1002,4 @@ async function cartAddNow(args) {
   }
 }
 
-const OPS = { status, searchDocuments, searchCustomers, createEstimate, createDraft, readDocument, openPdf, westcanSearch, cartAdd };
+const OPS = { status, searchDocuments, searchCustomers, createEstimate, createDraft, readDocument, readTaxSettings, saveDocument, convertDocument, openPdf, westcanSearch, cartAdd };

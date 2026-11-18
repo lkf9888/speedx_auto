@@ -17,6 +17,7 @@ import { WORKBENCH_PROFILE, type WorkbenchEvent } from "./assistant";
 import { getMemoryStore, memoryPrompt, type MemoryNote, type MemoryStore } from "./memory";
 import { getConversationStore, newTurnId, type ConversationStore } from "./conversations";
 import { ASSISTANT, type Turn, type Vehicle } from "./conversation-types";
+import type { AlldataChangeRequest } from "./alldata-change";
 import type { AlldataDraft } from "./alldata-draft";
 import type { MemoryProposal } from "./assistant";
 import { extraPctOf, PRESET_PRICING, type PriceTier } from "./price-tier";
@@ -99,6 +100,17 @@ function finalPriceLine(quote: StaffQuote): string {
   return `[员工把报价 ${quote.id} 改成了最终价：${priced.join("；")}。之后一律按最终价。]`;
 }
 
+/** So the assistant can point a later change at the document it made. */
+function draftCreatedLine(draft: AlldataDraft): string {
+  const c = draft.created!;
+  return `[ALLDATA 草稿 ${draft.id}（${draft.title}）已建好：document_id ${c.documentId}，${c.estimateNumber ? `估价单 #${c.estimateNumber}` : "草稿（还没有单号）"}]`;
+}
+
+function changeLine(change: AlldataChangeRequest): string {
+  const target = change.document.documentId ? `document_id ${change.document.documentId}` : `查找“${change.document.query}”`;
+  return `[已给员工看 ALLDATA 改单卡 ${change.id}（${target}，${change.ops.length} 项改动）${change.applied ? "，员工已应用" : "，员工还没应用"}]`;
+}
+
 export function historyFromTurns(turns: Turn[]): ChatTurn[] {
   const history = turns
     .filter((t) => !t.localOnly && (t.text.trim() || t.attachments?.length))
@@ -120,6 +132,8 @@ export function historyFromTurns(turns: Turn[]): ChatTurn[] {
         t.attachments?.length ? `[附件：${t.attachments.map((a) => a.name).join("、")}]` : "",
         ...(t.estimates ?? []).map(websiteCardLine),
         ...t.quotes.filter((q) => q.final).map(finalPriceLine),
+        ...(t.drafts ?? []).filter((d) => d.created).map(draftCreatedLine),
+        ...(t.changes ?? []).map(changeLine),
       ]
         .filter(Boolean)
         .join("\n")
@@ -203,16 +217,18 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
   }
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const reply: { text: string; quotes: StaffQuote[]; drafts: AlldataDraft[]; memories: MemoryProposal[]; vehicle?: Vehicle; error: string | null; priceChoice?: boolean; tier?: PriceTier } = {
+      const reply: { text: string; quotes: StaffQuote[]; drafts: AlldataDraft[]; changes: AlldataChangeRequest[]; memories: MemoryProposal[]; vehicle?: Vehicle; error: string | null; priceChoice?: boolean; tier?: PriceTier } = {
         text: "",
         quotes: [],
         drafts: [],
+        changes: [],
         memories: [],
         error: null,
       };
       const send = (event: WorkbenchStreamEvent) => {
         if (event.type === "quote") reply.quotes.push(event.quote);
         else if (event.type === "alldata_draft") reply.drafts.push(event.draft);
+        else if (event.type === "alldata_change") reply.changes.push(event.change);
         else if (event.type === "memory_proposal") reply.memories.push(event.proposal);
         else if (event.type === "vehicle") reply.vehicle = event.vehicle;
         else if (event.type === "price_choice") reply.priceChoice = true;
@@ -255,12 +271,13 @@ export async function handleWorkbenchChat(request: Request, deps: WorkbenchDeps 
             text: reply.error ? REPLY_ERRORS[reply.error] : reply.text,
             quotes: reply.quotes,
             ...(reply.drafts.length ? { drafts: reply.drafts } : {}),
+            ...(reply.changes.length ? { changes: reply.changes } : {}),
             ...(reply.memories.length ? { memories: reply.memories } : {}),
             ...(reply.priceChoice ? { priceChoice: true } : {}),
-            ...(reply.error || (!reply.text && !reply.quotes.length && !reply.priceChoice) ? { localOnly: true } : {}),
+            ...(reply.error || (!reply.text && !reply.quotes.length && !reply.priceChoice && !reply.drafts.length && !reply.changes.length) ? { localOnly: true } : {}),
           };
           if (!answer.text && reply.priceChoice) answer.text = "按哪个价报？";
-          if (!answer.text && !answer.quotes.length && !answer.drafts && !answer.memories) answer.text = REPLY_ERRORS.empty;
+          if (!answer.text && !answer.quotes.length && !answer.drafts && !answer.changes && !answer.memories) answer.text = REPLY_ERRORS.empty;
           try {
             if (reply.tier) {
               // Naming the price in words keeps the extra labor hours staff already set.

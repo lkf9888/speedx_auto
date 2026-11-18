@@ -105,6 +105,17 @@ export async function handleConversation(request: Request, id: string, deps: Con
         deps.log({ action: "westcan", email: user.email, id, quote: card.itemId });
         return json({ conversation });
       }
+      if (card && typeof card.itemId === "string" && card.kind === "change") {
+        const applied = (body.card as { applied?: { at?: unknown; documentId?: unknown; version?: unknown } }).applied;
+        if (!applied || !Number.isInteger(applied.documentId) || !Number.isInteger(applied.version)) return json({ error: "invalid" }, 400);
+        const conversation = await store.markCard(id, user.email, {
+          kind: "change",
+          itemId: card.itemId,
+          applied: { at: new Date().toISOString(), documentId: applied.documentId, version: applied.version },
+        });
+        deps.log({ action: "alldata_change_applied", email: user.email, id, change: card.itemId });
+        return json({ conversation });
+      }
       if (card && typeof card.itemId === "string" && (card.kind === "draft" || card.kind === "memory")) {
         const conversation =
           card.kind === "draft"

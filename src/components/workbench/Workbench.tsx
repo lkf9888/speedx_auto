@@ -17,6 +17,7 @@ import {
 } from "@/lib/workbench/conversation-types";
 import { describePricing, priceLabel, TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
 import type { StaffQuote } from "@/lib/workbench/quote";
+import type { AlldataChangeRequest } from "@/lib/workbench/alldata-change";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
 import { HouseRulesPanel } from "./HouseRulesPanel";
@@ -24,6 +25,7 @@ import { StaffPanel } from "./StaffPanel";
 import { FollowUpPanel } from "./FollowUpPanel";
 import { SharePanel } from "./SharePanel";
 import { MemoryPanel, MemoryProposalCard } from "./MemoryPanel";
+import { AlldataChangeCard } from "./AlldataChangeCard";
 import { AlldataDraftCard } from "./AlldataDraftCard";
 import { distinctJobs, PriceChoiceCard, QuoteSheetSummary, type PriceChoice } from "./QuoteSheetSummary";
 import { StaffQuoteCard } from "./StaffQuoteCard";
@@ -363,6 +365,19 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
     }).catch(() => null);
   }
 
+  async function markApplied(conversationId: string, changeId: string, applied: { documentId: number; version: number }) {
+    const at = new Date().toISOString();
+    patchLocal(conversationId, (c) => ({
+      ...c,
+      turns: c.turns.map((t) => (t.changes?.some((x) => x.id === changeId) ? { ...t, changes: t.changes.map((x) => (x.id === changeId ? { ...x, applied: { ...applied, at } } : x)) } : t)),
+    }));
+    await fetch(`/api/workbench/conversations/${conversationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card: { kind: "change", itemId: changeId, applied } }),
+    }).catch(() => null);
+  }
+
   /** Staff agreed a price with the customer: saved on the quote for everyone (null puts the assistant's back). */
   async function saveFinalPrices(conversationId: string, quoteId: string, totals: Record<string, number> | null): Promise<boolean> {
     const response = await fetch(`/api/workbench/conversations/${conversationId}`, {
@@ -574,6 +589,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
     let reply = "";
     const quotes: StaffQuote[] = [];
     const drafts: AlldataDraft[] = [];
+    const changes: AlldataChangeRequest[] = [];
     const memories: MemoryProposal[] = [];
     let nextVehicle = active.vehicle;
     let priceChoice = false;
@@ -609,6 +625,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
               | { type: "vehicle"; vehicle: { key: string; label: string } }
               | { type: "quote"; quote: StaffQuote }
               | { type: "alldata_draft"; draft: AlldataDraft }
+              | { type: "alldata_change"; change: AlldataChangeRequest }
               | { type: "memory_proposal"; proposal: MemoryProposal }
               | { type: "price_choice" }
               | { type: "price_tier"; tier: PriceTier }
@@ -620,6 +637,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
             else if (event.type === "vehicle") nextVehicle = event.vehicle;
             else if (event.type === "quote") quotes.push(event.quote);
             else if (event.type === "alldata_draft") drafts.push(event.draft);
+            else if (event.type === "alldata_change") changes.push(event.change);
             else if (event.type === "memory_proposal") memories.push(event.proposal);
             else if (event.type === "price_choice") priceChoice = true;
             else if (event.type === "price_tier") nextTier = event.tier;
@@ -644,10 +662,10 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
         return { ...c, ...withTier, vehicle: nextVehicle, turns: [...before, { ...question, attachments: mine.attachments }, answer] };
       }
       if (!failure && !reply && priceChoice) reply = "按哪个价报？";
-      if (!failure && !reply && quotes.length === 0 && drafts.length === 0 && memories.length === 0) failure = "empty";
+      if (!failure && !reply && quotes.length === 0 && drafts.length === 0 && changes.length === 0 && memories.length === 0) failure = "empty";
       const answer: Turn = failure
-        ? { id: `local-a-${Date.now()}`, role: "assistant", author: ASSISTANT, text: ERRORS[failure], quotes, drafts, memories, localOnly: true, at: Date.now() }
-        : { id: `local-a-${Date.now()}`, role: "assistant", author: ASSISTANT, text: reply, quotes, drafts, memories, at: Date.now(), ...(priceChoice ? { priceChoice: true } : {}) };
+        ? { id: `local-a-${Date.now()}`, role: "assistant", author: ASSISTANT, text: ERRORS[failure], quotes, drafts, changes, memories, localOnly: true, at: Date.now() }
+        : { id: `local-a-${Date.now()}`, role: "assistant", author: ASSISTANT, text: reply, quotes, drafts, changes, memories, at: Date.now(), ...(priceChoice ? { priceChoice: true } : {}) };
       return { ...c, ...withTier, vehicle: nextVehicle, turns: [...before, mine, answer] };
     });
     setPending((p) => {
@@ -1118,6 +1136,11 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
                   )}
                   {turn.drafts?.map((draft) => (
                     <AlldataDraftCard key={draft.id} draft={draft} onCreated={(created) => markCreated(active.id, draft.id, created)} />
+                  ))}
+                  {turn.changes?.map((change) => (
+                    <div key={change.id} className="ml-auto w-full max-w-3xl">
+                      <AlldataChangeCard request={change} onApplied={(applied) => markApplied(active.id, change.id, applied)} />
+                    </div>
                   ))}
                   {turn.memories?.map((proposal) => (
                     <div key={proposal.id} className="ml-auto w-full max-w-xl">

@@ -38,6 +38,7 @@ import { MAX_NOTE_LENGTH } from "./memory";
 import { laborShortfall, MIN_LABOR_HOURS, minimumLaborNote } from "@/lib/repair-chat/pricing";
 import { customerText } from "./customer-text";
 import { parseDraftInput, summarizeDraft, type AlldataDraft } from "./alldata-draft";
+import { ALLDATA_TECHNICIANS, ALLDATA_WRITERS, parseChangeInput, type AlldataChangeRequest } from "./alldata-change";
 import { describePricing, extraPctOf, isPriceTier, snapPricing, TIER_LABEL, type CustomPricing, type PriceTier } from "./price-tier";
 import { buildFlatQuote, buildLaborQuote, buildPartsQuote, buildTireQuote, fromPublicCard, summarizeStaffQuote, type StaffQuote, type StaffTireOption } from "./quote";
 
@@ -49,6 +50,8 @@ export type WorkbenchEvent =
   | Extract<ChatEvent, { type: "vehicle" }>
   | { type: "quote"; quote: StaffQuote }
   | { type: "alldata_draft"; draft: AlldataDraft }
+  /** A proposed change to (or lookup of) an ALLDATA document; the page reads the document and shows the before/after. */
+  | { type: "alldata_change"; change: AlldataChangeRequest }
   | { type: "memory_proposal"; proposal: MemoryProposal }
   /** The assistant asks which price to quote: the page shows the choices. */
   | { type: "price_choice" }
@@ -109,6 +112,13 @@ export const WORKBENCH_PROMPT = `You are the internal repair-quoting assistant f
 - Every line is taxable (taxable: true): at this shop ALLDATA charges GST and PST on parts, labor and fees alike. Set taxable false only when staff say a line is tax-exempt.
 - If something is missing (which part option, which oil grade, how many tires, the customer), ask first or leave it out and say so. Don't pick between the card's options for staff unless they told you which. Include the customer's name and phone when staff gave them, and the vehicle and mileage.
 - Printing past estimates, work orders or invoices (receipts) is done in the "ALLDATA 单据" panel at the top of the workbench; point staff there.
+
+# Changing or looking up an ALLDATA document (改单 / 查单)
+- When staff ask to change an ALLDATA draft or estimate that already exists (a part or labor line, a price, a quantity, adding or removing a line, the mileage, the technician, the customer) or just to look one up, call propose_alldata_change. It only shows a card in staff's browser: the page reads the document from ALLDATA, lists what would change and the new total, and staff press apply. Never say a change was made.
+- Name the document with document_id when this conversation made it (the history says "[ALLDATA 草稿 … document_id N]"), otherwise with a number, name or phone in query ("1062"). For a lookup only ("查一下 1062", "看看这张单"), pass an empty ops list.
+- Point at lines by the number the card lists (line), words from the description (contains) or the part number. unit_price is the customer price per unit (hour for labor) before tax. For a discount add a discount line with the positive dollar amount; ALLDATA doesn't work out percentages: if staff give a percent, work it out from the quote lines you already know, and if you don't know the base, ask for the dollar amount.
+- Invoices and voided documents are locked in ALLDATA and can't be changed; an estimate becomes an invoice, and a draft an estimate, only with the buttons on the card, never by you. A change of $50 or 10% of the document or more, a printed estimate and a change of customer need the owner's explicit yes on the card: tell staff in a line when you expect that.
+- Don't propose changes to a customer's record (name, phone, email, address); that is done in ALLDATA.
 
 # Our own fleet (TATO)
 - SPEEDX runs a Turo fleet, and many of those cars are repaired in this shop. When staff give a plate, a car's nickname, or say it's one of our cars (我们的车 / 车队 / 出租车), call find_fleet_car first. With exactly one match that has a VIN, pass the VIN to identify_vehicle instead of asking for year/make/model.
@@ -219,6 +229,56 @@ const DRAFT_ALLDATA_ESTIMATE: Anthropic.Beta.BetaTool = {
       note: { type: "string", description: "Internal shop note, or empty" },
     },
     required: ["title", "customer", "vehicle", "vin", "mileage", "lines", "note"],
+    additionalProperties: false,
+  },
+};
+
+const PROPOSE_ALLDATA_CHANGE: Anthropic.Beta.BetaTool = {
+  name: "propose_alldata_change",
+  description:
+    "Propose a change to (or a lookup of) an ALLDATA Shop Manager draft or estimate that already exists. Shows staff a card: their browser reads the document, lists what would change with the new total, and they press apply. Nothing is changed until they do. Invoices and voided documents can't be changed.",
+  input_schema: {
+    type: "object",
+    properties: {
+      document: {
+        type: "object",
+        description: "Which document: document_id when this conversation created it, else a query to search (a document number, a customer name or phone).",
+        properties: { document_id: { type: "integer" }, query: { type: "string" } },
+        additionalProperties: false,
+      },
+      reason: { type: "string", description: "Why, in staff's words (short)" },
+      ops: {
+        type: "array",
+        description: "The changes, in order. Empty for a lookup only.",
+        items: {
+          type: "object",
+          properties: {
+            op: { type: "string", enum: ["set_line", "remove_line", "add_line", "set_header", "set_customer"] },
+            ref: {
+              type: "object",
+              description: "set_line / remove_line: which line. Give one of line (1-based, as listed on the card), contains (words from its description) or part_number.",
+              properties: { line: { type: "integer" }, contains: { type: "string" }, part_number: { type: "string" } },
+              additionalProperties: false,
+            },
+            description: { type: "string", description: "set_line: new description; add_line: the description" },
+            part_number: { type: "string" },
+            quantity: { type: "number", description: "set_line / add_line: units, or hours for labor" },
+            unit_price: { type: "number", description: "Customer price per unit (per hour for labor) before tax; for a discount the positive dollar amount" },
+            unit_cost: { type: "number", description: "add_line part: the shop's cost per unit when known" },
+            taxable: { type: "boolean" },
+            kind: { type: "string", enum: ["part", "labor", "flat_fee", "discount"], description: "add_line only" },
+            mileage: { type: "integer", description: "set_header: odometer in km" },
+            shop_note: { type: "string", description: "set_header: the internal shop note (replaces it)" },
+            technician: { type: "string", enum: Object.keys(ALLDATA_TECHNICIANS) },
+            service_writer: { type: "string", enum: Object.keys(ALLDATA_WRITERS) },
+            search: { type: "string", description: "set_customer: phone or name of the customer to file the document under" },
+          },
+          required: ["op"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["document", "ops"],
     additionalProperties: false,
   },
 };
@@ -367,7 +427,7 @@ export const WORKBENCH_TOOLS: Anthropic.Beta.BetaTool[] = TOOLS.filter((t) => ST
     };
   }
   return tool;
-}).concat(FIND_BRAND_TIRES, FIND_PARTS, USED_PART, DRAFT_ALLDATA_ESTIMATE, PROPOSE_MEMORY, FIND_FLEET_CAR, ASK_PRICE_TIER, SET_PRICE_TIER);
+}).concat(FIND_BRAND_TIRES, FIND_PARTS, USED_PART, DRAFT_ALLDATA_ESTIMATE, PROPOSE_ALLDATA_CHANGE, PROPOSE_MEMORY, FIND_FLEET_CAR, ASK_PRICE_TIER, SET_PRICE_TIER);
 
 const MAX_BRAND_TIRES = 12;
 export const MAX_TIRE_COUNT = 20;
@@ -720,6 +780,20 @@ export async function runWorkbenchTool(
     if ("error" in draft) return { content: JSON.stringify(draft), isError: true, events: [] };
     return { content: JSON.stringify({ status: "ok", summary: summarizeDraft(draft) }), isError: false, events: [{ type: "alldata_draft", draft }] };
   }
+  if (name === "propose_alldata_change") {
+    const change = parseChangeInput(input, newEstimateId().replace(/^W-/, "C-"));
+    if ("error" in change) return { content: JSON.stringify(change), isError: true, events: [] };
+    return {
+      content: JSON.stringify({
+        status: "shown",
+        note: change.ops.length
+          ? "Shown to staff as a card. The change is made only when they press apply on it; don't say it was made. The card shows the before/after and any confirmation it needs."
+          : "Shown to staff as a card that looks the document up. Tell them in a line what you will change once they say what.",
+      }),
+      isError: false,
+      events: [{ type: "alldata_change", change }],
+    };
+  }
   if (name === "get_estimate") {
     const vehicle = typeof input.vehicle_key === "string" ? decodeVehicleKey(input.vehicle_key) : null;
     if (!vehicle) return { content: JSON.stringify({ error: "Unknown vehicle_key. Call identify_vehicle first." }), isError: true, events: [] };
@@ -879,6 +953,8 @@ export function toolStatusDetail(name: string, input: Record<string, unknown> = 
       return "正在 TATO 里找这辆车队的车…";
     case "draft_alldata_estimate":
       return "正在整理 ALLDATA 草稿…";
+    case "propose_alldata_change":
+      return "正在整理 ALLDATA 改单…";
     default:
       return undefined;
   }

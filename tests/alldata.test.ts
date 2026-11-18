@@ -117,7 +117,7 @@ function ask(op: string, args: unknown, url = "https://repair.speedxrental.com/"
 /** ALLDATA's answer to a first save: the lines with ids and types. */
 const savedLines = (datalines: Array<Record<string, unknown>>) =>
   datalines.map((l, i) => ({ ...l, lineNumber: i + 1, datalineId: 9000 + i, datalineType: { datalineTypeId: l.lineTypeId } }));
-const created = (id: number, call: { body: unknown }) => ({ status: 201, json: { documentId: id, state: "Draft", estimateNumber: 0, datalines: savedLines((call.body as { datalines: Array<Record<string, unknown>> }).datalines) } });
+const created = (id: number, call: { body: unknown }) => ({ status: 201, json: { documentId: id, documentVersion: 1, state: "Draft", estimateNumber: 0, datalines: savedLines((call.body as { datalines: Array<Record<string, unknown>> }).datalines) } });
 
 const DATALINES = toAlldataDatalines((parseDraftInput({ lines: LINES }, "D-1") as AlldataDraft).lines);
 
@@ -155,6 +155,7 @@ describe("ALLDATA extension", () => {
     alldata.respond = (call) => {
       if (call.path === "/ADAG/shopmgr/customers/55") return { status: 200, json: SAVED_CUSTOMER };
       if (call.method === "POST") return created(444, call);
+      if (call.method === "GET" && call.path === "/ADAG/shopmgr/documents/444") return { status: 200, json: { documentId: 444, documentVersion: 1 } };
       if (call.method === "PUT" && call.path === "/ADAG/shopmgr/documents/444") return { status: 200, json: { documentId: 444 } };
       if (call.path === "/ADAG/shopmgr/documents/444/state") return { status: 200, json: { documentId: 444, state: "Estimate", estimateNumber: 954 } };
       return { status: 404, json: null };
@@ -181,7 +182,7 @@ describe("ALLDATA extension", () => {
         return { status: 200, json: { vehicles: page === 1 ? [{ vehicleId: 902, year: "2016", make: "Toyota", model: "Sequoia", engine: "5.7L", vin: "5TDBY5G10GS000000", odometer: "KM", acesVehicleId: "321", acesVehicleToEngineConfigId: "88", acesTransmissionId: "4" }] : filler } };
       }
       if (call.method === "POST") return created(446, call);
-      return { status: 200, json: { estimateNumber: 956 } };
+      return { status: 200, json: { estimateNumber: 956, documentVersion: 1 } };
     };
     const reply = await ask("createEstimate", { customerId: 55, customerVehicleId: 902, mileageIn: null, shopNote: "", datalines: DATALINES });
     expect(reply.result).toMatchObject({ customerAttached: true });
@@ -193,7 +194,7 @@ describe("ALLDATA extension", () => {
     alldata.respond = (call) => {
       if (call.path === "/ADAG/shopmgr/customers/55") return { status: 200, json: SAVED_CUSTOMER };
       if (call.method === "POST") return (call.body as { customer: unknown }).customer ? { status: 400, json: { message: "bad customer" } } : created(445, call);
-      return { status: 200, json: { estimateNumber: 955 } };
+      return { status: 200, json: { estimateNumber: 955, documentVersion: 1 } };
     };
     const reply = await ask("createEstimate", { customerId: 55, customerVehicleId: 901, mileageIn: null, shopNote: "", datalines: DATALINES });
     expect(reply.result).toEqual({ documentId: 445, estimateNumber: 955, customerAttached: false, markupSaved: true });
@@ -245,14 +246,18 @@ const READBACK: AlldataReadback = {
   version: 2,
   state: "Draft",
   documentNumber: 0,
+  editable: true,
+  voided: false,
+  events: ["Created"],
   customerAttached: false,
+  customerId: null,
   mileageIn: 12345,
   technician: "Jason",
   serviceWriter: "Kevin",
   shopNote: "TEST 工作台 D-T",
   lines: [
-    { lineTypeId: 5, description: "TEST part", partNumber: "TEST-001", quantityOrHours: 2, priceRate: 10, cost: 6, total: 20, taxable: true },
-    { lineTypeId: 6, description: "TEST labor", partNumber: "", quantityOrHours: 1.5, priceRate: 120, cost: 180, total: 180, taxable: true },
+    { datalineId: 1, lineTypeId: 5, description: "TEST part", partNumber: "TEST-001", quantityOrHours: 2, priceRate: 10, cost: 6, markupAmount: 4, total: 20, taxable: true },
+    { datalineId: 2, lineTypeId: 6, description: "TEST labor", partNumber: "", quantityOrHours: 1.5, priceRate: 120, cost: 180, markupAmount: 0, total: 180, taxable: true },
   ],
   totals: { parts: 20, labor: 180, flatFee: 0, discount: 0, subTotal: 200, gst: 10, pst: 0, hst: 0, tax: 10, total: 210 },
 };
@@ -304,14 +309,15 @@ describe("ALLDATA extension: drafts and readback", () => {
     const draftLines = toAlldataDatalines(TEST_DRAFT.lines);
     alldata.respond = (call) => {
       if (call.method === "POST") return created(500, call);
+      if (call.method === "GET") return { status: 200, json: { documentId: 500, documentVersion: 1 } };
       if (call.method === "PUT") return { status: 200, json: { documentId: 500 } };
       return { status: 404, json: null };
     };
     const reply = await ask("createDraft", { customerId: null, customerVehicleId: null, mileageIn: 12345, shopNote: "TEST", datalines: draftLines });
     expect(reply.result).toEqual({ documentId: 500, estimateNumber: 0, customerAttached: false, markupSaved: true });
-    expect(alldata.calls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /ADAG/shopmgr/documents?is_draft=true", "PUT /ADAG/shopmgr/documents/500"]);
+    expect(alldata.calls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /ADAG/shopmgr/documents?is_draft=true", "GET /ADAG/shopmgr/documents/500", "PUT /ADAG/shopmgr/documents/500"]);
     expect(alldata.calls.some((c) => c.path.endsWith("/state"))).toBe(false);
-    const put = alldata.calls[1].body as { datalines: Array<Record<string, unknown>>; mileageIn: string; shopNote: string };
+    const put = alldata.calls.find((c) => c.method === "PUT")!.body as { datalines: Array<Record<string, unknown>>; mileageIn: string; shopNote: string };
     expect(put.mileageIn).toBe("12345");
     expect(put.datalines[0]).toMatchObject({ datalineId: 9000, cost: 6, priceRate: 6, markupAmount: 4, manualPriceRate: true, lineTypeId: 5 });
     expect(put.datalines[1]).toMatchObject({ datalineId: 9001, lineTypeId: 6, priceRate: 120 });
@@ -326,11 +332,12 @@ describe("ALLDATA extension: drafts and readback", () => {
     alldata.calls = [];
     alldata.respond = (call) => {
       if (call.method === "POST") return { status: 201, json: { documentId: 502 } };
-      if (call.method === "GET") return { status: 200, json: { documentId: 502, datalines: savedLines(toAlldataDatalines(TEST_DRAFT.lines)).map((l, i) => ({ ...l, lineNumber: i + 1 })) } };
+      if (call.method === "GET") return { status: 200, json: { documentId: 502, documentVersion: 1, datalines: savedLines(toAlldataDatalines(TEST_DRAFT.lines)).map((l, i) => ({ ...l, lineNumber: i + 1 })) } };
       return { status: 200, json: {} };
     };
     await ask("createDraft", { customerId: null, customerVehicleId: null, mileageIn: null, shopNote: "", datalines: toAlldataDatalines(TEST_DRAFT.lines) });
-    expect(alldata.calls.map((c) => c.method)).toEqual(["POST", "GET", "PUT"]);
+    // POST, the lines read back, the version re-checked, then the second save.
+    expect(alldata.calls.map((c) => c.method)).toEqual(["POST", "GET", "GET", "PUT"]);
   });
 
   it("keeps the document id and reports markupSaved false when the markup save fails, so a retry can't make a second draft", async () => {
@@ -353,6 +360,7 @@ describe("ALLDATA extension: drafts and readback", () => {
     let failState = false;
     alldata.respond = (call) => {
       if (call.method === "POST") return created(505, call);
+      if (call.method === "GET") return { status: 200, json: { documentId: 505, documentVersion: 1 } };
       if (call.path.endsWith("/state")) {
         failState = true;
         throw new Error("network down");
@@ -397,5 +405,217 @@ describe("ALLDATA extension: drafts and readback", () => {
     expect(reply.result).toMatchObject({ documentId: 500, state: "Draft", customerAttached: true, technician: "Jason", totals: { parts: 20, gst: 1, total: 21 } });
     expect(JSON.stringify(reply.result)).not.toContain("Private");
     expect((await ask("readDocument", { documentId: "x" })).error?.code).toBe("bad_request");
+  });
+});
+
+// ------------------------------------------------------------------ changing and converting a document
+
+const rawLine = (id: number, typeId: number, extra: Record<string, unknown>) => ({
+  datalineId: id,
+  lineNumber: id - 100,
+  datalineType: { datalineTypeId: typeId },
+  itemName: typeId === 6 ? "Labor" : "Part",
+  description: `line ${id}`,
+  partNumber: typeId === 5 ? `P${id}` : null,
+  laborRate: typeId === 6 ? { laborRateId: 238899, name: "Basic Labor", amount: 120 } : null,
+  cost: 6,
+  priceRate: 10,
+  markupAmount: 4,
+  manualPriceRate: true,
+  quantityOrHours: 2,
+  skill: null,
+  taxable: true,
+  total: 20,
+  children: [],
+  ...extra,
+});
+
+function rawDocument(over: Record<string, unknown> = {}) {
+  return {
+    documentId: 900,
+    documentVersion: 3,
+    state: "Draft",
+    estimateNumber: 0,
+    mileageIn: 1000,
+    mileageOut: 0,
+    shopNote: "TEST",
+    serviceTag: null,
+    customer: null,
+    customerVehicle: null,
+    technician: { technicianId: 270227, name: "Jason" },
+    serviceWriter: { serviceWriterId: 276708, name: "Kevin" },
+    documentStates: { estimate: { voided: false }, invoice: { isVoided: false } },
+    datalines: [rawLine(101, 5, {}), rawLine(102, 5, { cost: 5, priceRate: 5, markupAmount: 0, manualPriceRate: false, quantityOrHours: 1, total: 5 }), rawLine(103, 6, { cost: 120, priceRate: 120, markupAmount: 0, manualPriceRate: false, quantityOrHours: 1, total: 120 })],
+    ...over,
+  };
+}
+
+describe("ALLDATA extension: changing a document", () => {
+  const NO_TAX = { gst: { apply: false, rate: 0 }, pst: { apply: false, rate: 0 }, hst: { apply: false, rate: 0 } };
+  const save = (edits: unknown, extra: Record<string, unknown> = {}) => ask("saveDocument", { documentId: 900, expectedVersion: 3, expectedTaxes: NO_TAX, edits, ...extra });
+
+  it("saves the whole document with the edits applied, leaving other lines as they were", async () => {
+    alldata.respond = (call) => {
+      if (call.method === "GET") return { status: 200, json: rawDocument() };
+      return { status: 200, json: { documentId: 900, documentVersion: 4, datalines: [] } };
+    };
+    const reply = await save({ updates: [{ datalineId: 101, quantity: 3, unitPrice: 12 }, { datalineId: 103, quantity: 1.5 }], removes: [102], adds: [], header: { mileageIn: 2500, shopNote: "改过", technicianId: 270226 } });
+    expect(reply.result).toEqual({ documentId: 900, version: 4, markupSaved: true });
+    const put = alldata.calls.find((c) => c.method === "PUT")!;
+    expect(put.path).toBe("/ADAG/shopmgr/documents/900");
+    const body = put.body as { datalines: Array<Record<string, unknown>>; mileageIn: string; shopNote: string; technicianId: number; serviceWriterId: number; customer: unknown };
+    expect(body).toMatchObject({ mileageIn: "2500", shopNote: "改过", technicianId: 270226, serviceWriterId: 276708, customer: null });
+    expect(body.datalines.map((l) => l.datalineId)).toEqual([101, 103]);
+    // The shop's cost ($6) stays and the price moves through the markup ($12 − $6 = $6); the stored price goes back as it was,
+    // because ALLDATA keeps a changed priceRate as a hand-typed price.
+    expect(body.datalines[0]).toMatchObject({ lineTypeId: 5, quantityOrHours: 3, cost: 6, priceRate: 10, markupAmount: 6, manualPriceRate: true, lineNumber: 1 });
+    expect(body.datalines[1]).toMatchObject({ lineTypeId: 6, quantityOrHours: 1.5, priceRate: 120, laborRate: "Basic Labor", laborRateId: 238899, lineNumber: 2 });
+    expect(alldata.calls.filter((c) => c.method === "PUT")).toHaveLength(1);
+  });
+
+  it("saves a second time so a newly added part gets its markup", async () => {
+    let puts = 0;
+    alldata.respond = (call) => {
+      // The document is as the first save left it (version 4) when the second save checks.
+      if (call.method === "GET") return { status: 200, json: puts === 0 ? rawDocument() : rawDocument({ documentVersion: 3 + puts }) };
+      puts += 1;
+      const lines = (call.body as { datalines: Array<Record<string, unknown>> }).datalines.map((l, i) => ({ ...l, lineNumber: i + 1, datalineId: (l.datalineId as number | null) ?? 777, datalineType: { datalineTypeId: l.lineTypeId } }));
+      return { status: 200, json: { documentId: 900, documentVersion: 3 + puts, datalines: lines } };
+    };
+    const reply = await save({ updates: [], removes: [], adds: [{ kind: "part", description: "Wiper", partNumber: "W1", quantity: 2, unitPrice: 20, unitCost: 12, taxable: true }, { kind: "flat_fee", description: "Fee", partNumber: "", quantity: 1, unitPrice: 25, unitCost: null, taxable: true }, { kind: "discount", description: "10%", partNumber: "", quantity: 1, unitPrice: 7, unitCost: null, taxable: false }], header: {} });
+    expect(reply.result).toEqual({ documentId: 900, version: 5, markupSaved: true });
+    const [first, second] = alldata.calls.filter((c) => c.method === "PUT").map((c) => (c.body as { datalines: Array<Record<string, unknown>> }).datalines);
+    expect(first.slice(3).map((l) => [l.lineTypeId, l.datalineId, l.priceRate, l.markupAmount])).toEqual([[5, null, 12, 8], [7, null, 25, null], [18, null, -7, null]]);
+    expect(first[5]).toMatchObject({ taxable: false });
+    expect(second[3]).toMatchObject({ datalineId: 777, markupAmount: 8, manualPriceRate: true });
+    // Every line goes back in the second save with the price ALLDATA stored for it.
+    expect(second.map((l) => l.priceRate)).toEqual(first.map((l) => l.priceRate));
+  });
+
+  it("reports markupSaved false, and keeps going, when the second save fails", async () => {
+    let puts = 0;
+    alldata.respond = (call) => {
+      if (call.method === "GET") return { status: 200, json: puts === 0 ? rawDocument() : rawDocument({ documentVersion: 3 + puts }) };
+      puts += 1;
+      if (puts === 2) return { status: 500, json: null };
+      const lines = (call.body as { datalines: Array<Record<string, unknown>> }).datalines.map((l, i) => ({ ...l, lineNumber: i + 1, datalineId: 700 + i, datalineType: { datalineTypeId: l.lineTypeId } }));
+      return { status: 200, json: { documentId: 900, documentVersion: 4, datalines: lines } };
+    };
+    const reply = await save({ updates: [], removes: [], adds: [{ kind: "part", description: "Wiper", partNumber: "W1", quantity: 1, unitPrice: 20, unitCost: 12, taxable: true }], header: {} });
+    expect(reply.result).toMatchObject({ documentId: 900, markupSaved: false });
+  });
+
+  it("does not overwrite what someone else added between the two saves", async () => {
+    let puts = 0;
+    alldata.respond = (call) => {
+      if (call.method === "GET") return { status: 200, json: puts === 0 ? rawDocument() : rawDocument({ documentVersion: 9 }) };
+      puts += 1;
+      const lines = (call.body as { datalines: Array<Record<string, unknown>> }).datalines.map((l, i) => ({ ...l, lineNumber: i + 1, datalineId: 700 + i, datalineType: { datalineTypeId: l.lineTypeId } }));
+      return { status: 200, json: { documentId: 900, documentVersion: 4, datalines: lines } };
+    };
+    const reply = await save({ updates: [], removes: [], adds: [{ kind: "part", description: "Wiper", partNumber: "W1", quantity: 1, unitPrice: 20, unitCost: 12, taxable: true }], header: {} });
+    expect(reply.result).toMatchObject({ documentId: 900, version: 4, markupSaved: false });
+    expect(alldata.calls.filter((c) => c.method === "PUT")).toHaveLength(1);
+  });
+
+  it("leaves the markups unsaved when the tax switches move between the two saves", async () => {
+    let puts = 0;
+    let settingsReads = 0;
+    alldata.respond = (call) => {
+      if (call.path.endsWith("rates_taxes_discounts")) {
+        settingsReads += 1;
+        // The first reading matches the change; by the second one PST has been switched on.
+        return { status: 200, json: { taxRates: [{ name: "GST", apply: true, amount: 5 }, { name: "PST", apply: settingsReads > 1, amount: 7 }] } };
+      }
+      if (call.method === "GET") return { status: 200, json: puts === 0 ? rawDocument() : rawDocument({ documentVersion: 4 }) };
+      puts += 1;
+      const lines = (call.body as { datalines: Array<Record<string, unknown>> }).datalines.map((l, i) => ({ ...l, lineNumber: i + 1, datalineId: 700 + i, datalineType: { datalineTypeId: l.lineTypeId } }));
+      return { status: 200, json: { documentId: 900, documentVersion: 4, datalines: lines } };
+    };
+    const reply = await save({ updates: [], removes: [], adds: [{ kind: "part", description: "Wiper", partNumber: "W1", quantity: 1, unitPrice: 20, unitCost: 12, taxable: true }], header: {} }, { expectedTaxes: { gst: { apply: true, rate: 5 }, pst: { apply: false, rate: 7 }, hst: { apply: false, rate: 0 } } });
+    expect(reply.result).toMatchObject({ markupSaved: false });
+    expect(alldata.calls.filter((c) => c.method === "PUT")).toHaveLength(1);
+  });
+
+  it("refuses to save when the tax switches in ALLDATA Settings are not the ones the change was measured with, or one line twice", async () => {
+    alldata.respond = (call) => (call.path.endsWith("rates_taxes_discounts") ? { status: 200, json: { taxRates: [{ name: "GST", apply: true, amount: 5 }, { name: "PST", apply: true, amount: 7 }] } } : { status: 200, json: rawDocument() });
+    expect((await save({ updates: [{ datalineId: 101, quantity: 3 }] })).error?.code).toBe("document_changed");
+    expect((await save({ updates: [{ datalineId: 101, quantity: 3 }] }, { expectedTaxes: { gst: { apply: true, rate: 5 }, pst: { apply: true, rate: 7 }, hst: { apply: false, rate: 0 } } })).ok).toBe(true);
+    expect((await ask("saveDocument", { documentId: 900, expectedVersion: 3, edits: { updates: [{ datalineId: 101, quantity: 3 }] } })).error?.code).toBe("bad_request");
+    alldata.calls = [];
+    alldata.respond = () => ({ status: 200, json: rawDocument() });
+    expect((await save({ updates: [{ datalineId: 101, unitPrice: 200 }, { datalineId: 101, unitPrice: 100 }] })).error?.code).toBe("bad_request");
+    expect(alldata.calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+
+  it("refuses an invoice, a voided document, a document someone else changed, and lines it can't edit", async () => {
+    alldata.respond = () => ({ status: 200, json: rawDocument({ state: "Invoice" }) });
+    expect((await save({ updates: [{ datalineId: 101, quantity: 3 }] })).error?.code).toBe("document_locked");
+    alldata.respond = () => ({ status: 200, json: rawDocument({ state: "Estimate", documentStates: { estimate: { voided: true }, invoice: {} } }) });
+    expect((await save({ updates: [{ datalineId: 101, quantity: 3 }] })).error?.code).toBe("document_locked");
+    alldata.respond = () => ({ status: 200, json: rawDocument({ documentVersion: 4 }) });
+    expect((await save({ updates: [{ datalineId: 101, quantity: 3 }] })).error?.code).toBe("document_changed");
+    alldata.respond = () => ({ status: 200, json: rawDocument({ datalines: [rawLine(101, 1, {}), rawLine(103, 6, {})] }) });
+    expect((await save({ updates: [{ datalineId: 101, quantity: 3 }] })).error?.code).toBe("bad_request");
+    expect((await save({ updates: [{ datalineId: 999, quantity: 3 }] })).error?.code).toBe("bad_request");
+    expect((await save({ removes: [999] })).error?.code).toBe("bad_request");
+    expect((await save({ updates: [{ datalineId: 103, quantity: 0 }] })).error?.code).toBe("bad_request");
+    expect((await save({ removes: [101, 103] })).error?.code).toBe("bad_request");
+    expect(alldata.calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+
+  it("files the document under another customer when asked, with that customer's saved vehicle", async () => {
+    alldata.respond = (call) => {
+      if (call.path === "/ADAG/shopmgr/customers/55") return { status: 200, json: SAVED_CUSTOMER };
+      if (call.method === "GET") return { status: 200, json: rawDocument() };
+      return { status: 200, json: { documentId: 900, documentVersion: 4, datalines: [] } };
+    };
+    await save({ updates: [], removes: [], adds: [], header: {} }, { customerId: 55, customerVehicleId: 901 });
+    const body = alldata.calls.find((c) => c.method === "PUT")!.body as { customer: Record<string, unknown>; vehicleInformation: Record<string, unknown> };
+    expect(body.customer).toMatchObject({ customerId: 55 });
+    expect(body.customer).not.toHaveProperty("vehicles");
+    expect(body.vehicleInformation).toMatchObject({ customerVehicleId: 901, acesVehicleId: "123" });
+  });
+});
+
+describe("ALLDATA extension: converting and reading", () => {
+  const convert = (args: Record<string, unknown>) => ask("convertDocument", { documentId: 900, expectedVersion: 3, ...args });
+
+  it("turns a draft into an estimate, and nothing else without being asked", async () => {
+    alldata.respond = (call) => (call.method === "GET" ? { status: 200, json: rawDocument() } : { status: 200, json: { state: "Estimate", estimateNumber: 1080 } });
+    expect((await convert({ to: "estimate" })).result).toEqual({ documentId: 900, state: "Estimate", documentNumber: 1080 });
+    expect(alldata.calls.find((c) => c.method === "PUT")).toMatchObject({ path: "/ADAG/shopmgr/documents/900/state", body: "estimate", contentType: "text/plain" });
+    alldata.respond = () => ({ status: 200, json: rawDocument({ state: "Estimate" }) });
+    expect((await convert({ to: "estimate" })).error?.code).toBe("bad_request");
+  });
+
+  it("makes an invoice only with the confirmation for this exact version of this document", async () => {
+    alldata.respond = (call) => (call.method === "GET" ? { status: 200, json: rawDocument({ state: "Estimate", estimateNumber: 1080 }) } : { status: 201, json: { state: "Invoice", estimateNumber: 1080 } });
+    expect((await convert({ to: "invoice" })).error?.code).toBe("bad_request");
+    expect((await convert({ to: "invoice", confirm: "invoice:900:2" })).error?.code).toBe("bad_request");
+    expect((await convert({ to: "invoice", confirm: "invoice:901:3" })).error?.code).toBe("bad_request");
+    expect(alldata.calls.some((c) => c.method === "POST")).toBe(false);
+    expect((await convert({ to: "invoice", confirm: "invoice:900:3" })).result).toEqual({ documentId: 900, state: "Invoice", documentNumber: 1080 });
+    expect(alldata.calls.find((c) => c.method === "POST")!.path).toBe("/ADAG/shopmgr/documents/900/invoice");
+    // Stale version and locked documents are refused before anything is sent.
+    alldata.calls = [];
+    expect((await convert({ to: "invoice", expectedVersion: 2, confirm: "invoice:900:2" })).error?.code).toBe("document_changed");
+    alldata.respond = () => ({ status: 200, json: rawDocument({ state: "Invoice" }) });
+    expect((await convert({ to: "invoice", confirm: "invoice:900:3" })).error?.code).toBe("document_locked");
+    expect(alldata.calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("reads the tax switches and the document's print history", async () => {
+    alldata.respond = (call) => {
+      if (call.path.endsWith("rates_taxes_discounts")) return { status: 200, json: { taxRates: [{ name: "PST", apply: true, amount: 7 }, { name: "HST", apply: false, amount: null }, { name: "GST", apply: true, amount: 5 }] } };
+      if (call.path.endsWith("/history")) return { status: 200, json: [{ eventType: "Created" }, { eventType: "Printed" }] };
+      return { status: 200, json: rawDocument({ state: "Estimate" }) };
+    };
+    expect((await ask("readTaxSettings", {})).result).toEqual({ gst: { apply: true, rate: 5 }, pst: { apply: true, rate: 7 }, hst: { apply: false, rate: 0 } });
+    const doc = (await ask("readDocument", { documentId: 900 })).result!;
+    expect(doc).toMatchObject({ editable: true, voided: false, events: ["Created", "Printed"] });
+    expect((doc.lines as Array<Record<string, unknown>>)[0]).toMatchObject({ datalineId: 101, markupAmount: 4 });
+    alldata.respond = (call) => (call.path.endsWith("/history") ? { status: 500, json: null } : { status: 200, json: rawDocument({ state: "Invoice" }) });
+    expect((await ask("readDocument", { documentId: 900 })).result).toMatchObject({ editable: false, events: null });
   });
 });

@@ -23,6 +23,7 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
   const [error, setError] = useState("");
   const [pst, setPst] = useState<"charge" | "exempt" | null>(null);
   const [checks, setChecks] = useState<{ ok: boolean; checks: ReadbackCheck[] } | null>(null);
+  const [taxNote, setTaxNote] = useState("");
   const totals = draftTotals(draft);
   const preview = expectedTotals(draft, pst === "charge");
   const created = draft.created;
@@ -49,6 +50,7 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
     setBusy(kind === "draft" ? "draft" : "create");
     setError("");
     setChecks(null);
+    setTaxNote("");
     try {
       const shopNote = [draft.note, `工作台 ${draft.id}`].filter(Boolean).join(" · ");
       const args = {
@@ -62,6 +64,9 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
       onCreated(result);
       try {
         const doc = await callAlldata("readDocument", { documentId: result.documentId });
+        // The shop-wide tax switches in ALLDATA Settings decide the tax on every save; PST is turned on and off there.
+        const taxes = await callAlldata("readTaxSettings", {}).catch(() => null);
+        if (taxes && taxes.pst.apply !== chargePst) setTaxNote(`ALLDATA 设置里 PST 现在是${taxes.pst.apply ? "收" : "不收"}，和你选的不一样。税额以 ALLDATA 为准；需要的话请在 ALLDATA 里处理这张单。`);
         setChecks(
           checkReadback(draft, doc, {
             shopNote,
@@ -69,6 +74,7 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
             customerAttached: result.customerAttached,
             chargePst,
             state: result.estimateNumber > 0 ? "Estimate" : "Draft",
+            ...(taxes ? { rates: { gst: taxes.gst.apply ? taxes.gst.rate / 100 : 0, pst: taxes.pst.rate / 100 } } : {}),
           }),
         );
       } catch (e) {
@@ -253,6 +259,7 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
             </div>
           </>
         )}
+        {taxNote && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{taxNote}</p>}
         {checks && (
           <div data-testid="alldata-readback" className={`rounded-lg px-3 py-2 text-xs ${checks.ok ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}>
             <p className="font-semibold">
