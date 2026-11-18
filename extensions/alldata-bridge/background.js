@@ -85,13 +85,20 @@ async function alldataTab() {
 async function pageRequest(method, path, body, contentType) {
   const headers = { Accept: "application/json, text/plain, */*" };
   if (body !== null) headers["Content-Type"] = contentType;
-  const response = await fetch(path, {
-    method,
-    headers,
-    credentials: "include",
-    body: body === null ? undefined : contentType === "application/json" ? JSON.stringify(body) : body,
-  });
-  const text = await response.text();
+  let response;
+  let text;
+  try {
+    response = await fetch(path, {
+      method,
+      headers,
+      credentials: "include",
+      body: body === null ? undefined : contentType === "application/json" ? JSON.stringify(body) : body,
+    });
+    text = await response.text();
+  } catch {
+    // The connection dropped. For a write, whether it arrived is unknown: status 0 is reported as network_error.
+    return { status: 0, json: null, text: "network" };
+  }
   let json = null;
   try {
     json = text ? JSON.parse(text) : null;
@@ -112,6 +119,9 @@ async function request(method, path, body = null, contentType = "application/jso
   });
   const result = run && run.result;
   if (!result) throw new BridgeError("alldata_error", "no answer from the ALLDATA page");
+  if (result.status === 0) throw new BridgeError("network_error", "the connection to ALLDATA dropped");
+  // A server error on a write may still have saved it (a gateway timeout, say): report it as unknown, never repeat the write.
+  if (method !== "GET" && result.status >= 500) throw new BridgeError("network_error", `ALLDATA answered ${result.status}; the write may or may not have been saved`);
   if (result.status === 401) throw new BridgeError("not_signed_in");
   if (result.status === 403 && result.json && result.json.url) throw new BridgeError("not_signed_in", "ALLDATA wants a human check; open ALLDATA in Chrome first");
   return result;
@@ -123,6 +133,16 @@ function ok(result, what) {
     throw new BridgeError("alldata_error", `${what} ${result.status} ${detail}`.trim());
   }
   return result.json;
+}
+
+/**
+ * A document as Shop Manager returns it must still have the fields every operation relies on. If it doesn't, ALLDATA
+ * changed (or this isn't the page we think it is): stop and report instead of guessing. A draft with no lines has datalines null.
+ */
+function assertDocument(d, what) {
+  const fine = d && typeof d === "object" && Number.isInteger(d.documentId) && Number.isInteger(d.documentVersion) && typeof d.state === "string" && (d.datalines === null || d.datalines === undefined || Array.isArray(d.datalines));
+  if (!fine) throw new BridgeError("alldata_changed", `${what}: unexpected document shape`);
+  return d;
 }
 
 // ------------------------------------------------------------------ operations
@@ -385,7 +405,7 @@ async function createDocument(args) {
     created = await request("POST", `${SHOPMGR}documents?is_draft=true`, document(false, datalines));
     customerAttached = false;
   }
-  const draft = ok(created, "create");
+  const draft = assertDocument(ok(created, "create"), "create");
   const documentId = draft.documentId;
 
   // The draft exists now. A failed markup save must not throw: the caller would lose the document id
@@ -426,7 +446,7 @@ async function createEstimate(args) {
 async function readDocument(args) {
   const documentId = positiveInt(args.documentId);
   if (!documentId) throw new BridgeError("bad_request", "bad document");
-  const d = ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read");
+  const d = assertDocument(ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read"), "read");
   const n = (value) => (Number.isFinite(value) ? value : 0);
   const states = d.documentStates || {};
   const voided = Boolean((states.estimate && states.estimate.voided) || (states.invoice && states.invoice.isVoided) || (states.repairOrder && states.repairOrder.voided));
@@ -636,7 +656,7 @@ async function saveDocument(args) {
   const { updates, removes, adds, header } = checkEdits(args.edits);
   const expected = args.expectedTaxes;
   if (!expected || ["gst", "pst", "hst"].some((k) => !expected[k] || typeof expected[k].apply !== "boolean" || !Number.isFinite(expected[k].rate))) throw new BridgeError("bad_request", "tax settings missing");
-  const raw = ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read");
+  const raw = assertDocument(ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read"), "read");
   const states = raw.documentStates || {};
   const voided = Boolean((states.estimate && states.estimate.voided) || (states.invoice && states.invoice.isVoided));
   if (!EDITABLE_STATES.includes(raw.state) || voided) throw new BridgeError("document_locked", `document is ${voided ? "voided" : raw.state}`);
@@ -715,7 +735,7 @@ async function saveDocument(args) {
   const taxes = await readTaxSettings();
   if (!sameTaxes(taxes, expected)) throw new BridgeError("document_changed", "tax settings changed");
 
-  const saved = ok(await request("PUT", `${SHOPMGR}documents/${documentId}`, body(lines)), "save");
+  const saved = assertDocument(ok(await request("PUT", `${SHOPMGR}documents/${documentId}`, body(lines)), "save"), "save");
 
   // Added parts get their markup on a second save, now that ALLDATA has given them ids.
   let markupSaved = true;
@@ -744,19 +764,22 @@ async function saveDocument(args) {
 async function convertDocument(args) {
   const documentId = positiveInt(args.documentId);
   if (!documentId || !Number.isInteger(args.expectedVersion) || !["estimate", "invoice"].includes(args.to)) throw new BridgeError("bad_request", "bad document");
-  const raw = ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read");
+  const raw = assertDocument(ok(await request("GET", `${SHOPMGR}documents/${documentId}`), "read"), "read");
   const states = raw.documentStates || {};
   const voided = Boolean((states.estimate && states.estimate.voided) || (states.invoice && states.invoice.isVoided));
   if (!EDITABLE_STATES.includes(raw.state) || voided) throw new BridgeError("document_locked", `document is ${voided ? "voided" : raw.state}`);
   if (raw.documentVersion !== args.expectedVersion) throw new BridgeError("document_changed", "document changed since it was read");
   if (args.to === "estimate") {
     if (raw.state !== "Draft") throw new BridgeError("bad_request", "only a draft becomes an estimate");
-    const converted = ok(await request("PUT", `${SHOPMGR}documents/${documentId}/state`, "estimate", "text/plain"), "to estimate");
-    return { documentId, state: text(converted && converted.state, 30) || "Estimate", documentNumber: (converted && converted.estimateNumber) || 0 };
+    const converted = assertDocument(ok(await request("PUT", `${SHOPMGR}documents/${documentId}/state`, "estimate", "text/plain"), "to estimate"), "to estimate");
+    if (converted.state !== "Estimate") throw new BridgeError("alldata_changed", "to estimate: the document did not come back as an estimate");
+    return { documentId, state: "Estimate", documentNumber: converted.estimateNumber || 0 };
   }
   if (args.confirm !== `invoice:${documentId}:${raw.documentVersion}`) throw new BridgeError("bad_request", "invoice needs the confirmation for this exact version");
   const made = ok(await request("POST", `${SHOPMGR}documents/${documentId}/invoice`), "to invoice");
-  return { documentId, state: text(made && made.state, 30) || "Invoice", documentNumber: (made && made.estimateNumber) || raw.estimateNumber || 0 };
+  // Not what we expect: the invoice may exist, so this is reported as unknown for staff to check in ALLDATA, never as success.
+  if (!made || typeof made !== "object" || made.state !== "Invoice") throw new BridgeError("alldata_changed", "to invoice: the document did not come back as an invoice");
+  return { documentId, state: "Invoice", documentNumber: made.estimateNumber || raw.estimateNumber || 0 };
 }
 
 async function openPdf(args) {

@@ -1,13 +1,32 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { bridgeErrorText, callAlldata, type AlldataCustomerRow, type AlldataDocumentRow } from "@/lib/workbench/alldata-bridge";
-import { checkChange, docLines, evaluateGates, planChange, type AlldataChangeRequest, type Taxes } from "@/lib/workbench/alldata-change";
+import { bridgeErrorText, callAlldata, failureCode, isUncertainWrite, type AlldataCustomerRow, type AlldataDocumentRow } from "@/lib/workbench/alldata-bridge";
+import { changeDetail, checkChange, docLines, evaluateGates, planChange, type AlldataChangeRequest, type Taxes } from "@/lib/workbench/alldata-change";
+import { GATE_LABEL, type GateId, type GateReleases } from "@/lib/workbench/alldata-gates";
+import { logOp, type OpLogLine } from "@/lib/workbench/alldata-log-client";
 import type { AlldataReadback, ReadbackCheck } from "@/lib/workbench/alldata-readback";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 const money = (value: number) => usd.format(value);
 const KIND = { part: "零件", labor: "工时", flat_fee: "一口价", discount: "折扣", other: "其他" } as const;
+
+const flagKey = (id: string) => `alldata-uncertain:${id}`;
+const readFlag = (id: string): boolean => {
+  try {
+    return window.localStorage.getItem(flagKey(id)) === "1";
+  } catch {
+    return false;
+  }
+};
+const writeFlag = (id: string, on: boolean) => {
+  try {
+    if (on) window.localStorage.setItem(flagKey(id), "1");
+    else window.localStorage.removeItem(flagKey(id));
+  } catch {
+    // Not kept: the lock then lasts only while the card is open.
+  }
+};
 
 type CustomerPick = { customerId: number; customerVehicleId: number | null; label: string } | null;
 
@@ -17,7 +36,24 @@ type CustomerPick = { customerId: number; customerVehicleId: number | null; labe
  * owner must confirm (money, a printed estimate, another customer) need a ticked confirmation first; nothing here
  * can touch an invoice, except the separate typed confirmation to create one.
  */
-export function AlldataChangeCard({ request, onApplied }: { request: AlldataChangeRequest; onApplied: (applied: { documentId: number; version: number }) => void }) {
+export function AlldataChangeCard({
+  request,
+  onApplied,
+  isOwner = false,
+  releases,
+  onRelease,
+  verifyReleases,
+}: {
+  request: AlldataChangeRequest;
+  onApplied: (applied: { documentId: number; version: number }) => void;
+  isOwner?: boolean;
+  /** Kinds of change the owner let go ahead without his tick in this conversation. */
+  releases?: GateReleases;
+  /** The owner lets a kind of change go ahead (or takes that back) for this conversation. */
+  onRelease?: (gate: GateId, released: boolean) => void;
+  /** The releases as the server has them now; null when they can't be read. Checked before a change that relies on one. */
+  verifyReleases?: () => Promise<GateReleases | null>;
+}) {
   const [rows, setRows] = useState<AlldataDocumentRow[] | null>(null);
   const [documentId, setDocumentId] = useState<number | null>(request.applied?.documentId ?? request.document.documentId);
   const [doc, setDoc] = useState<AlldataReadback | null>(null);
@@ -32,6 +68,18 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
   const [convertAsked, setConvertAsked] = useState<{ to: "estimate" | "invoice"; version: number } | null>(null);
   const [invoiceWord, setInvoiceWord] = useState("");
   const [loadTick, setLoadTick] = useState(0);
+  // After a write whose outcome is unknown (the connection dropped, nothing answered) the same write is not offered
+  // again until staff have looked at the document as it is now and said so.
+  const [uncertain, setUncertainState] = useState(() => readFlag(request.id));
+  const [uncertainAck, setUncertainAck] = useState(false);
+  // Kept in this browser so reopening the card or switching conversations doesn't clear it.
+  const setUncertain = (on: boolean) => {
+    writeFlag(request.id, on);
+    setUncertainState(on);
+  };
+  const [uncertainWhy, setUncertainWhy] = useState("");
+  const [logNote, setLogNote] = useState("");
+  const looked = useRef(false);
   const done = Boolean(request.applied) || applied !== null;
 
   const sequence = useRef(0);
@@ -62,8 +110,15 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
       if (mine !== sequence.current) return;
       setDoc(d);
       setTaxes(t);
+      if (!looked.current) {
+        looked.current = true;
+        void record({ action: "lookup", documentId: d.documentId, documentNumber: d.documentNumber, detail: { after: d.totals.total }, result: "ok" });
+      }
     } catch (e) {
-      if (mine === sequence.current) setError(bridgeErrorText(e));
+      if (mine === sequence.current) {
+        setError(bridgeErrorText(e));
+        void record({ action: "failure", documentId: id, result: "failed", errorCode: failureCode(e) });
+      }
     } finally {
       if (mine === sequence.current) setBusy(null);
     }
@@ -86,15 +141,30 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
   const convert = doc && convertAsked && convertAsked.version === doc.version ? convertAsked.to : null;
   // A change that is waiting, or couldn't be placed, keeps the conversions away: the document would be locked before it is right.
   const pending = Boolean(plan && (plan.diff.length > 0 || plan.problems.length > 0 || needsCustomer));
-  const gates = doc && plan ? evaluateGates(doc, plan, needsCustomer) : null;
+  const gates = doc && plan ? evaluateGates(doc, plan, needsCustomer, releases) : null;
   const lines = doc ? docLines(doc) : [];
   const hasChange = Boolean(plan && (plan.diff.length > 0 || (needsCustomer && pick)));
   const ready = Boolean(
-    plan && taxes && gates && !gates.blocked && plan.problems.length === 0 && hasChange && (!needsCustomer || pick) && (gates.gates.length === 0 || ack) && busy === null,
+    plan &&
+      taxes &&
+      gates &&
+      !gates.blocked &&
+      plan.problems.length === 0 &&
+      hasChange &&
+      (!needsCustomer || pick) &&
+      (gates.gates.length === 0 || ack) &&
+      (!uncertain || uncertainAck) &&
+      busy === null,
   );
   // The tax switches in ALLDATA Settings decide the tax on every save: say so when they differ from how this document was taxed.
   const pstNow = taxes?.pst.apply ?? null;
   const pstThen = doc ? doc.totals.pst > 0 : null;
+
+  /** One line in the operation log; a line that can't be written is reported, never hidden. */
+  async function record(line: OpLogLine) {
+    const wrote = await logOp(line);
+    setLogNote(wrote ? "" : "这一步没有记进操作日志（日志服务连不上）。");
+  }
 
   async function findCustomer() {
     if (!plan?.customerSearch) return;
@@ -106,10 +176,33 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
     }
   }
 
+  /** Another tab may have hit an unknown outcome on this card since this one opened: its flag is read again before any write. */
+  function lockedElsewhere(): boolean {
+    if (!uncertain && readFlag(request.id)) {
+      setUncertain(true);
+      setUncertainAck(false);
+      setLoadTick((n) => n + 1);
+      return true;
+    }
+    return false;
+  }
+
   async function apply() {
-    if (!doc || !plan || !ready) return;
+    if (!doc || !plan || !ready || !gates || lockedElsewhere()) return;
     setBusy("apply");
     setError("");
+    // A release the owner has since taken back must not be used: ask the server, not this page's copy.
+    if (gates.released.length > 0) {
+      const fresh = verifyReleases ? await verifyReleases() : null;
+      if (!fresh || gates.released.some((g) => !fresh[g.id as GateId])) {
+        setError("老板刚刚撤销了放开（或读不到当前设置），这次需要老板重新确认。请再点一次。");
+        setBusy(null);
+        return;
+      }
+    }
+    const gateIds = [...gates.gates, ...gates.released].map((g) => g.id);
+    const ownerAck = gates.gates.length > 0 && ack;
+    const detail = changeDetail(plan);
     try {
       const saved = await callAlldata("saveDocument", {
         documentId: doc.documentId,
@@ -118,30 +211,48 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
         edits: plan.edits,
         ...(pick ? { customerId: pick.customerId, customerVehicleId: pick.customerVehicleId } : {}),
       });
+      setUncertain(false);
+      setUncertainAck(false);
+      let result: OpLogLine["result"] = "ok";
       try {
         const after = await callAlldata("readDocument", { documentId: saved.documentId });
-        const result = checkChange(plan, after, pick ? { customerId: pick.customerId } : {});
-        setApplied({ ok: result.ok && saved.markupSaved, checks: result.checks, markupSaved: saved.markupSaved });
+        const check = checkChange(plan, after, pick ? { customerId: pick.customerId } : {});
+        const good = check.ok && saved.markupSaved;
+        result = good ? "ok" : "mismatch";
+        setApplied({ ok: good, checks: check.checks, markupSaved: saved.markupSaved });
         setDoc(after);
       } catch (e) {
+        result = "uncertain";
         setApplied({ ok: false, checks: [], markupSaved: saved.markupSaved });
         setError(`已保存到 ALLDATA，但回读核对没有完成：${bridgeErrorText(e)}`);
       }
+      await record({ action: "change", documentId: saved.documentId, documentNumber: doc.documentNumber, detail, gates: gateIds, ownerAck, result });
       // Recorded on the conversation only after the check is on screen, so the card never shows a bare "applied".
       onApplied({ documentId: saved.documentId, version: saved.version });
     } catch (e) {
       setError(bridgeErrorText(e));
+      const unsure = isUncertainWrite("saveDocument", e);
+      if (unsure) {
+        // Look again at what ALLDATA holds now; the change is shown (or not) against that.
+        setUncertain(true);
+        setUncertainAck(false);
+        setUncertainWhy(bridgeErrorText(e));
+        setLoadTick((n) => n + 1);
+      }
+      await record({ action: "change", documentId: doc.documentId, documentNumber: doc.documentNumber, detail, gates: gateIds, ownerAck, result: unsure ? "uncertain" : "failed", errorCode: failureCode(e) });
     } finally {
       setBusy(null);
     }
   }
 
   async function convertNow() {
-    if (!doc || !convert) return;
+    if (!doc || !convert || (uncertain && !uncertainAck) || lockedElsewhere()) return;
     setBusy("convert");
     setError("");
+    const action = convert === "invoice" ? "convert_invoice" : "convert_estimate";
+    const detail = { after: doc.totals.total };
     try {
-      await callAlldata("convertDocument", {
+      const converted = await callAlldata("convertDocument", {
         documentId: doc.documentId,
         expectedVersion: doc.version,
         to: convert,
@@ -150,9 +261,22 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
       setConvertAsked(null);
       setInvoiceWord("");
       setApplied(null);
+      setUncertain(false);
+      setUncertainAck(false);
       setLoadTick((n) => n + 1);
+      await record({ action, documentId: doc.documentId, documentNumber: converted.documentNumber, detail, ownerAck: convert === "invoice", result: "ok" });
     } catch (e) {
       setError(bridgeErrorText(e));
+      const unsure = isUncertainWrite("convertDocument", e);
+      if (unsure) {
+        setConvertAsked(null);
+        setInvoiceWord("");
+        setUncertain(true);
+        setUncertainAck(false);
+        setUncertainWhy(bridgeErrorText(e));
+        setLoadTick((n) => n + 1);
+      }
+      await record({ action, documentId: doc.documentId, documentNumber: doc.documentNumber, detail, ownerAck: convert === "invoice", result: unsure ? "uncertain" : "failed", errorCode: failureCode(e) });
     } finally {
       setBusy(null);
     }
@@ -230,6 +354,33 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
           </div>
         )}
 
+        {uncertain && (
+          <div className="space-y-1 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-red-900">
+            <p className="font-semibold">不确定上一次有没有保存到 ALLDATA。</p>
+            {uncertainWhy && <p>{uncertainWhy}</p>}
+            <p>已经重新读取这张单，请对照上面的内容；如果这次改动已经在单子里，就不要再应用，免得重复。</p>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={uncertainAck} onChange={(e) => setUncertainAck(e.target.checked)} />
+              我看过现在的单据，确认这次改动还没保存
+            </label>
+          </div>
+        )}
+
+
+        {isOwner && onRelease && releases && Object.keys(releases).length > 0 && (
+          <p className="text-xs text-ink-600">
+            本次对话已放开：
+            {(Object.keys(releases) as GateId[]).map((g) => (
+              <span key={g} className="ml-1">
+                {GATE_LABEL[g]}
+                <button type="button" onClick={() => onRelease(g, false)} className="ml-1 underline">
+                  撤销
+                </button>
+              </span>
+            ))}
+          </p>
+        )}
+
         {doc && pstNow !== null && pstThen !== null && pstNow !== pstThen && !done && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
             ALLDATA 设置里 PST 现在是{pstNow ? "收" : "不收"}，这张单原来{pstThen ? "收了" : "没收"} PST。保存时 ALLDATA 会按现在的设置重新计税，下面的新合计已按现在的设置算。
@@ -292,6 +443,11 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
                   <p key={g.id} className="text-amber-900">
                     <span className="font-semibold">需要老板确认：{g.label}。</span>
                     {g.reason}
+                    {isOwner && onRelease && g.id !== "locked" && (
+                      <button type="button" onClick={() => onRelease(g.id as GateId, true)} className="ml-2 rounded-full border border-amber-500 px-2 py-0.5 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                        本次对话里这一类不再问我
+                      </button>
+                    )}
                   </p>
                 ))}
                 <label className="flex items-center gap-2 text-sm font-medium text-amber-900">
@@ -299,6 +455,12 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
                   老板已确认这次改动（照上面的内容）
                 </label>
               </div>
+            )}
+
+            {gates.released.length > 0 && (
+              <p className="text-xs text-ink-600">
+                老板已对本次对话放开：{gates.released.map((g) => GATE_LABEL[g.id as GateId]).join("；")}。这次不用再勾确认。
+              </p>
             )}
 
             {request.ops.length > 0 && (
@@ -344,11 +506,11 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
             {convert === null && (
               <div className="flex flex-wrap gap-2">
                 {doc.state === "Draft" && (
-                  <button type="button" onClick={() => setConvertAsked({ to: "estimate", version: doc.version })} disabled={busy !== null} className="rounded-full border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-ink-500 disabled:opacity-40">
+                  <button type="button" onClick={() => setConvertAsked({ to: "estimate", version: doc.version })} disabled={busy !== null || (uncertain && !uncertainAck)} className="rounded-full border border-ink-300 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:border-ink-500 disabled:opacity-40">
                     转成估价单（会领取单号）
                   </button>
                 )}
-                <button type="button" onClick={() => setConvertAsked({ to: "invoice", version: doc.version })} disabled={busy !== null} className="rounded-full border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:border-red-500 disabled:opacity-40">
+                <button type="button" onClick={() => setConvertAsked({ to: "invoice", version: doc.version })} disabled={busy !== null || (uncertain && !uncertainAck)} className="rounded-full border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:border-red-500 disabled:opacity-40">
                   转成发票（不可撤销）
                 </button>
               </div>
@@ -356,7 +518,7 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
             {convert === "estimate" && (
               <div className="flex flex-wrap items-center gap-2">
                 <span>把这张草稿转成估价单，ALLDATA 会给它一个单号。</span>
-                <button type="button" onClick={() => void convertNow()} disabled={busy !== null} className="rounded-full bg-ink-900 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+                <button type="button" onClick={() => void convertNow()} disabled={busy !== null || (uncertain && !uncertainAck)} className="rounded-full bg-ink-900 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
                   {busy === "convert" ? "正在转换…" : "确认转成估价单"}
                 </button>
                 <button type="button" onClick={() => setConvertAsked(null)} className="text-xs text-ink-500 underline">
@@ -375,7 +537,7 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
                   <input value={invoiceWord} onChange={(e) => setInvoiceWord(e.target.value)} className="w-28 rounded-lg border border-red-300 px-2 py-1 text-sm" aria-label="输入开发票确认" />
                 </label>
                 <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => void convertNow()} disabled={busy !== null || invoiceWord.trim() !== "开发票"} className="rounded-full bg-red-700 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+                  <button type="button" onClick={() => void convertNow()} disabled={busy !== null || invoiceWord.trim() !== "开发票" || (uncertain && !uncertainAck)} className="rounded-full bg-red-700 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
                     {busy === "convert" ? "正在开发票…" : "确认开发票"}
                   </button>
                   <button type="button" onClick={() => setConvertAsked(null)} className="text-xs underline">
@@ -392,6 +554,7 @@ export function AlldataChangeCard({ request, onApplied }: { request: AlldataChan
             {error}
           </p>
         )}
+        {logNote && <p className="text-xs text-amber-800">{logNote}</p>}
       </div>
     </article>
   );

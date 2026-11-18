@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { bridgeErrorText, callAlldata, type AlldataDocumentRow, type AlldataDocumentType } from "@/lib/workbench/alldata-bridge";
+import { AlldataLogView } from "./AlldataLogView";
 
 const PDF_LABEL: Record<AlldataDocumentType, string> = {
   Estimate: "估价单",
@@ -109,6 +110,7 @@ export function AlldataDocuments({ onClose }: { onClose: () => void }) {
           ))}
         </ul>
       )}
+      <AlldataLogView />
     </section>
   );
 }

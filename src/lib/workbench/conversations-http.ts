@@ -5,6 +5,8 @@
 import type { StaffUser } from "./access";
 import { signedInStaff } from "./staff-roster";
 import { ConversationError, getConversationStore, type ConversationStore } from "./conversations";
+import { isGateId } from "./alldata-gates";
+import { echoToServerLog, getOpLogStore, type OpLogStore } from "./alldata-oplog";
 import { isPriceTier, snapPricing } from "./price-tier";
 import type { WestcanAnswer } from "./westcan";
 
@@ -12,6 +14,8 @@ export interface ConversationDeps {
   user: (request: Request) => Promise<StaffUser | null>;
   store: () => ConversationStore | null;
   log: (entry: Record<string, unknown>) => void;
+  /** The ALLDATA operation log (the owner's releases are written to it); defaults to the real one. */
+  opLog?: () => OpLogStore | null;
 }
 
 const defaultDeps: ConversationDeps = {
@@ -78,6 +82,20 @@ export async function handleConversation(request: Request, id: string, deps: Con
       if (typeof body.title === "string") {
         const conversation = await store.rename(id, user.email, body.title);
         deps.log({ action: "rename", email: user.email, id, title: conversation.title });
+        return json({ conversation });
+      }
+      if (body.gate && typeof body.gate === "object") {
+        const gate = body.gate as { id?: unknown; released?: unknown };
+        if (!isGateId(gate.id) || typeof gate.released !== "boolean") return json({ error: "invalid" }, 400);
+        // Letting a kind of change go ahead without the owner's tick is the owner's call, and only for this conversation.
+        if (user.role !== "owner") return json({ error: "forbidden", message: "只有老板能放开或撤销确认门" }, 403);
+        const conversation = await store.setGateRelease(id, user.email, gate.id, gate.released);
+        deps.log({ action: gate.released ? "gate_release" : "gate_revoke", email: user.email, id, gate: gate.id });
+        // Written to the operation log too (best effort: the conversation already holds the release).
+        const entry = { action: gate.released ? "gate_release" : "gate_revoke", gates: [gate.id], result: "ok" };
+        void (deps.opLog ?? getOpLogStore)()
+          ?.append(entry, user.email, echoToServerLog, { conversationId: id })
+          .catch(() => undefined);
         return json({ conversation });
       }
       if (isPriceTier(body.priceTier)) {

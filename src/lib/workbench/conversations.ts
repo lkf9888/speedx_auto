@@ -7,6 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { cloudflareKv, type KvClient } from "./kv";
 import type { Conversation, ConversationSummary, PendingQuery, ShareLink, Turn, Vehicle } from "./conversation-types";
+import type { GateId, GateReleases } from "./alldata-gates";
 import type { FollowUpRecord } from "./followup";
 import type { CustomPricing, PriceTier } from "./price-tier";
 import { getShareStore, shareKey } from "./shares";
@@ -185,6 +186,17 @@ export class ConversationStore {
     return this.change(id, by, (c) => {
       const clean = title.replace(/\s+/g, " ").trim().slice(0, TITLE_LENGTH);
       c.title = clean || c.turns.find((t) => t.role === "user")?.text.slice(0, 30) || "";
+    });
+  }
+
+  /** The owner lets one kind of ALLDATA change go ahead without his tick in this conversation (or takes that back). */
+  async setGateRelease(id: string, by: string, gate: GateId, released: boolean): Promise<Conversation> {
+    return this.change(id, by, (c) => {
+      const next: GateReleases = { ...(c.gateReleases ?? {}) };
+      if (released) next[gate] = { by, at: new Date(this.now()).toISOString() };
+      else delete next[gate];
+      if (Object.keys(next).length) c.gateReleases = next;
+      else delete c.gateReleases;
     });
   }
 

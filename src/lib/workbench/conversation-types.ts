@@ -5,6 +5,7 @@
  */
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import type { AlldataChangeRequest } from "./alldata-change";
+import type { GateReleases } from "./alldata-gates";
 import type { AlldataDraft } from "./alldata-draft";
 import type { MemoryProposal } from "./assistant";
 import type { FollowUpRecord } from "./followup";
@@ -100,6 +101,8 @@ export interface Conversation {
   followUps?: FollowUpRecord[];
   /** Messaging with the customer's phone: windows, channel, opt-out. */
   messaging?: Messaging;
+  /** Kinds of ALLDATA change the owner let go ahead without his tick, for this conversation only. */
+  gateReleases?: GateReleases;
 }
 
 /** A no-login link to a snapshot of a conversation; it stops working at expiresAt. */

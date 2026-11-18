@@ -1,12 +1,30 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { bridgeErrorText, callAlldata, type AlldataCustomerRow } from "@/lib/workbench/alldata-bridge";
+import { bridgeErrorText, callAlldata, failureCode, isUncertainWrite, type AlldataCustomerRow } from "@/lib/workbench/alldata-bridge";
+import { logOp, type OpLogLine } from "@/lib/workbench/alldata-log-client";
 import { draftTotals, lineTotal, toAlldataDatalines, type AlldataCreated, type AlldataDraft } from "@/lib/workbench/alldata-draft";
 import { checkReadback, expectedTotals, type ReadbackCheck } from "@/lib/workbench/alldata-readback";
 
 const usd = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 const money = (value: number) => usd.format(value);
+
+const flagKey = (id: string) => `alldata-uncertain:${id}`;
+const readFlag = (id: string): boolean => {
+  try {
+    return window.localStorage.getItem(flagKey(id)) === "1";
+  } catch {
+    return false;
+  }
+};
+const writeFlag = (id: string, on: boolean) => {
+  try {
+    if (on) window.localStorage.setItem(flagKey(id), "1");
+    else window.localStorage.removeItem(flagKey(id));
+  } catch {
+    // Not kept: the lock then lasts only while the card is open.
+  }
+};
 
 type Pick = { customerId: number; customerVehicleId: number | null; label: string } | "none" | null;
 
@@ -24,6 +42,16 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
   const [pst, setPst] = useState<"charge" | "exempt" | null>(null);
   const [checks, setChecks] = useState<{ ok: boolean; checks: ReadbackCheck[] } | null>(null);
   const [taxNote, setTaxNote] = useState("");
+  // After a create whose outcome is unknown, creating again is locked until staff have searched ALLDATA and said so.
+  const [uncertain, setUncertainState] = useState(() => readFlag(draft.id));
+  const [uncertainAck, setUncertainAck] = useState(false);
+  // Kept in this browser so reopening the card or switching conversations doesn't clear it.
+  const setUncertain = (on: boolean) => {
+    writeFlag(draft.id, on);
+    setUncertainState(on);
+  };
+  const [logNote, setLogNote] = useState("");
+  const locked = uncertain && !uncertainAck;
   const totals = draftTotals(draft);
   const preview = expectedTotals(draft, pst === "charge");
   const created = draft.created;
@@ -44,8 +72,19 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
   }
 
   /** Creates the document (a Draft, or an estimate that takes a document number), then reads it back and compares it with this card. */
+  async function record(line: OpLogLine) {
+    const wrote = await logOp(line);
+    setLogNote(wrote ? "" : "这一步没有记进操作日志（日志服务连不上）。");
+  }
+
   async function submit(kind: "draft" | "estimate") {
-    if (!pick || !pst) return;
+    if (!pick || !pst || locked) return;
+    // Another tab may have hit an unknown outcome on this card since this one opened.
+    if (!uncertain && readFlag(draft.id)) {
+      setUncertain(true);
+      setUncertainAck(false);
+      return;
+    }
     const chargePst = pst === "charge";
     setBusy(kind === "draft" ? "draft" : "create");
     setError("");
@@ -61,27 +100,39 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
         datalines: toAlldataDatalines(draft.lines),
       };
       const result = kind === "draft" ? await callAlldata("createDraft", args) : await callAlldata("createEstimate", args);
+      setUncertain(false);
+      setUncertainAck(false);
       onCreated(result);
+      const totals = draftTotals(draft);
+      const detail = { parts: draft.lines.filter((l) => l.kind === "part").length, labor: draft.lines.filter((l) => l.kind === "labor").length, subtotal: totals.subtotal };
+      const base = { action: kind === "draft" ? ("create_draft" as const) : ("create_estimate" as const), documentId: result.documentId, documentNumber: result.estimateNumber || null, detail };
       try {
         const doc = await callAlldata("readDocument", { documentId: result.documentId });
         // The shop-wide tax switches in ALLDATA Settings decide the tax on every save; PST is turned on and off there.
         const taxes = await callAlldata("readTaxSettings", {}).catch(() => null);
         if (taxes && taxes.pst.apply !== chargePst) setTaxNote(`ALLDATA 设置里 PST 现在是${taxes.pst.apply ? "收" : "不收"}，和你选的不一样。税额以 ALLDATA 为准；需要的话请在 ALLDATA 里处理这张单。`);
-        setChecks(
-          checkReadback(draft, doc, {
-            shopNote,
-            mileage: draft.mileage,
-            customerAttached: result.customerAttached,
-            chargePst,
-            state: result.estimateNumber > 0 ? "Estimate" : "Draft",
-            ...(taxes ? { rates: { gst: taxes.gst.apply ? taxes.gst.rate / 100 : 0, pst: taxes.pst.rate / 100 } } : {}),
-          }),
-        );
+        const check = checkReadback(draft, doc, {
+          shopNote,
+          mileage: draft.mileage,
+          customerAttached: result.customerAttached,
+          chargePst,
+          state: result.estimateNumber > 0 ? "Estimate" : "Draft",
+          ...(taxes ? { rates: { gst: taxes.gst.apply ? taxes.gst.rate / 100 : 0, pst: taxes.pst.rate / 100 } } : {}),
+        });
+        setChecks(check);
+        await record({ ...base, result: check.ok && result.markupSaved !== false ? "ok" : "mismatch" });
       } catch (e) {
         setError(`单据已建好，但回读核对没有完成：${bridgeErrorText(e)}`);
+        await record({ ...base, result: "uncertain", errorCode: failureCode(e) });
       }
     } catch (e) {
       setError(bridgeErrorText(e));
+      const unsure = isUncertainWrite(kind === "draft" ? "createDraft" : "createEstimate", e);
+      if (unsure) {
+        setUncertain(true);
+        setUncertainAck(false);
+      }
+      await record({ action: kind === "draft" ? "create_draft" : "create_estimate", result: unsure ? "uncertain" : "failed", errorCode: failureCode(e) });
     } finally {
       setBusy(null);
     }
@@ -243,7 +294,7 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
               <button
                 type="button"
                 onClick={() => void submit("draft")}
-                disabled={busy !== null || pick === null || pst === null}
+                disabled={busy !== null || pick === null || pst === null || locked}
                 className="rounded-full bg-ink-900 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
               >
                 {busy === "draft" ? "正在 ALLDATA 建草稿…" : "在 ALLDATA 创建草稿并核对"}
@@ -251,13 +302,23 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
               <button
                 type="button"
                 onClick={() => void submit("estimate")}
-                disabled={busy !== null || pick === null || pst === null}
+                disabled={busy !== null || pick === null || pst === null || locked}
                 className="rounded-full border border-ink-300 px-4 py-2 text-sm font-semibold text-ink-700 hover:border-ink-500 disabled:opacity-40"
               >
                 {busy === "create" ? "正在 ALLDATA 建单…" : "在 ALLDATA 创建估价单"}
               </button>
             </div>
           </>
+        )}
+        {uncertain && !created && (
+          <div className="space-y-1 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+            <p className="font-semibold">不确定 ALLDATA 里有没有建出来。先不要再建。</p>
+            <p>请到“ALLDATA 单据”里按备注里的 “工作台 {draft.id}” 搜一下；搜到了就用那张，不要重复创建。</p>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={uncertainAck} onChange={(e) => setUncertainAck(e.target.checked)} />
+              我已经搜过，确实没有建出来
+            </label>
+          </div>
         )}
         {taxNote && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{taxNote}</p>}
         {checks && (
@@ -283,6 +344,7 @@ export function AlldataDraftCard({ draft, onCreated }: { draft: AlldataDraft; on
             {error}
           </p>
         )}
+        {logNote && <p className="text-xs text-amber-800">{logNote}</p>}
       </div>
     </article>
   );

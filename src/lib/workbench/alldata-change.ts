@@ -4,6 +4,8 @@
  * this module works out the before/after and which confirmation gates the change trips, and the extension
  * saves it only after staff press the button. Nothing here talks to ALLDATA.
  */
+import { isReleased, type GateReleases } from "./alldata-gates";
+import type { OpDetail } from "./alldata-oplog";
 import type { AlldataReadback } from "./alldata-readback";
 import type { ReadbackCheck } from "./alldata-readback";
 
@@ -463,6 +465,19 @@ export function planChange(doc: AlldataReadback, ops: ChangeOp[], taxes: Taxes |
   return { edits, diff, problems, customerSearch, predicted, before: { subTotal: doc.totals.subTotal, total: doc.totals.total }, header };
 }
 
+/** What the operation log keeps about a change: counts and money only (the server writes the summary line). */
+export function changeDetail(plan: Pick<ChangePlan, "edits" | "predicted" | "before" | "customerSearch">): OpDetail {
+  return {
+    updates: plan.edits.updates.length,
+    adds: plan.edits.adds.length,
+    removes: plan.edits.removes.length,
+    header: Object.keys(plan.edits.header).length,
+    customerChange: Boolean(plan.customerSearch),
+    before: plan.before.total,
+    after: plan.predicted.total,
+  };
+}
+
 // ------------------------------------------------------------------ confirmation gates
 
 export interface Gate {
@@ -476,6 +491,8 @@ export interface GateResult {
   blocked: string | null;
   /** Gates that need the owner's explicit yes for this exact change. */
   gates: Gate[];
+  /** Gates this change trips that the owner has let go ahead for this conversation: no tick needed. */
+  released: Gate[];
   /** Change in the document total, tax included. */
   delta: number;
   /** The amount at which the money gate trips for this document. */
@@ -487,7 +504,7 @@ export function amountThreshold(beforeTotal: number): number {
   return Math.min(AMOUNT_GATE.dollars, money(Math.max(beforeTotal, 0) * AMOUNT_GATE.percent));
 }
 
-export function evaluateGates(doc: AlldataReadback, plan: Pick<ChangePlan, "predicted" | "before" | "customerSearch">, changesCustomer: boolean): GateResult {
+export function evaluateGates(doc: AlldataReadback, plan: Pick<ChangePlan, "predicted" | "before" | "customerSearch">, changesCustomer: boolean, releases?: GateReleases): GateResult {
   const delta = money(plan.predicted.total - plan.before.total);
   const threshold = amountThreshold(plan.before.total);
   const gates: Gate[] = [];
@@ -503,7 +520,9 @@ export function evaluateGates(doc: AlldataReadback, plan: Pick<ChangePlan, "pred
     gates.push({ id: "sent", label: "读不到这张单的打印记录", reason: "无法确认客人有没有看过旧版本，按已发送处理，改动需要 Kevin 确认。" });
   }
   if (changesCustomer) gates.push({ id: "customer", label: "更换客户", reason: "会把这张单改挂到另一位客户名下。" });
-  return { blocked, gates, delta, threshold };
+  // A locked document is never opened by a release; the rest follow the owner's releases for this conversation.
+  const released = gates.filter((g) => g.id !== "locked" && isReleased(releases, g.id));
+  return { blocked, gates: gates.filter((g) => !released.includes(g)), released, delta, threshold };
 }
 
 // ------------------------------------------------------------------ check after saving

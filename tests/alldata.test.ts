@@ -155,7 +155,7 @@ describe("ALLDATA extension", () => {
     alldata.respond = (call) => {
       if (call.path === "/ADAG/shopmgr/customers/55") return { status: 200, json: SAVED_CUSTOMER };
       if (call.method === "POST") return created(444, call);
-      if (call.method === "GET" && call.path === "/ADAG/shopmgr/documents/444") return { status: 200, json: { documentId: 444, documentVersion: 1 } };
+      if (call.method === "GET" && call.path === "/ADAG/shopmgr/documents/444") return { status: 200, json: { documentId: 444, documentVersion: 1, state: "Draft" } };
       if (call.method === "PUT" && call.path === "/ADAG/shopmgr/documents/444") return { status: 200, json: { documentId: 444 } };
       if (call.path === "/ADAG/shopmgr/documents/444/state") return { status: 200, json: { documentId: 444, state: "Estimate", estimateNumber: 954 } };
       return { status: 404, json: null };
@@ -309,7 +309,7 @@ describe("ALLDATA extension: drafts and readback", () => {
     const draftLines = toAlldataDatalines(TEST_DRAFT.lines);
     alldata.respond = (call) => {
       if (call.method === "POST") return created(500, call);
-      if (call.method === "GET") return { status: 200, json: { documentId: 500, documentVersion: 1 } };
+      if (call.method === "GET") return { status: 200, json: { documentId: 500, documentVersion: 1, state: "Draft" } };
       if (call.method === "PUT") return { status: 200, json: { documentId: 500 } };
       return { status: 404, json: null };
     };
@@ -325,14 +325,14 @@ describe("ALLDATA extension: drafts and readback", () => {
 
   it("makes one save when no part needs a markup, and reads the lines back if ALLDATA's first answer has none", async () => {
     const noMarkup = toAlldataDatalines((parseDraftInput({ lines: [{ ...TEST_LINES[0], unit_cost: null }, TEST_LINES[1]] }, "D-T") as AlldataDraft).lines);
-    alldata.respond = (call) => (call.method === "POST" ? { status: 201, json: { documentId: 501 } } : { status: 404, json: null });
+    alldata.respond = (call) => (call.method === "POST" ? { status: 201, json: { documentId: 501, documentVersion: 1, state: "Draft" } } : { status: 404, json: null });
     expect((await ask("createDraft", { customerId: null, customerVehicleId: null, mileageIn: null, shopNote: "", datalines: noMarkup })).result).toMatchObject({ documentId: 501, estimateNumber: 0 });
     expect(alldata.calls).toHaveLength(1);
 
     alldata.calls = [];
     alldata.respond = (call) => {
-      if (call.method === "POST") return { status: 201, json: { documentId: 502 } };
-      if (call.method === "GET") return { status: 200, json: { documentId: 502, documentVersion: 1, datalines: savedLines(toAlldataDatalines(TEST_DRAFT.lines)).map((l, i) => ({ ...l, lineNumber: i + 1 })) } };
+      if (call.method === "POST") return { status: 201, json: { documentId: 502, documentVersion: 1, state: "Draft" } };
+      if (call.method === "GET") return { status: 200, json: { documentId: 502, documentVersion: 1, state: "Draft", datalines: savedLines(toAlldataDatalines(TEST_DRAFT.lines)).map((l, i) => ({ ...l, lineNumber: i + 1 })) } };
       return { status: 200, json: {} };
     };
     await ask("createDraft", { customerId: null, customerVehicleId: null, mileageIn: null, shopNote: "", datalines: toAlldataDatalines(TEST_DRAFT.lines) });
@@ -360,7 +360,7 @@ describe("ALLDATA extension: drafts and readback", () => {
     let failState = false;
     alldata.respond = (call) => {
       if (call.method === "POST") return created(505, call);
-      if (call.method === "GET") return { status: 200, json: { documentId: 505, documentVersion: 1 } };
+      if (call.method === "GET") return { status: 200, json: { documentId: 505, documentVersion: 1, state: "Draft" } };
       if (call.path.endsWith("/state")) {
         failState = true;
         throw new Error("network down");
@@ -374,7 +374,7 @@ describe("ALLDATA extension: drafts and readback", () => {
   });
 
   it("does not save a second time when ALLDATA lost a line, and says so", async () => {
-    alldata.respond = (call) => (call.method === "POST" ? { status: 201, json: { documentId: 503, datalines: [] } } : call.method === "GET" ? { status: 200, json: { documentId: 503, datalines: [] } } : { status: 200, json: {} });
+    alldata.respond = (call) => (call.method === "POST" ? { status: 201, json: { documentId: 503, documentVersion: 1, state: "Draft", datalines: [] } } : call.method === "GET" ? { status: 200, json: { documentId: 503, documentVersion: 1, state: "Draft", datalines: [] } } : { status: 200, json: {} });
     const reply = await ask("createDraft", { customerId: null, customerVehicleId: null, mileageIn: null, shopNote: "", datalines: toAlldataDatalines(TEST_DRAFT.lines) });
     expect(reply.result).toMatchObject({ documentId: 503, markupSaved: false });
     expect(alldata.calls.some((c) => c.method === "PUT")).toBe(false);
@@ -457,7 +457,7 @@ describe("ALLDATA extension: changing a document", () => {
   it("saves the whole document with the edits applied, leaving other lines as they were", async () => {
     alldata.respond = (call) => {
       if (call.method === "GET") return { status: 200, json: rawDocument() };
-      return { status: 200, json: { documentId: 900, documentVersion: 4, datalines: [] } };
+      return { status: 200, json: { documentId: 900, documentVersion: 4, state: "Draft", datalines: [] } };
     };
     const reply = await save({ updates: [{ datalineId: 101, quantity: 3, unitPrice: 12 }, { datalineId: 103, quantity: 1.5 }], removes: [102], adds: [], header: { mileageIn: 2500, shopNote: "改过", technicianId: 270226 } });
     expect(reply.result).toEqual({ documentId: 900, version: 4, markupSaved: true });
@@ -480,7 +480,7 @@ describe("ALLDATA extension: changing a document", () => {
       if (call.method === "GET") return { status: 200, json: puts === 0 ? rawDocument() : rawDocument({ documentVersion: 3 + puts }) };
       puts += 1;
       const lines = (call.body as { datalines: Array<Record<string, unknown>> }).datalines.map((l, i) => ({ ...l, lineNumber: i + 1, datalineId: (l.datalineId as number | null) ?? 777, datalineType: { datalineTypeId: l.lineTypeId } }));
-      return { status: 200, json: { documentId: 900, documentVersion: 3 + puts, datalines: lines } };
+      return { status: 200, json: { documentId: 900, documentVersion: 3 + puts, state: "Draft", datalines: lines } };
     };
     const reply = await save({ updates: [], removes: [], adds: [{ kind: "part", description: "Wiper", partNumber: "W1", quantity: 2, unitPrice: 20, unitCost: 12, taxable: true }, { kind: "flat_fee", description: "Fee", partNumber: "", quantity: 1, unitPrice: 25, unitCost: null, taxable: true }, { kind: "discount", description: "10%", partNumber: "", quantity: 1, unitPrice: 7, unitCost: null, taxable: false }], header: {} });
     expect(reply.result).toEqual({ documentId: 900, version: 5, markupSaved: true });
@@ -499,7 +499,7 @@ describe("ALLDATA extension: changing a document", () => {
       puts += 1;
       if (puts === 2) return { status: 500, json: null };
       const lines = (call.body as { datalines: Array<Record<string, unknown>> }).datalines.map((l, i) => ({ ...l, lineNumber: i + 1, datalineId: 700 + i, datalineType: { datalineTypeId: l.lineTypeId } }));
-      return { status: 200, json: { documentId: 900, documentVersion: 4, datalines: lines } };
+      return { status: 200, json: { documentId: 900, documentVersion: 4, state: "Draft", datalines: lines } };
     };
     const reply = await save({ updates: [], removes: [], adds: [{ kind: "part", description: "Wiper", partNumber: "W1", quantity: 1, unitPrice: 20, unitCost: 12, taxable: true }], header: {} });
     expect(reply.result).toMatchObject({ documentId: 900, markupSaved: false });
@@ -511,7 +511,7 @@ describe("ALLDATA extension: changing a document", () => {
       if (call.method === "GET") return { status: 200, json: puts === 0 ? rawDocument() : rawDocument({ documentVersion: 9 }) };
       puts += 1;
       const lines = (call.body as { datalines: Array<Record<string, unknown>> }).datalines.map((l, i) => ({ ...l, lineNumber: i + 1, datalineId: 700 + i, datalineType: { datalineTypeId: l.lineTypeId } }));
-      return { status: 200, json: { documentId: 900, documentVersion: 4, datalines: lines } };
+      return { status: 200, json: { documentId: 900, documentVersion: 4, state: "Draft", datalines: lines } };
     };
     const reply = await save({ updates: [], removes: [], adds: [{ kind: "part", description: "Wiper", partNumber: "W1", quantity: 1, unitPrice: 20, unitCost: 12, taxable: true }], header: {} });
     expect(reply.result).toMatchObject({ documentId: 900, version: 4, markupSaved: false });
@@ -530,7 +530,7 @@ describe("ALLDATA extension: changing a document", () => {
       if (call.method === "GET") return { status: 200, json: puts === 0 ? rawDocument() : rawDocument({ documentVersion: 4 }) };
       puts += 1;
       const lines = (call.body as { datalines: Array<Record<string, unknown>> }).datalines.map((l, i) => ({ ...l, lineNumber: i + 1, datalineId: 700 + i, datalineType: { datalineTypeId: l.lineTypeId } }));
-      return { status: 200, json: { documentId: 900, documentVersion: 4, datalines: lines } };
+      return { status: 200, json: { documentId: 900, documentVersion: 4, state: "Draft", datalines: lines } };
     };
     const reply = await save({ updates: [], removes: [], adds: [{ kind: "part", description: "Wiper", partNumber: "W1", quantity: 1, unitPrice: 20, unitCost: 12, taxable: true }], header: {} }, { expectedTaxes: { gst: { apply: true, rate: 5 }, pst: { apply: false, rate: 7 }, hst: { apply: false, rate: 0 } } });
     expect(reply.result).toMatchObject({ markupSaved: false });
@@ -568,7 +568,7 @@ describe("ALLDATA extension: changing a document", () => {
     alldata.respond = (call) => {
       if (call.path === "/ADAG/shopmgr/customers/55") return { status: 200, json: SAVED_CUSTOMER };
       if (call.method === "GET") return { status: 200, json: rawDocument() };
-      return { status: 200, json: { documentId: 900, documentVersion: 4, datalines: [] } };
+      return { status: 200, json: { documentId: 900, documentVersion: 4, state: "Draft", datalines: [] } };
     };
     await save({ updates: [], removes: [], adds: [], header: {} }, { customerId: 55, customerVehicleId: 901 });
     const body = alldata.calls.find((c) => c.method === "PUT")!.body as { customer: Record<string, unknown>; vehicleInformation: Record<string, unknown> };
@@ -582,11 +582,20 @@ describe("ALLDATA extension: converting and reading", () => {
   const convert = (args: Record<string, unknown>) => ask("convertDocument", { documentId: 900, expectedVersion: 3, ...args });
 
   it("turns a draft into an estimate, and nothing else without being asked", async () => {
-    alldata.respond = (call) => (call.method === "GET" ? { status: 200, json: rawDocument() } : { status: 200, json: { state: "Estimate", estimateNumber: 1080 } });
+    alldata.respond = (call) => (call.method === "GET" ? { status: 200, json: rawDocument() } : { status: 200, json: { documentId: 900, documentVersion: 4, state: "Estimate", estimateNumber: 1080 } });
     expect((await convert({ to: "estimate" })).result).toEqual({ documentId: 900, state: "Estimate", documentNumber: 1080 });
     expect(alldata.calls.find((c) => c.method === "PUT")).toMatchObject({ path: "/ADAG/shopmgr/documents/900/state", body: "estimate", contentType: "text/plain" });
     alldata.respond = () => ({ status: 200, json: rawDocument({ state: "Estimate" }) });
     expect((await convert({ to: "estimate" })).error?.code).toBe("bad_request");
+  });
+
+  it("reports a conversion whose answer isn't what it should be as unknown, never as done", async () => {
+    alldata.respond = (call) => (call.method === "GET" ? { status: 200, json: rawDocument() } : { status: 200, json: { ok: true } });
+    expect((await convert({ to: "estimate" })).error?.code).toBe("alldata_changed");
+    alldata.respond = (call) => (call.method === "GET" ? { status: 200, json: rawDocument({ state: "Estimate" }) } : { status: 200, json: { ok: true } });
+    expect((await convert({ to: "invoice", confirm: "invoice:900:3" })).error?.code).toBe("alldata_changed");
+    alldata.respond = (call) => (call.method === "GET" ? { status: 200, json: rawDocument({ state: "Estimate" }) } : { status: 200, json: { state: "Draft" } });
+    expect((await convert({ to: "invoice", confirm: "invoice:900:3" })).error?.code).toBe("alldata_changed");
   });
 
   it("makes an invoice only with the confirmation for this exact version of this document", async () => {
@@ -617,5 +626,54 @@ describe("ALLDATA extension: converting and reading", () => {
     expect((doc.lines as Array<Record<string, unknown>>)[0]).toMatchObject({ datalineId: 101, markupAmount: 4 });
     alldata.respond = (call) => (call.path.endsWith("/history") ? { status: 500, json: null } : { status: 200, json: rawDocument({ state: "Invoice" }) });
     expect((await ask("readDocument", { documentId: 900 })).result).toMatchObject({ editable: false, events: null });
+  });
+});
+
+// ------------------------------------------------------------------ when ALLDATA misbehaves
+
+import { failureCode, isUncertainWrite, BridgeError, bridgeErrorText } from "@/lib/workbench/alldata-bridge";
+
+describe("ALLDATA extension: stop and report", () => {
+  it("reports a dropped connection as network_error and does not try again", async () => {
+    alldata.respond = () => ({ status: 0, json: null });
+    expect((await ask("readDocument", { documentId: 900 })).error?.code).toBe("network_error");
+    alldata.calls = [];
+    expect((await ask("saveDocument", { documentId: 900, expectedVersion: 3, expectedTaxes: { gst: { apply: false, rate: 0 }, pst: { apply: false, rate: 0 }, hst: { apply: false, rate: 0 } }, edits: { updates: [], removes: [], adds: [], header: {} } })).error?.code).toBe("network_error");
+    // One request, no retry.
+    expect(alldata.calls).toHaveLength(1);
+  });
+
+  it("never repeats a write after a server error: a 504 on a create is reported as unknown, with one request sent", async () => {
+    alldata.respond = (call) => (call.path.startsWith("/ADAG/shopmgr/customers/55") ? { status: 200, json: SAVED_CUSTOMER } : { status: 504, json: null });
+    const reply = await ask("createDraft", { customerId: 55, customerVehicleId: 901, mileageIn: null, shopNote: "", datalines: DATALINES });
+    expect(reply.error?.code).toBe("network_error");
+    expect(alldata.calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    alldata.calls = [];
+    alldata.respond = (call) => (call.method === "GET" ? { status: 200, json: rawDocument() } : { status: 500, json: null });
+    expect((await ask("saveDocument", { documentId: 900, expectedVersion: 3, expectedTaxes: { gst: { apply: false, rate: 0 }, pst: { apply: false, rate: 0 }, hst: { apply: false, rate: 0 } }, edits: { updates: [{ datalineId: 101, quantity: 2 }], removes: [], adds: [], header: {} } })).error?.code).toBe("network_error");
+    expect(alldata.calls.filter((c) => c.method === "PUT")).toHaveLength(1);
+  });
+
+  it("stops when a document no longer has the shape the operations rely on (ALLDATA changed)", async () => {
+    for (const odd of [{ status: 200, json: { id: 900, ver: 3 } }, { status: 200, json: { documentId: 900, documentVersion: "3", state: "Draft" } }, { status: 200, json: { documentId: 900, documentVersion: 3, state: "Draft", datalines: "none" } }, { status: 200, json: "<html>sign in</html>" }]) {
+      alldata.respond = () => odd;
+      expect((await ask("readDocument", { documentId: 900 })).error?.code).toBe("alldata_changed");
+    }
+    // A draft with no lines is normal: datalines is null.
+    alldata.respond = () => ({ status: 200, json: { documentId: 900, documentVersion: 1, state: "Draft", datalines: null } });
+    expect((await ask("readDocument", { documentId: 900 })).ok).toBe(true);
+    // The same guard protects a create: a draft that came back wrong is reported, not trusted.
+    alldata.respond = () => ({ status: 201, json: { ok: true } });
+    expect((await ask("createDraft", { customerId: null, customerVehicleId: null, mileageIn: null, shopNote: "", datalines: toAlldataDatalines(TEST_DRAFT.lines) })).error?.code).toBe("alldata_changed");
+  });
+
+  it("tells staff which failures leave a write's outcome unknown, and never offers a retry for a refused one", () => {
+    for (const code of ["timeout", "network_error", "alldata_changed"] as const) expect(isUncertainWrite("saveDocument", new BridgeError(code))).toBe(true);
+    for (const code of ["not_signed_in", "document_changed", "document_locked", "bad_request", "alldata_error"] as const) expect(isUncertainWrite("saveDocument", new BridgeError(code))).toBe(false);
+    // Reads are never "uncertain": looking again is harmless.
+    expect(isUncertainWrite("readDocument", new BridgeError("network_error"))).toBe(false);
+    expect(failureCode(new BridgeError("not_signed_in"))).toBe("not_signed_in");
+    expect(bridgeErrorText(new BridgeError("alldata_changed"))).toContain("可能改版");
+    expect(bridgeErrorText(new BridgeError("not_signed_in"))).toContain("登录");
   });
 });

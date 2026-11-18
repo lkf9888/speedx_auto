@@ -106,7 +106,7 @@ export const CART_URLS: Record<CartSupplier, string> = {
   lordco: "https://1000027.nexpart.com/cart.php",
 };
 
-export type BridgeErrorCode = "document_locked" | "document_changed" | "not_installed" | "not_signed_in" | "timeout" | "alldata_error" | "bad_request" | "westcan_not_signed_in" | "westcan_error" | "nexpart_error";
+export type BridgeErrorCode = "network_error" | "alldata_changed" | "document_locked" | "document_changed" | "not_installed" | "not_signed_in" | "timeout" | "alldata_error" | "bad_request" | "westcan_not_signed_in" | "westcan_error" | "nexpart_error";
 
 export class BridgeError extends Error {
   constructor(readonly code: BridgeErrorCode, message: string = code) {
@@ -116,6 +116,8 @@ export class BridgeError extends Error {
 }
 
 export const BRIDGE_ERRORS: Record<BridgeErrorCode, string> = {
+  network_error: "和 ALLDATA 的连接断了。",
+  alldata_changed: "ALLDATA 返回的内容和预期不一样（可能改版了），已停止，没有继续。请把这个情况告诉 Kevin。",
   document_locked: "这张单在 ALLDATA 里已经锁定（发票或已作废），不能修改。",
   document_changed: "这张单在你查看之后被别人改过了，请重新打开再改。",
   not_installed: "这台电脑还没装 SPEEDX ALLDATA 扩展，或扩展没启用。",
@@ -185,6 +187,22 @@ export async function callAlldata<K extends keyof BridgeOps>(op: K, args: Bridge
   if (data.ok) return data.result as BridgeOps[K]["result"];
   const code: BridgeErrorCode = data.error?.code && data.error.code in BRIDGE_ERRORS ? data.error.code : "alldata_error";
   throw new BridgeError(code, data.error?.message ?? "");
+}
+
+/** The operations that write to ALLDATA. They are never retried by the workbench: a person decides after reading what happened. */
+export const WRITE_OPS: ReadonlySet<string> = new Set(["createDraft", "createEstimate", "saveDocument", "convertDocument"]);
+
+/**
+ * After these failures a write may or may not have reached ALLDATA (the connection dropped, nothing answered, or the
+ * answer wasn't what we expect). The card must not offer the same write again until staff have looked at ALLDATA.
+ */
+export function isUncertainWrite(op: string, error: unknown): boolean {
+  return WRITE_OPS.has(op) && error instanceof BridgeError && (error.code === "timeout" || error.code === "network_error" || error.code === "alldata_changed");
+}
+
+/** The short code the operation log keeps for a failure. */
+export function failureCode(error: unknown): string {
+  return error instanceof BridgeError ? error.code : "alldata_error";
 }
 
 /** A staff-readable message for any bridge failure. */

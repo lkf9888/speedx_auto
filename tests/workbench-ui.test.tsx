@@ -7,6 +7,8 @@ import { ConversationStore, newTurnId } from "@/lib/workbench/conversations";
 import { handleConversation, handleConversationList } from "@/lib/workbench/conversations-http";
 import { historyFromTurns } from "@/lib/workbench/http";
 import { memoryKv } from "@/lib/workbench/kv";
+import { OpLogStore } from "@/lib/workbench/alldata-oplog";
+import { handleOpLog } from "@/lib/workbench/alldata-oplog-http";
 import { WebsiteInbox } from "@/lib/workbench/website-inbox";
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
 
@@ -21,6 +23,8 @@ interface CloudOptions {
   events?: (message: string) => unknown[];
   /** Hold a reply until the promise settles. */
   delay?: (message: string) => Promise<void> | undefined;
+  /** The signed-in staff member's role (an owner can let kinds of ALLDATA change go ahead). */
+  role?: "owner" | "staff";
   /** Other endpoints (e.g. memory). */
   other?: (url: string, init?: RequestInit) => Promise<Response> | undefined;
 }
@@ -34,9 +38,11 @@ function cloud(options: CloudOptions = {}) {
   const store = new ConversationStore(memoryKv());
   const chats: Array<{ conversationId: string; message: string; history: Array<{ role: string; text: string }>; attachments?: unknown[] }> = [];
   let who = "staff@example.com";
-  const deps = { user: async () => ({ email: who }), store: () => store, log: () => {} };
+  const deps = { user: async () => ({ email: who, role: options.role }), store: () => store, log: () => {} };
+  const opLog = new OpLogStore(memoryKv());
   const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
     const request = new Request(`https://repair.speedxrental.com${url}`, init);
+    if (url === "/api/workbench/alldata-log") return handleOpLog(request, { user: deps.user, store: () => opLog, echo: () => {} });
     if (url === "/api/workbench/conversations") return handleConversationList(request, deps);
     const one = url.match(/^\/api\/workbench\/conversations\/([^/]+)$/);
     if (one) return handleConversation(request, one[1], deps);
@@ -81,6 +87,7 @@ function cloud(options: CloudOptions = {}) {
   });
   return {
     store,
+    opLog,
     chats,
     fetchImpl,
     /** Who the next requests come from. */
@@ -436,7 +443,10 @@ describe("ALLDATA in the workbench", () => {
       if (data.direction === "request") {
         requests.push({ op: data.op!, args: data.args! });
         const given = answers[data.op!];
-        answer({ direction: "response", ok: true, result: typeof given === "function" ? (given as (args: Record<string, unknown>) => unknown)(data.args!) : given });
+        const value = typeof given === "function" ? (given as (args: Record<string, unknown>) => unknown)(data.args!) : given;
+        // { __error: "network_error" } answers the way the extension does when an operation fails.
+        if (value && typeof value === "object" && "__error" in value) answer({ direction: "response", ok: false, error: { code: (value as { __error: string }).__error } });
+        else answer({ direction: "response", ok: true, result: value });
       }
     };
     window.addEventListener("message", fakeExtension);
@@ -567,6 +577,25 @@ describe("ALLDATA in the workbench", () => {
     expect(within(card).queryByRole("button", { name: "打开 PDF（打印 / 下载）" })).not.toBeInTheDocument();
   });
 
+  it("locks creating again after a create whose outcome is unknown, until staff say they searched ALLDATA", async () => {
+    installFakeExtension({ createDraft: { __error: "timeout" } });
+    render(<Workbench email="staff@example.com" />);
+    await ask("开 ALLDATA 估价单");
+    const card = await screen.findByTestId("alldata-draft");
+    await userEvent.click(within(card).getByRole("radio", { name: /不关联客户/ }));
+    await userEvent.click(within(card).getByRole("radio", { name: /不收/ }));
+    await userEvent.click(within(card).getByRole("button", { name: "在 ALLDATA 创建草稿并核对" }));
+    expect(await within(card).findByText(/不确定 ALLDATA 里有没有建出来/)).toBeInTheDocument();
+    expect(within(card).getByText(/工作台 D-1/)).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "在 ALLDATA 创建草稿并核对" })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: "在 ALLDATA 创建估价单" })).toBeDisabled();
+    expect(requests.filter((r) => r.op === "createDraft")).toHaveLength(1);
+    await userEvent.click(within(card).getByRole("checkbox", { name: /确实没有建出来/ }));
+    expect(within(card).getByRole("button", { name: "在 ALLDATA 创建草稿并核对" })).toBeEnabled();
+    // The lock survives opening the page again (it is kept in this browser).
+    expect(window.localStorage.getItem("alldata-uncertain:D-1")).toBe("1");
+  });
+
   it("warns, and keeps the draft, when ALLDATA did not save a part's markup; the PST choice is locked while creating", async () => {
     installFakeExtension({
       createDraft: { documentId: 446, estimateNumber: 0, customerAttached: false, markupSaved: false },
@@ -633,8 +662,10 @@ describe("ALLDATA in the workbench", () => {
     const taxes = { gst: { apply: true, rate: 5 }, pst: { apply: false, rate: 7 }, hst: { apply: false, rate: 0 } };
     const change = (ops: unknown[]) => ({ type: "alldata_change", change: { id: "C-1", document: { documentId: 900, query: "" }, ops, reason: "客人要改", createdAt: "2026-11-17T20:00:00Z" } });
 
-    function cloudWith(ops: unknown[]) {
-      vi.stubGlobal("fetch", cloud({ events: () => [change(ops)] }).fetchImpl);
+    function cloudWith(ops: unknown[], role?: "owner" | "staff") {
+      const server = cloud({ events: () => [change(ops)], role });
+      vi.stubGlobal("fetch", server.fetchImpl);
+      return server;
     }
 
     it("shows what would change, saves only when applied, and checks the saved document", async () => {
@@ -712,6 +743,154 @@ describe("ALLDATA in the workbench", () => {
       await userEvent.click(within(card).getByRole("radio", { name: /B Person/ }));
       expect(within(card).getByRole("checkbox", { name: /老板已确认/ })).not.toBeChecked();
       expect(within(card).getByRole("button", { name: "在 ALLDATA 应用修改" })).toBeDisabled();
+    });
+
+    it("writes one line to the operation log for each step, with counts and money and nothing about the customer", async () => {
+      installFakeExtension({
+        readTaxSettings: taxes,
+        readDocument: doc(),
+        saveDocument: { documentId: 900, version: 4, markupSaved: true },
+      });
+      const server = cloudWith([{ op: "set_line", ref: { line: 1 }, unitPrice: 105 }]);
+      render(<Workbench email="staff@example.com" />);
+      await ask("前刹车片改 105");
+      const card = await screen.findByTestId("alldata-change");
+      await userEvent.click(await within(card).findByRole("button", { name: "在 ALLDATA 应用修改" }));
+      await within(card).findByTestId("alldata-change-result");
+      await waitFor(async () => expect((await server.opLog.list()).map((e) => e.action)).toEqual(expect.arrayContaining(["lookup", "change"])));
+      const change = (await server.opLog.list()).find((e) => e.action === "change")!;
+      expect(change).toMatchObject({ by: "staff@example.com", documentId: 900, result: "mismatch", gates: [], ownerAck: false });
+      expect(change.summary).toBe("改单：改 1 行，合计 $231.00 → $236.25");
+      expect(JSON.stringify(await server.opLog.list())).not.toMatch(/Front pads|Test Person|604/);
+    });
+
+    it("stops after a write whose outcome is unknown, re-reads the document and asks before offering the write again", async () => {
+      installFakeExtension({ readTaxSettings: taxes, readDocument: doc(), saveDocument: { __error: "network_error" } });
+      const server = cloudWith([{ op: "set_line", ref: { line: 1 }, unitPrice: 105 }]);
+      render(<Workbench email="staff@example.com" />);
+      await ask("前刹车片改 105");
+      const card = await screen.findByTestId("alldata-change");
+      const apply = await within(card).findByRole("button", { name: "在 ALLDATA 应用修改" });
+      await userEvent.click(apply);
+      expect(await within(card).findByText(/不确定上一次有没有保存/)).toBeInTheDocument();
+      expect(within(card).getByText(/不确定上一次有没有保存/).parentElement).toHaveTextContent("连接断了");
+      // It looked at the document again and does not retry by itself.
+      await vi.waitFor(() => expect(requests.filter((r) => r.op === "readDocument").length).toBeGreaterThanOrEqual(2));
+      expect(requests.filter((r) => r.op === "saveDocument")).toHaveLength(1);
+      expect(within(card).getByRole("button", { name: "在 ALLDATA 应用修改" })).toBeDisabled();
+      await userEvent.click(within(card).getByRole("checkbox", { name: /确认这次改动还没保存/ }));
+      expect(within(card).getByRole("button", { name: "在 ALLDATA 应用修改" })).toBeEnabled();
+      await waitFor(async () => expect((await server.opLog.list()).find((e) => e.action === "change")).toMatchObject({ result: "uncertain", errorCode: "network_error" }));
+    });
+
+    it("lets only the owner let a kind of change go ahead, for this conversation, and take that back", async () => {
+      installFakeExtension({ readTaxSettings: taxes, readDocument: doc(), saveDocument: { documentId: 900, version: 4, markupSaved: true } });
+      const server = cloudWith([{ op: "set_line", ref: { line: 2 }, quantity: 2 }], "owner");
+      server.as("kevin@example.com");
+      render(<Workbench email="kevin@example.com" isOwner />);
+      await ask("工时改成 2 小时");
+      const card = await screen.findByTestId("alldata-change");
+      await userEvent.click(await within(card).findByRole("button", { name: "本次对话里这一类不再问我" }));
+      expect(await within(card).findByText(/老板已对本次对话放开：金额变动超过阈值/)).toBeInTheDocument();
+      expect(within(card).queryByRole("checkbox", { name: /老板已确认/ })).not.toBeInTheDocument();
+      expect(within(card).getByRole("button", { name: "在 ALLDATA 应用修改" })).toBeEnabled();
+      const conversation = (await server.store.get((await server.store.list())[0].id))!;
+      expect(conversation.gateReleases?.amount).toMatchObject({ by: "kevin@example.com" });
+      await userEvent.click(within(card).getByRole("button", { name: "撤销" }));
+      expect(await within(card).findByText(/需要老板确认：金额变动超过阈值/)).toBeInTheDocument();
+      expect((await server.store.get((await server.store.list())[0].id))!.gateReleases).toBeUndefined();
+    });
+
+    it("won't use a release the owner has taken back in another window", async () => {
+      installFakeExtension({ readTaxSettings: taxes, readDocument: doc(), saveDocument: { documentId: 900, version: 4, markupSaved: true } });
+      const server = cloudWith([{ op: "set_line", ref: { line: 2 }, quantity: 2 }], "owner");
+      server.as("kevin@example.com");
+      render(<Workbench email="kevin@example.com" isOwner />);
+      await ask("工时改成 2 小时");
+      const card = await screen.findByTestId("alldata-change");
+      await userEvent.click(await within(card).findByRole("button", { name: "本次对话里这一类不再问我" }));
+      await within(card).findByText(/老板已对本次对话放开/);
+      // Another window takes the release back; this page still holds the old copy.
+      const id = (await server.store.list())[0].id;
+      await server.store.setGateRelease(id, "kevin@example.com", "amount", false);
+      await userEvent.click(within(card).getByRole("button", { name: "在 ALLDATA 应用修改" }));
+      expect(await within(card).findByText(/老板刚刚撤销了放开/)).toBeInTheDocument();
+      expect(requests.some((r) => r.op === "saveDocument")).toBe(false);
+      // The card now asks for the owner's tick again.
+      expect(await within(card).findByText(/需要老板确认：金额变动超过阈值/)).toBeInTheDocument();
+    });
+
+    it("keeps the unknown-outcome lock when the card is opened again, and the conversion buttons obey it too", async () => {
+      installFakeExtension({ readTaxSettings: taxes, readDocument: doc(), convertDocument: { __error: "network_error" } });
+      cloudWith([]);
+      const view = render(<Workbench email="staff@example.com" />);
+      await ask("看看这张单");
+      let card = await screen.findByTestId("alldata-change");
+      await userEvent.click(await within(card).findByRole("button", { name: "转成发票（不可撤销）" }));
+      await userEvent.type(within(card).getByLabelText("输入开发票确认"), "开发票");
+      await userEvent.click(within(card).getByRole("button", { name: "确认开发票" }));
+      expect(await within(card).findByText(/不确定上一次有没有保存/)).toBeInTheDocument();
+      // The conversion buttons are locked until staff say they have looked.
+      expect(await within(card).findByRole("button", { name: "转成发票（不可撤销）" })).toBeDisabled();
+      expect(requests.filter((r) => r.op === "convertDocument")).toHaveLength(1);
+      // Opening the page again: the lock is still there.
+      view.unmount();
+      render(<Workbench email="staff@example.com" />);
+      card = await screen.findByTestId("alldata-change");
+      expect(await within(card).findByText(/不确定上一次有没有保存/)).toBeInTheDocument();
+      expect(await within(card).findByRole("button", { name: "转成发票（不可撤销）" })).toBeDisabled();
+      await userEvent.click(within(card).getByRole("checkbox", { name: /确认这次改动还没保存/ }));
+      expect(within(card).getByRole("button", { name: "转成发票（不可撤销）" })).toBeEnabled();
+    });
+
+    it("takes the lock another tab set before writing, and clears it once a conversion succeeds", async () => {
+      let fail = true;
+      installFakeExtension({
+        readTaxSettings: taxes,
+        readDocument: doc(),
+        convertDocument: () => (fail ? { __error: "timeout" } : { documentId: 900, state: "Estimate", documentNumber: 1080 }),
+      });
+      cloudWith([]);
+      render(<Workbench email="staff@example.com" />);
+      await ask("看看这张单");
+      const card = await screen.findByTestId("alldata-change");
+      await userEvent.click(await within(card).findByRole("button", { name: "转成估价单（会领取单号）" }));
+      // Another tab hit an unknown outcome on this card after it was opened here.
+      window.localStorage.setItem("alldata-uncertain:C-1", "1");
+      await userEvent.click(within(card).getByRole("button", { name: "确认转成估价单" }));
+      expect(await within(card).findByText(/不确定上一次有没有保存/)).toBeInTheDocument();
+      expect(requests.some((r) => r.op === "convertDocument")).toBe(false);
+      // Staff look and say so; this time it works, and the lock is gone for good.
+      fail = false;
+      await userEvent.click(within(card).getByRole("checkbox", { name: /确认这次改动还没保存/ }));
+      await userEvent.click(await within(card).findByRole("button", { name: "确认转成估价单" }));
+      await vi.waitFor(() => expect(requests.filter((r) => r.op === "convertDocument")).toHaveLength(1));
+      await vi.waitFor(() => expect(window.localStorage.getItem("alldata-uncertain:C-1")).toBeNull());
+    });
+
+    it("shows a staff member who is not the owner no release button", async () => {
+      installFakeExtension({ readTaxSettings: taxes, readDocument: doc() });
+      cloudWith([{ op: "set_line", ref: { line: 2 }, quantity: 2 }], "staff");
+      render(<Workbench email="staff@example.com" />);
+      await ask("工时改成 2 小时");
+      const card = await screen.findByTestId("alldata-change");
+      await within(card).findByText(/需要老板确认：金额变动超过阈值/);
+      expect(within(card).queryByRole("button", { name: "本次对话里这一类不再问我" })).not.toBeInTheDocument();
+    });
+
+    it("reads the operation log in the ALLDATA panel", async () => {
+      installFakeExtension({});
+      const server = cloudWith([]);
+      await server.opLog.append({ action: "change", documentId: 900, documentNumber: 1062, detail: { updates: 1, before: 231, after: 236.25 }, gates: ["amount"], ownerAck: true, result: "ok" }, "kevin@example.com");
+      render(<Workbench email="staff@example.com" />);
+      await userEvent.click(screen.getByRole("button", { name: "ALLDATA 单据" }));
+      await userEvent.click(await screen.findByRole("button", { name: "操作日志" }));
+      const log = await screen.findByTestId("alldata-log");
+      expect(log).toHaveTextContent("kevin · 改单 · #1062 · 成功");
+      expect(log).toHaveTextContent("确认门：amount（老板已确认）");
+      await userEvent.click(screen.getByRole("button", { name: "哪些操作要老板确认" }));
+      expect(screen.getByText("转发票（不可撤销）")).toBeInTheDocument();
+      expect(screen.getByText("向客户发送发票、收据（邮件、短信、打印）")).toBeInTheDocument();
     });
 
     it("offers no conversion while a change couldn't be placed", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { amountThreshold, checkChange, evaluateGates, parseChangeInput, planChange, predict, resolveRef, docLines, type ChangeOp, type Taxes } from "@/lib/workbench/alldata-change";
+import { amountThreshold, changeDetail, checkChange, evaluateGates, parseChangeInput, planChange, predict, resolveRef, docLines, type ChangeOp, type Taxes } from "@/lib/workbench/alldata-change";
 import type { AlldataReadback } from "@/lib/workbench/alldata-readback";
 
 const TAXES_ON: Taxes = { gst: { apply: true, rate: 5 }, pst: { apply: true, rate: 7 }, hst: { apply: false, rate: 0 } };
@@ -297,5 +297,188 @@ describe("stored change cards", () => {
     const ok = await patch({ kind: "change", itemId: "C-1", applied: { documentId: 900, version: 4 } });
     expect(ok.status).toBe(200);
     expect((await store.get("cabc1234"))!.turns[0].changes![0].applied).toMatchObject({ documentId: 900, version: 4 });
+  });
+});
+
+
+// ------------------------------------------------------------------ gate releases and the operation log
+
+import { ACTION_POLICY, isReleased } from "@/lib/workbench/alldata-gates";
+import { buildSummary, OPLOG_PREFIX, OpLogStore, sanitizeEntry } from "@/lib/workbench/alldata-oplog";
+import { handleOpLog } from "@/lib/workbench/alldata-oplog-http";
+
+describe("releasing a gate", () => {
+  const big = planChange(DOC, [set({ line: 3 }, { quantity: 1.2 })], TAXES_ON);
+
+  it("takes a released kind of change out of the ones that need the owner's tick, but never opens a locked document", () => {
+    const asked = evaluateGates(DOC, big, false);
+    expect(asked.gates.map((g) => g.id)).toEqual(["amount"]);
+    const released = evaluateGates(DOC, big, false, { amount: { by: "kevin@x", at: "2026-11-17T20:00:00Z" } });
+    expect(released.gates).toEqual([]);
+    expect(released.released.map((g) => g.id)).toEqual(["amount"]);
+    // Another kind of gate still asks.
+    const customer = evaluateGates(DOC, big, true, { amount: { by: "kevin@x", at: "x" } });
+    expect(customer.gates.map((g) => g.id)).toEqual(["customer"]);
+    expect(evaluateGates({ ...DOC, state: "Invoice", editable: false }, big, false, { amount: { by: "kevin@x", at: "x" } }).blocked).toContain("Invoice");
+    expect(isReleased(undefined, "amount")).toBe(false);
+  });
+
+  it("lists every kind of action with how it is gated, and has no entry for sending, paying or voiding", () => {
+    const byId = Object.fromEntries(ACTION_POLICY.map((p) => [p.id, p]));
+    expect(byId.lookup.state).toBe("auto");
+    expect(byId.change_amount).toMatchObject({ state: "ask", gate: "amount" });
+    expect(byId.convert_invoice).toMatchObject({ state: "ask" });
+    expect(byId.convert_invoice.gate).toBeUndefined();
+    for (const id of ["send_customer", "payment", "void_delete", "sent_or_paid_edit"]) expect(byId[id].state).toBe("never");
+  });
+
+  it("stores a release with the conversation, only the owner can set it, and it is written to the log", async () => {
+    const store = new ConversationStore(memoryKv());
+    const log = new OpLogStore(memoryKv());
+    await store.append("cabc1234", "a@x", [{ id: newTurnId(), role: "user", text: "x", author: "a@x", at: 1, quotes: [] }]);
+    const call = (role: "owner" | "staff", body: unknown) =>
+      handleConversation(
+        new Request("http://x/api/workbench/conversations/cabc1234", { method: "PATCH", body: JSON.stringify(body) }),
+        "cabc1234",
+        { user: async () => ({ email: `${role}@x`, role }), store: () => store, log: vi.fn(), opLog: () => log } as never,
+      );
+    expect((await call("staff", { gate: { id: "amount", released: true } })).status).toBe(403);
+    expect((await call("owner", { gate: { id: "invoice", released: true } })).status).toBe(400);
+    expect((await call("owner", { gate: { id: "amount", released: "yes" } })).status).toBe(400);
+    expect((await store.get("cabc1234"))!.gateReleases).toBeUndefined();
+
+    expect((await call("owner", { gate: { id: "amount", released: true } })).status).toBe(200);
+    expect((await store.get("cabc1234"))!.gateReleases).toMatchObject({ amount: { by: "owner@x" } });
+    expect((await call("owner", { gate: { id: "amount", released: false } })).status).toBe(200);
+    expect((await store.get("cabc1234"))!.gateReleases).toBeUndefined();
+    await vi.waitFor(async () => expect((await log.list()).map((e) => e.action)).toEqual(["gate_revoke", "gate_release"]));
+    expect((await log.list()).every((e) => e.conversationId === "cabc1234")).toBe(true);
+  });
+});
+
+describe("the ALLDATA operation log", () => {
+  const NOW = new Date("2026-11-17T20:00:00Z");
+
+  it("keeps only the known fields in fixed shapes: free text from the browser can't reach the log", () => {
+    const entry = sanitizeEntry(
+      {
+        action: "change",
+        at: "1999-01-01",
+        by: "someone@else",
+        documentId: 900,
+        documentNumber: 1062,
+        detail: { updates: 1, before: 231, after: 236.25, customerName: "Kevin Li" },
+        gates: ["amount", "owner_secret"],
+        ownerAck: true,
+        result: "ok",
+        customerName: "Kevin Li",
+        phone: "604-555-0100",
+        errorCode: "not_signed_in",
+        summary: "Alice Smith, 123 Main St, plate ABC123, Front brake pads",
+      },
+      "staff@x.ca",
+      NOW,
+      "id1",
+    )!;
+    expect(entry).toEqual({
+      id: "id1",
+      at: "2026-11-17T20:00:00.000Z",
+      by: "staff@x.ca",
+      conversationId: "",
+      action: "change",
+      documentId: 900,
+      documentNumber: 1062,
+      summary: "改单：改 1 行，合计 $231.00 → $236.25",
+      gates: ["amount"],
+      ownerAck: true,
+      result: "ok",
+      errorCode: "not_signed_in",
+    });
+    expect(JSON.stringify(entry)).not.toMatch(/Kevin Li|604|1999|Alice|plate|Front brake/);
+    expect(sanitizeEntry({ action: "delete_everything" }, "a@x", NOW)).toBeNull();
+    expect(sanitizeEntry(null, "a@x", NOW)).toBeNull();
+  });
+
+  it("refuses a failure code or a secret that isn't one of the fixed shapes, and never takes a conversation id from the browser", () => {
+    const entry = sanitizeEntry({ action: "failure", conversationId: "c1hgcm82633a004352", errorCode: "alice_smith", detail: { after: "sk-demo-abc-xyz-123", updates: "604-555-0100" } }, "a@x", NOW)!;
+    expect(entry.conversationId).toBe("");
+    expect(entry.errorCode).toBe("");
+    expect(entry.summary).toBe("操作失败");
+    expect(sanitizeEntry({ action: "failure", errorCode: "network_error" }, "a@x", NOW)).toMatchObject({ errorCode: "network_error" });
+    expect(sanitizeEntry({ action: "lookup" }, "not an email", NOW)!.by).toBe("");
+    // Only the server's own code can name a conversation, and only in the shape the server makes them.
+    expect(sanitizeEntry({ action: "gate_release" }, "a@x", NOW, "i", { conversationId: "cabc12345" })!.conversationId).toBe("cabc12345");
+    expect(sanitizeEntry({ action: "gate_release" }, "a@x", NOW, "i", { conversationId: "Alice Smith" })!.conversationId).toBe("");
+  });
+
+  it("builds the summary from counts and money", () => {
+    const plan = planChange(DOC, [set({ line: 1 }, { quantity: 3 }), { op: "remove_line", ref: { line: 2 } }, { op: "add_line", kind: "flat_fee", description: "Fee", partNumber: "", quantity: 1, unitPrice: 25, unitCost: null, taxable: true }, { op: "set_header", mileage: 5 }, { op: "set_customer", search: "604-555-0100" }], TAXES_ON);
+    const detail = changeDetail(plan);
+    expect(detail).toMatchObject({ updates: 1, adds: 1, removes: 1, header: 1, customerChange: true, before: 162.4 });
+    const summary = buildSummary("change", detail);
+    expect(summary).toMatch(/^改单：改 1 行，加 1 行，删 1 行，表头 1 项，换客户，合计 \$162\.40 → \$/);
+    expect(JSON.stringify(detail)).not.toMatch(/604|Fee/);
+    expect(buildSummary("create_draft", { parts: 2, labor: 1, subtotal: 200 })).toBe("建草稿：零件 2 行、工时 1 行，税前 $200.00");
+    expect(buildSummary("lookup", {})).toBe("查看");
+  });
+
+  it("writes each line under its own key (nothing to overwrite), lists newest first, and lines expire by themselves", async () => {
+    const kv = memoryKv();
+    const puts: Array<{ key: string; ttl?: number }> = [];
+    const original = kv.put.bind(kv);
+    kv.put = async (key, value, options) => {
+      puts.push({ key, ttl: options?.ttlSeconds });
+      return original(key, value, options);
+    };
+    let tick = 0;
+    const log = new OpLogStore(kv, () => new Date(NOW.getTime() + (tick += 1) * 1000));
+    // Five lines written at the same moment: none can overwrite another.
+    await Promise.all(Array.from({ length: 5 }, (_, i) => log.append({ action: "lookup", documentId: i + 1, result: "ok" }, "a@x")));
+    expect((await log.list()).map((e) => e.documentId).sort()).toEqual([1, 2, 3, 4, 5]);
+    expect(puts).toHaveLength(5);
+    expect(new Set(puts.map((p) => p.key)).size).toBe(5);
+    expect(puts.every((p) => p.key.startsWith(OPLOG_PREFIX) && p.ttl === 180 * 24 * 60 * 60)).toBe(true);
+    const newest = await log.list(2);
+    expect(newest).toHaveLength(2);
+    expect(newest[0].at > newest[1].at).toBe(true);
+  });
+
+  it("finds the newest lines day by day, so a long history is never listed whole", async () => {
+    const kv = memoryKv();
+    const days = [0, 1, 2, 9];
+    for (const back of days) {
+      const log = new OpLogStore(kv, () => new Date(NOW.getTime() - back * 24 * 60 * 60 * 1000));
+      await log.append({ action: "lookup", documentId: 100 + back, result: "ok" }, "a@x");
+    }
+    const listed = await new OpLogStore(kv, () => NOW).list(3);
+    expect(listed.map((e) => e.documentId)).toEqual([100, 101, 102]);
+    // Lines older than the look-back window are not listed.
+    const old = new OpLogStore(kv, () => new Date(NOW.getTime() - 40 * 24 * 60 * 60 * 1000));
+    await old.append({ action: "lookup", documentId: 999, result: "ok" }, "a@x");
+    expect((await new OpLogStore(kv, () => NOW).list(50)).map((e) => e.documentId)).not.toContain(999);
+  });
+
+  it("gives the server's own log the line before KV is written, so a KV failure doesn't lose it", async () => {
+    const kv = memoryKv();
+    kv.put = async () => {
+      throw new Error("KV down");
+    };
+    const seen: string[] = [];
+    await expect(new OpLogStore(kv, () => NOW).append({ action: "change", documentId: 900, result: "failed" }, "a@x", (e) => seen.push(e.action))).rejects.toThrow("KV down");
+    expect(seen).toEqual(["change"]);
+  });
+
+  it("serves the signed-in staff only, and stamps who wrote each line", async () => {
+    const log = new OpLogStore(memoryKv(), () => NOW);
+    const echo = vi.fn();
+    const call = (user: { email: string } | null, init?: RequestInit) => handleOpLog(new Request("http://x/api/workbench/alldata-log", init), { user: async () => user as never, store: () => log, echo });
+    expect((await call(null)).status).toBe(401);
+    expect((await call({ email: "a@x.ca" }, { method: "POST", body: JSON.stringify({ entry: { action: "convert_invoice", documentId: 900, by: "forged@x", result: "ok" } }) })).status).toBe(201);
+    expect((await call({ email: "a@x.ca" }, { method: "POST", body: JSON.stringify({ entry: { action: "nope" } }) })).status).toBe(400);
+    expect((await call({ email: "a@x.ca" }, { method: "PUT" })).status).toBe(405);
+    const listed = (await (await call({ email: "b@x.ca" })).json()) as { entries: Array<{ by: string; action: string }> };
+    expect(listed.entries).toEqual([expect.objectContaining({ by: "a@x.ca", action: "convert_invoice" })]);
+    expect(echo).toHaveBeenCalledTimes(1);
+    expect((await handleOpLog(new Request("http://x/api/workbench/alldata-log"), { user: async () => ({ email: "a@x" }) as never, store: () => null, echo })).status).toBe(503);
   });
 });

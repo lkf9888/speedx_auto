@@ -18,6 +18,7 @@ import {
 import { describePricing, priceLabel, TIER_LABEL, type PriceTier } from "@/lib/workbench/price-tier";
 import type { StaffQuote } from "@/lib/workbench/quote";
 import type { AlldataChangeRequest } from "@/lib/workbench/alldata-change";
+import type { GateId, GateReleases } from "@/lib/workbench/alldata-gates";
 import { AlldataDocuments } from "./AlldataDocuments";
 import { ConnectionButton, ConnectionStatus, useConnectionSummary } from "./ConnectionStatus";
 import { HouseRulesPanel } from "./HouseRulesPanel";
@@ -324,6 +325,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
       patchLocal(conversationId, (c) => ({
         ...c,
         updatedAt: conversation.updatedAt,
+        gateReleases: conversation.gateReleases,
         turns: c.turns.map((t) => (t.quotes.some((q) => q.id === quote.id) ? { ...t, quotes: t.quotes.map((q) => (q.id === quote.id ? saved : q)) } : t)),
       }));
     } catch (error) {
@@ -365,6 +367,28 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
     }).catch(() => null);
   }
 
+  /** The owner lets a kind of ALLDATA change go ahead without his tick in this conversation, or takes that back. */
+  async function setGateRelease(conversationId: string, gate: GateId, released: boolean) {
+    const response = await fetch(`/api/workbench/conversations/${conversationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gate: { id: gate, released } }),
+    }).catch(() => null);
+    if (!response?.ok) return;
+    const { conversation } = (await response.json().catch(() => ({}))) as { conversation?: Conversation };
+    if (conversation) patchLocal(conversationId, (c) => ({ ...c, updatedAt: conversation.updatedAt, gateReleases: conversation.gateReleases }));
+  }
+
+  /** The owner's releases as the server has them right now (null when they can't be read): a change that relies on one checks first. */
+  async function verifyReleases(conversationId: string): Promise<GateReleases | null> {
+    const response = await fetch(`/api/workbench/conversations/${conversationId}`, { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) return null;
+    const { conversation } = (await response.json().catch(() => ({}))) as { conversation?: Conversation };
+    if (!conversation) return null;
+    patchLocal(conversationId, (c) => ({ ...c, gateReleases: conversation.gateReleases }));
+    return conversation.gateReleases ?? {};
+  }
+
   async function markApplied(conversationId: string, changeId: string, applied: { documentId: number; version: number }) {
     const at = new Date().toISOString();
     patchLocal(conversationId, (c) => ({
@@ -392,6 +416,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
     patchLocal(conversationId, (c) => ({
       ...c,
       updatedAt: conversation.updatedAt,
+      gateReleases: conversation.gateReleases,
       turns: c.turns.map((t) => (t.quotes.some((q) => q.id === quoteId) ? { ...t, quotes: t.quotes.map((q) => (q.id === quoteId ? saved : q)) } : t)),
     }));
     return true;
@@ -1139,7 +1164,15 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
                   ))}
                   {turn.changes?.map((change) => (
                     <div key={change.id} className="ml-auto w-full max-w-3xl">
-                      <AlldataChangeCard request={change} onApplied={(applied) => markApplied(active.id, change.id, applied)} />
+                      <AlldataChangeCard
+                        request={change}
+                       
+                        isOwner={isOwner}
+                        releases={active.gateReleases}
+                        onRelease={currentId ? (gate, released) => void setGateRelease(active.id, gate, released) : undefined}
+                        verifyReleases={currentId ? () => verifyReleases(active.id) : undefined}
+                        onApplied={(applied) => markApplied(active.id, change.id, applied)}
+                      />
                     </div>
                   ))}
                   {turn.memories?.map((proposal) => (
