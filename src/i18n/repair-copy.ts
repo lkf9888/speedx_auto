@@ -30,7 +30,6 @@ export const enAutoRepair: AutoRepairCopy = {
     title: "At a glance",
     items: [
       { label: "Labor time", value: "Industry-standard labor-guide times (ALLDATA), not a stopwatch" },
-      { label: "Parts", value: "WorldPac parts, quoted at list price" },
       { label: "Oil change", value: "From $95, oil and filter included" },
       { label: "Electric vehicles", value: "Mainly Tesla: battery checks, drive motor repair, fault codes" },
       { label: "Languages", value: "English, Cantonese, Mandarin" },
@@ -277,7 +276,6 @@ export const zhCNAutoRepair: AutoRepairCopy = {
     title: "基本信息",
     items: [
       { label: "工时标准", value: "按行业标准工时手册（ALLDATA）计时，不按实际干活时间随意计算" },
-      { label: "配件", value: "WorldPac 配件，按标价报价" },
       { label: "换机油", value: "$95 起，含机油和机滤" },
       { label: "电动车", value: "以特斯拉为主：电池检测、电机维修、故障码检测" },
       { label: "服务语言", value: "普通话、粤语、英语" },
@@ -474,7 +472,6 @@ const zhTWHub: Omit<AutoRepairCopy, "services" | "priceGuide" | "landing"> = {
     title: "基本資料",
     items: [
       { label: "工時標準", value: "按行業標準工時手冊（ALLDATA）計算，並非隨意計時" },
-      { label: "零件", value: "WorldPac 零件，按標價報價" },
       { label: "換機油", value: "$95 起，已包機油及機油格" },
       { label: "電動車", value: "以 Tesla 為主：電池檢測、電動馬達維修、故障碼檢測" },
       { label: "服務語言", value: "粵語、普通話、英語" },

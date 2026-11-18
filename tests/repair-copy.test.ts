@@ -74,7 +74,7 @@ describe("localized auto repair copy", () => {
     const hubText = JSON.stringify({ ...hub, services: undefined });
 
     expect(hub.faqs.length).toBeGreaterThanOrEqual(10);
-    expect(hub.facts.items.length).toBeGreaterThanOrEqual(8);
+    expect(hub.facts.items.length).toBeGreaterThanOrEqual(7);
     expect(hub.pricing.rows.length).toBeGreaterThanOrEqual(6);
     expect(hub.scope.offered.length).toBeGreaterThanOrEqual(5);
     expect(hub.serviceAreaPlaces.length).toBeGreaterThanOrEqual(4);
