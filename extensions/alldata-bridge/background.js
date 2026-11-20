@@ -1025,4 +1025,62 @@ async function cartAddNow(args) {
   }
 }
 
-const OPS = { status, searchDocuments, searchCustomers, createEstimate, createDraft, readDocument, readTaxSettings, saveDocument, convertDocument, openPdf, westcanSearch, cartAdd };
+// ------------------------------------------------------------------ RockAuto prices (read-only)
+
+// RockAuto blocks the workbench's server (data-centre address), so staff's own browser reads its public part-search
+// page, the way a person would: one part number at a time, in a background tab, no login, nothing added to any cart.
+// Only the listing blocks are sent back; the workbench's server reads them again and does the pricing.
+
+// Runs inside the RockAuto search page. A real browser passes RockAuto's own script check by itself.
+async function rockautoReadPage() {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const end = Date.now() + 25000;
+  const listings = () => document.querySelectorAll('tbody[id^="listingcontainer["]');
+  while (Date.now() < end && !document.getElementById("frm_partsearch") && listings().length === 0) await sleep(300);
+  const recognised = Boolean(document.getElementById("frm_partsearch")) || listings().length > 0;
+  // The page's own markup, one block per listing; the tables inside a listing lose their tbody tags so a block stays in one piece.
+  const blocks = [...listings()].slice(0, 40).map((tb) => `<tbody id="${tb.id}">${tb.innerHTML.replace(/<\/?tbody[^>]*>/gi, "")}</tbody>`);
+  return { recognised, html: blocks.join("\n").slice(0, 250000) };
+}
+
+let rockautoQueue = Promise.resolve();
+
+function rockautoSearch(args) {
+  const run = rockautoQueue.then(() => rockautoSearchNow(args));
+  rockautoQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function rockautoSearchNow(args) {
+  const parts = Array.isArray(args.parts) ? args.parts : [];
+  if (parts.length === 0 || parts.length > 4 || !parts.every((p) => typeof p === "string" && /^[A-Za-z0-9][A-Za-z0-9 ._\/-]{1,39}$/.test(p.trim()))) {
+    throw new BridgeError("bad_request", "bad part numbers");
+  }
+  const pages = [];
+  for (const raw of parts) {
+    const part = raw.trim();
+    // A pause between pages: RockAuto is asked politely.
+    if (pages.length > 0) await new Promise((resolve) => setTimeout(resolve, 1200));
+    const tab = await chrome.tabs.create({ url: `https://www.rockauto.com/en/partsearch/?partnum=${encodeURIComponent(part)}`, active: false });
+    try {
+      try {
+        await waitForLoad(tab.id);
+        const [run] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world: "MAIN", func: rockautoReadPage });
+        const result = run && run.result;
+        if (!result) throw new Error("no answer from the RockAuto page");
+        pages.push({ part, recognised: result.recognised === true, html: typeof result.html === "string" ? result.html : "" });
+      } catch (error) {
+        throw new BridgeError("rockauto_error", String((error && error.message) || "").slice(0, 160));
+      }
+    } finally {
+      try {
+        await chrome.tabs.remove(tab.id);
+      } catch {
+        // The tab is already gone.
+      }
+    }
+  }
+  return { pages };
+}
+
+const OPS = { status, searchDocuments, searchCustomers, createEstimate, createDraft, readDocument, readTaxSettings, saveDocument, convertDocument, openPdf, westcanSearch, cartAdd, rockautoSearch };

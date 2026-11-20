@@ -78,6 +78,9 @@ export async function handleConversation(request: Request, id: string, deps: Con
       return json({ ok: true });
     }
     if (request.method === "PATCH") {
+      // Nothing a staff page sends is this big (RockAuto pages from the extension are at most 4 × 250 KB).
+      const declared = Number(request.headers.get("content-length"));
+      if (Number.isFinite(declared) && declared > 1_500_000) return json({ error: "too_large" }, 413);
       const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
       if (!body) return json({ error: "invalid" }, 400);
       if (typeof body.title === "string") {
@@ -129,6 +132,14 @@ export async function handleConversation(request: Request, id: string, deps: Con
         if (!answer || typeof answer !== "object" || !["ok", "need_engine", "no_vehicle"].includes(String(answer.status))) return json({ error: "invalid" }, 400);
         const conversation = await store.applyWestcan(id, user.email, card.itemId, answer);
         deps.log({ action: "westcan", email: user.email, id, quote: card.itemId });
+        return json({ conversation });
+      }
+      if (card && typeof card.itemId === "string" && card.kind === "rockauto") {
+        const pages = (body.card as { pages?: unknown }).pages;
+        if (!Array.isArray(pages) || pages.length === 0 || pages.length > 4) return json({ error: "invalid" }, 400);
+        if (pages.some((p) => !p || typeof p !== "object" || typeof (p as { html?: unknown }).html !== "string" || (p as { html: string }).html.length > 260_000)) return json({ error: "invalid" }, 400);
+        const conversation = await store.applyRockAuto(id, user.email, card.itemId, pages);
+        deps.log({ action: "rockauto", email: user.email, id, quote: card.itemId });
         return json({ conversation });
       }
       if (card && typeof card.itemId === "string" && card.kind === "change") {

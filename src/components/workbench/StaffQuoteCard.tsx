@@ -272,6 +272,38 @@ function WestcanLine({ quote, error, onRetry }: { quote: StaffQuote; error?: str
   );
 }
 
+/** Where the RockAuto check stands: read in this Chrome (the server is blocked), failed here, or what it found. */
+function RockAutoLine({ quote, error, onRetry }: { quote: StaffQuote; error?: string; onRetry?: () => void }) {
+  const r = quote.rockauto;
+  if (!r) return null;
+  if (!r.pending) {
+    const text = r.found > 0 ? `已查 RockAuto：${r.found} 个有价格的零件，已按（价格 + 运费估算）× 1.3 加进报价，运费是估的，下单时核对。` : (r.note ?? "RockAuto 上没有可用零件。");
+    return (
+      <p data-testid="rockauto-status" className="px-4 pt-2 text-xs text-ink-600">
+        {text}
+      </p>
+    );
+  }
+  if (error) {
+    return (
+      <p data-testid="rockauto-status" className="flex flex-wrap items-center gap-2 px-4 pt-2 text-xs text-amber-800">
+        <span>没查成 RockAuto：{error}</span>
+        {onRetry && (
+          <button type="button" onClick={onRetry} className="rounded-full border border-amber-700 px-2 py-0.5 font-semibold hover:bg-amber-50">
+            重试 RockAuto
+          </button>
+        )}
+      </p>
+    );
+  }
+  if (!onRetry) return null;
+  return (
+    <p data-testid="rockauto-status" className="px-4 pt-2 text-xs text-sky-800">
+      本地都没货，服务器读不了 RockAuto，正在用这台电脑的浏览器查（会在后台开一个标签页，几秒钟）…
+    </p>
+  );
+}
+
 export function StaffQuoteCard({
   quote: stored,
   onSaveFinal,
@@ -279,6 +311,8 @@ export function StaffQuoteCard({
   custom,
   westcanError,
   onRetryWestcan,
+  rockautoError,
+  onRetryRockAuto,
   vehicleKey,
 }: {
   quote: StaffQuote;
@@ -288,6 +322,9 @@ export function StaffQuoteCard({
   /** Why the Westcan check couldn't run on this computer. */
   westcanError?: string;
   onRetryWestcan?: () => void;
+  /** Why the RockAuto check couldn't run in this Chrome. */
+  rockautoError?: string;
+  onRetryRockAuto?: () => void;
   /** The conversation's price; the card shows only that one. */
   tier?: PriceTier;
   /** The slider positions when tier is "custom". */
@@ -440,6 +477,7 @@ export function StaffQuoteCard({
       )}
 
       {quote.westcan && <WestcanLine quote={quote} error={westcanError} onRetry={onRetryWestcan} />}
+      {quote.rockauto && <RockAutoLine quote={quote} error={rockautoError} onRetry={onRetryRockAuto} />}
       {quote.used && !quote.options.some((o) => o.source === "used") && (
         <div data-testid="used-search" className="px-4 pt-2 text-xs text-violet-900">
           <p className="font-semibold">二手件：{quote.used.part}。先去这些地方查，查到后告诉助手拆车场、价格、运费和卖家说的质保。</p>
@@ -622,7 +660,7 @@ export function StaffQuoteCard({
                 发给客人（WhatsApp / 微信）
               </button>
             )}
-            {onSaveFinal && visible.length > 0 && !(stored.westcan && !stored.westcan.checked) && (
+            {onSaveFinal && visible.length > 0 && !(stored.westcan && !stored.westcan.checked) && !stored.rockauto?.pending && (
               <button type="button" onClick={startEditing} className="rounded-full border border-amber-400 px-4 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50">
                 ✎ 改价
               </button>

@@ -56,23 +56,25 @@ export const partKey = (value: string) => value.replace(/[^A-Za-z0-9]/g, "").toU
  */
 export function parseRockAutoSearch(html: string): RockAutoRow[] {
   const rows: RockAutoRow[] = [];
-  for (const chunk of html.split(/(?=<tbody id="listingcontainer\[\d+\]")/).slice(1)) {
+  // The text before the first listing (or nothing, when the input starts with one) isn't a listing.
+  for (const chunk of html.split(/(?=<tbody id="listingcontainer\[\d+\]")/).filter((c) => c.startsWith('<tbody id="listingcontainer['))) {
     const block = chunk.split("</tbody>")[0];
     const brand = block.match(/class="listing-final-manufacturer[^"]*"[^>]*>([^<]*)</)?.[1];
     const partNumber = block.match(/class="listing-final-partnumber[^"]*"[^>]*>([^<]*)</)?.[1];
     if (!brand || !partNumber) continue;
-    // Prices in the order they appear: the part price, then the core charge ("CAD$0.00" when none).
-    const amounts = [...block.matchAll(/CAD\$(\d[\d,]*(?:\.\d{1,2})?)/g)].map((m) => amount(m[1]));
-    const unit = amounts[0];
-    if (unit === null || unit === undefined || unit <= 0 || !/id="dprice\[\d+\]\[v\]"/.test(block)) continue;
-    const core = amounts[1];
+    // The price and the core charge come from their own cells (dprice / dcore), never from other text in the listing.
+    const price = block.match(/id="dprice\[\d+\]\[v\]"[^>]*>\s*CAD\$(\d[\d,]*(?:\.\d{1,2})?)\s*</)?.[1];
+    const unit = price === undefined ? null : amount(price);
+    if (unit === null || unit <= 0) continue;
+    const core = block.match(/id="dcore\[\d+\]\[v\]"[^>]*>\s*CAD\$(\d[\d,]*(?:\.\d{1,2})?)\s*</)?.[1];
+    // Lengths are capped: these texts are matched later and must stay small even on a hostile page.
     rows.push({
-      brand: decode(brand),
-      partNumber: decode(partNumber),
-      description: decode(block.match(/class="span-link-underline-remover"[^>]*>([^<]*)</)?.[1] ?? ""),
-      category: decode(block.match(/Category:\s*([^<]*)</)?.[1] ?? ""),
+      brand: decode(brand).slice(0, 60),
+      partNumber: decode(partNumber).slice(0, 40),
+      description: decode(block.match(/class="span-link-underline-remover"[^>]*>([^<]*)</)?.[1] ?? "").slice(0, 200),
+      category: decode(block.match(/Category:\s*([^<]*)</)?.[1] ?? "").slice(0, 80),
       price: unit,
-      core: core ?? 0,
+      core: core === undefined ? 0 : (amount(core) ?? 0),
     });
   }
   return rows;

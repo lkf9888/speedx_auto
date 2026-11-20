@@ -11,7 +11,8 @@
  * ROCKAUTO_SHIPPING estimate in the cost. Staff screens only: the customer copy
  * says "到货时间待确认" like any ordered-in part and never names RockAuto.
  */
-import { partKey, searchRockAuto, type RockAutoRow } from "@/lib/rockauto/search";
+import { parseRockAutoSearch, partKey, searchRockAuto, type RockAutoRow } from "@/lib/rockauto/search";
+import type { RockAutoPage } from "./alldata-bridge";
 import { customerText } from "./customer-text";
 import { finish, FRIEND_OTHER_MARKUP, type StaffQuote, type StaffQuoteOption } from "./quote";
 
@@ -121,16 +122,24 @@ function toOption(source: StaffQuoteOption, row: RockAutoRow, quote: StaffQuote)
     friendTotal: money(costTotal * FRIEND_OTHER_MARKUP + referral),
     costTotal,
     prices: { priceCost: row.price },
-    fields: { supplier: "RockAuto", currency: "CAD", shipping: ROCKAUTO_SHIPPING,...(row.category ? { category: row.category } : {}) },
+    fields: { supplier: "RockAuto", currency: "CAD", shipping: ROCKAUTO_SHIPPING, ...(row.category ? { category: row.category } : {}) },
   });
 }
 
 export type RockAutoAnswers = Map<string, RockAutoRow[]>;
 
-/** The quote with RockAuto's rows merged in as extra options (pure: the lookups are done by the caller). */
-export function mergeRockAuto(quote: StaffQuote, answers: RockAutoAnswers, now = new Date(), failed = 0): StaffQuote {
+const NOTE_ROW = `RockAuto 零件按（它的价格（加元）+ 运费估算 $${ROCKAUTO_SHIPPING}/个零件号）× 1.3 报价，不含核心件押金。运费是估的，下单时核对真实运费。RockAuto 是邮寄，不当本地现货。`;
+
+/**
+ * The quote with RockAuto's rows merged in as extra options (pure: the lookups
+ * are done by the caller). Part numbers the server couldn't read (`unread`) are
+ * left for staff's own browser to ask (RockAuto blocks data-centre IPs), unless
+ * `browser` says this answer already came from a browser.
+ */
+export function mergeRockAuto(quote: StaffQuote, answers: RockAutoAnswers, now = new Date(), unread: string[] = [], browser = false): StaffQuote {
   if (quote.rockauto) return quote;
   const at = now.toISOString();
+  const via = browser ? ({ via: "browser" } as const) : {};
   const added: StaffQuoteOption[] = [];
   for (const option of candidates(quote)) {
     const row = bestMatch(option, answers.get(partKey(option.partNumber)) ?? [], `${quote.service} ${quote.position} ${option.label}`);
@@ -138,26 +147,56 @@ export function mergeRockAuto(quote: StaffQuote, answers: RockAutoAnswers, now =
     if (added.some((a) => partKey(a.partNumber) === partKey(row.partNumber) && brandKey(a.brand) === brandKey(row.brand))) continue;
     added.push(toOption(option, row, quote));
   }
-  const note =
-    added.length > 0
-      ? undefined
-      : failed > 0
-        ? "RockAuto 这次没查成（没有回应或出错了），请手动搜一下。"
-        : "RockAuto 上也没有这些零件号的现货。";
-  if (added.length === 0) return { ...quote, rockauto: { at, found: 0, ...(note ? { note } : {}) } };
+  if (added.length === 0) {
+    if (unread.length > 0 && !browser) {
+      return { ...quote, rockauto: { at, found: 0, note: "服务器这次读不了 RockAuto，改由这台电脑的浏览器去查。", pending: { parts: unread.slice(0, MAX_ROCKAUTO_PARTS) } } };
+    }
+    const note = unread.length > 0 ? "RockAuto 这次没查成（页面没有正常打开），请点“RockAuto 搜索”手动查。" : "RockAuto 上也没有这些零件号的现货。";
+    return { ...quote, rockauto: { at, found: 0, note, ...via } };
+  }
   const merged: StaffQuote = {
     ...quote,
     options: [...quote.options, ...added].map((o) => {
       const { eta, ...rest } = o;
       return eta ? { ...rest, eta } : rest;
     }),
-    notes: [
-      ...quote.notes.filter((n) => !n.startsWith("RockAuto")),
-      `RockAuto 零件按（它的价格（加元）+ 运费估算 $${ROCKAUTO_SHIPPING}/个零件号）× 1.3 报价，不含核心件押金。运费是估的，下单时核对真实运费。RockAuto 是邮寄，不当本地现货。`,
-    ],
-    rockauto: { at, found: added.length },
+    notes: [...quote.notes.filter((n) => !n.startsWith("RockAuto")), NOTE_ROW],
+    // Some part numbers found here, others unread: the unread ones still go to staff's browser.
+    rockauto: { at, found: added.length, ...via, ...(unread.length > 0 && !browser ? { pending: { parts: unread.slice(0, MAX_ROCKAUTO_PARTS) } } : {}) },
   };
   return { ...merged, customerText: customerText(merged) };
+}
+
+/** Most characters taken from one page; a staff browser's answer is checked again here. */
+const MAX_PAGE_CHARS = 250_000;
+
+/**
+ * Staff's browser read RockAuto for the parts the server couldn't. Each page is
+ * parsed with the same parser as the server's own reads; a page that isn't
+ * RockAuto's search page, or whose prices aren't in CAD, counts as not read.
+ */
+export function mergeRockAutoFromBrowser(quote: StaffQuote, pages: unknown, now = new Date()): StaffQuote {
+  const pending = quote.rockauto?.pending;
+  if (!pending) return quote;
+  const answers: RockAutoAnswers = new Map();
+  const unread: string[] = [];
+  const list = Array.isArray(pages) ? (pages as Array<Partial<RockAutoPage> | null>) : [];
+  for (const part of pending.parts) {
+    const page = list.find((p) => p && typeof p.part === "string" && partKey(p.part) === partKey(part));
+    const html = page && typeof page.html === "string" ? page.html.slice(0, MAX_PAGE_CHARS) : "";
+    const rows = parseRockAutoSearch(html);
+    const pricedButNotCad = rows.length === 0 && /id="dprice\[\d+\]\[v\]"/.test(html);
+    if (!page || page.recognised !== true || pricedButNotCad) unread.push(part);
+    else answers.set(partKey(part), rows);
+  }
+  const { rockauto: _asked, ...rest } = quote;
+  void _asked;
+  // Local stock turned up meanwhile (Westcan or Lordco answered in staff's Chrome): RockAuto isn't needed.
+  if (hasLocal(rest as StaffQuote)) return { ...quote, rockauto: { at: now.toISOString(), found: 0, note: "已经有本地有货，没用 RockAuto。", via: "browser" } };
+  const merged = mergeRockAuto(rest as StaffQuote, answers, now, unread, true);
+  // Part numbers the server already found keep counting.
+  const total = (quote.rockauto?.found ?? 0) + (merged.rockauto?.found ?? 0);
+  return total > 0 && merged.rockauto ? { ...merged, rockauto: { at: merged.rockauto.at, found: total, via: "browser" } } : merged;
 }
 
 export interface RockAutoDeps {
@@ -175,37 +214,38 @@ export async function checkRockAuto(quote: StaffQuote, deps: RockAutoDeps = {}):
   const numbers = [...new Set(candidates(quote).map((o) => o.partNumber.trim()))].slice(0, MAX_ROCKAUTO_PARTS);
   say(`本地都没货，正在 RockAuto 查 ${numbers.length} 个零件号的价格…`);
   const answers: RockAutoAnswers = new Map();
-  let failed = 0;
+  const unread: string[] = [];
   const deadline = Date.now() + (deps.timeoutMs ?? TOTAL_TIMEOUT_MS);
+  let blocked = false;
   for (const part of numbers) {
-    if (Date.now() > deadline) {
-      failed += 1;
+    // Once RockAuto has refused the server, the other part numbers aren't tried here: staff's browser gets them all.
+    if (blocked || Date.now() > deadline) {
+      unread.push(part);
       continue;
     }
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const left = deadline - Date.now();
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        answers.set(
-          partKey(part),
-          await Promise.race([
-            search(part),
-            new Promise<never>((_, reject) => {
-              timer = setTimeout(() => reject(new Error("RockAuto took too long")), Math.max(left, 1));
-            }),
-          ]),
-        );
-      } finally {
-        if (timer) clearTimeout(timer);
-      }
+      answers.set(
+        partKey(part),
+        await Promise.race([
+          search(part),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("RockAuto took too long")), Math.max(left, 1));
+          }),
+        ]),
+      );
     } catch (error) {
-      failed += 1;
+      unread.push(part);
+      blocked = true;
       // Status only, never page content.
       console.warn(`[rockauto] lookup failed: ${error instanceof Error ? error.message.slice(0, 80) : "error"}`);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
-  const merged = mergeRockAuto(quote, answers, deps.now, failed);
+  const merged = mergeRockAuto(quote, answers, deps.now, unread);
   const found = merged.options.filter((o) => o.source === "rockauto").length;
-  say(found > 0 ? `RockAuto：找到 ${found} 个有价格的零件` : failed > 0 ? "RockAuto 这次没查成" : "RockAuto：没有这些零件号的现货");
+  say(found > 0 ? `RockAuto：找到 ${found} 个有价格的零件` : merged.rockauto?.pending ? "服务器读不了 RockAuto，改由这台电脑的浏览器去查" : "RockAuto：没有这些零件号的现货");
   return merged;
 }

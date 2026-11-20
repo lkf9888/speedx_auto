@@ -13,6 +13,7 @@ import type { CustomPricing, PriceTier } from "./price-tier";
 import { getShareStore, shareKey } from "./shares";
 import { leftContactAt, MAX_FOLLOW_LOG, stageOf, type FollowInput } from "./follow-status";
 import { finalCustomerText, readFinalTotals } from "./final-price";
+import { mergeRockAutoFromBrowser } from "./rockauto";
 import { mergeWestcan, type WestcanAnswer } from "./westcan";
 
 const PREFIX = "workbench-conv-v1:";
@@ -293,6 +294,7 @@ export class ConversationStore {
         if (card.totals !== null && !totals) throw new ConversationError("Give a price for at least one option.", "invalid");
         // The options are about to change: prices saved now would land on the wrong ones.
         if (totals && quote.westcan && !quote.westcan.checked) throw new ConversationError("Westcan is still being checked; set the price after the card updates.", "invalid");
+        if (totals && quote.rockauto?.pending) throw new ConversationError("RockAuto is still being checked; set the price after the card updates.", "invalid");
         if (totals) quote.final = { totals, by, at: this.now() };
         else delete quote.final;
         quote.customerText = finalCustomerText(quote);
@@ -323,6 +325,25 @@ export class ConversationStore {
         // Checked already (another tab, a retry): keep the first answer.
         if (quote.westcan.checked) return;
         turn.quotes[index] = mergeWestcan(quote, answer, new Date(this.now()));
+        return;
+      }
+      throw new ConversationError("That quote isn't in this conversation.", "not_found");
+    });
+  }
+
+  /** RockAuto's price pages read in staff's browser for a quote the server couldn't check: merged once, by the server's rules. */
+  async applyRockAuto(id: string, by: string, quoteId: string, pages: unknown): Promise<Conversation> {
+    return this.change(id, by, (c) => {
+      for (const turn of c.turns) {
+        const index = turn.quotes.findIndex((q) => q.id === quoteId);
+        if (index < 0) continue;
+        const quote = turn.quotes[index];
+        if (!quote.rockauto?.pending) {
+          // Answered already (another tab, a retry): keep the first answer.
+          if (quote.rockauto) return;
+          throw new ConversationError("That quote has no RockAuto check waiting.", "invalid");
+        }
+        turn.quotes[index] = mergeRockAutoFromBrowser(quote, pages, new Date(this.now()));
         return;
       }
       throw new ConversationError("That quote isn't in this conversation.", "not_found");

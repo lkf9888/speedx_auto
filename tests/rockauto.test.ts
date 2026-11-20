@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { clearRockAutoCache, parseRockAutoSearch, searchRockAuto } from "@/lib/rockauto/search";
 import { optionLinks } from "@/lib/workbench/links";
-import { checkRockAuto, mergeRockAuto, needsRockAuto } from "@/lib/workbench/rockauto";
+import { checkRockAuto, mergeRockAuto, mergeRockAutoFromBrowser, needsRockAuto } from "@/lib/workbench/rockauto";
 import { buildLaborQuote, supplierLabel, type StaffQuote } from "@/lib/workbench/quote";
 import { mergeLordco, mergeWestcan } from "@/lib/workbench/westcan";
 import type { StaffPartOption } from "@/lib/worldpac/catalog";
@@ -17,7 +17,7 @@ const listing = (n: number, brand: string, part: string, desc: string, category:
  <div class="listing-text-row"><span class="listing-footnote-text">Category: ${category}</span></div></td>
  ${
    prices
-     ? `<td><span id="dprice[${n}][v]">${prices[0]}</span></td><td><span>${prices[1]}</span></td><td>+ Sold in packs of 1</td>`
+     ? `<td><span id="dprice[${n}][v]">${prices[0]}</span></td><td><span id="dcore[${n}][v]">${prices[1]}</span></td><td>+ Sold in packs of 1</td>`
      : `<td><span>Out of Stock</span></td>`
  }
  </tr></tbody>`;
@@ -237,7 +237,7 @@ describe("RockAuto on a staff quote", () => {
     const started = Date.now();
     const result = await checkRockAuto(q, { search: () => new Promise(() => {}), timeoutMs: 50 });
     expect(Date.now() - started).toBeLessThan(1000);
-    expect(result.rockauto?.note).toMatch(/没查成/);
+    expect(result.rockauto?.note).toMatch(/浏览器去查/);
   });
 
   it("is not asked when something is local, for a left + right set, or twice", () => {
@@ -252,8 +252,89 @@ describe("RockAuto on a staff quote", () => {
     const q = quoteWith([part()]);
     const result = await checkRockAuto(q, { search: async () => Promise.reject(new Error("RockAuto answered 403")), onProgress: say });
     expect(result.options).toEqual(q.options);
-    expect(result.rockauto?.note).toMatch(/没查成/);
-    expect(say).toHaveBeenLastCalledWith("RockAuto 这次没查成");
+    expect(result.rockauto?.note).toMatch(/浏览器去查/);
+    expect(say).toHaveBeenLastCalledWith("服务器读不了 RockAuto，改由这台电脑的浏览器去查");
+  });
+
+  describe("when the server is blocked, staff's browser reads RockAuto instead", () => {
+    const blocked = () => checkRockAuto(quoteWith([part({ partNumber: "ACT866A" }), part({ partNumber: "ACT999B", brand: "Akebono" })]), { search: async () => Promise.reject(new Error("RockAuto page not recognised")) });
+
+    it("marks every part number for the browser, tries the server only until the first refusal, and shows no option yet", async () => {
+      const search = vi.fn(async () => Promise.reject(new Error("RockAuto page not recognised")));
+      const q = quoteWith([part({ partNumber: "ACT866A" }), part({ partNumber: "ACT999B", brand: "Akebono" })]);
+      const result = await checkRockAuto(q, { search });
+      expect(search).toHaveBeenCalledTimes(1);
+      expect(result.rockauto?.pending?.parts).toEqual(["ACT866A", "ACT999B"]);
+      expect(result.options).toEqual(q.options);
+    });
+
+    // The extension sends each listing as the page's own markup, with the tbody tags of the tables inside a listing removed.
+    const block = (part: string) => `<tbody id="listingcontainer[3]">${listing(3, "AKEBONO", part, "Proact Pads", "Brake Pad", ["CAD$72.76", "CAD$0.00"]).replace(/<\/?tbody[^>]*>/g, "")}</tbody>`;
+
+    it("merges what the browser read, with the same price rule, and clears the waiting mark", async () => {
+      const q = await blocked();
+      const merged = mergeRockAutoFromBrowser(q, [{ part: "ACT866A", recognised: true, html: block("ACT866A") }, { part: "ACT999B", recognised: true, html: "" }]);
+      expect(merged.rockauto).toMatchObject({ found: 1, via: "browser" });
+      expect(merged.rockauto?.pending).toBeUndefined();
+      expect(merged.options.at(-1)).toMatchObject({ source: "rockauto", partNumber: "ACT866A", unitCost: 72.76, costTotal: 87.76, unitPrice: 114.09 });
+      expect(merged.customerText).not.toMatch(/RockAuto/);
+    });
+
+    it("says so when the browser couldn't read the page (script check, error page, prices not in CAD), and never asks again", async () => {
+      const q = await blocked();
+      const usd = block("ACT866A").replace("CAD$72.76", "$72.76");
+      const merged = mergeRockAutoFromBrowser(q, [{ part: "ACT866A", recognised: true, html: usd }, { part: "ACT999B", recognised: false, html: "" }]);
+      expect(merged.rockauto?.found).toBe(0);
+      expect(merged.rockauto?.pending).toBeUndefined();
+      expect(merged.rockauto?.note).toMatch(/没查成/);
+      expect(merged.options).toEqual(q.options);
+      expect(mergeRockAutoFromBrowser(merged, [], new Date())).toBe(merged);
+    });
+
+    it("ignores a page for a part number nobody asked about, junk input, and a quote that isn't waiting", async () => {
+      const q = await blocked();
+      expect(mergeRockAutoFromBrowser(q, [{ part: "OTHER123", recognised: true, html: block("OTHER123") }]).rockauto?.note).toMatch(/没查成/);
+      expect(mergeRockAutoFromBrowser(q, "nope").rockauto?.found).toBe(0);
+      const plain = quoteWith([part()]);
+      expect(mergeRockAutoFromBrowser(plain, [{ part: "ACT866A", recognised: true, html: block("ACT866A") }])).toBe(plain);
+    });
+
+    it("a server read that worked for one part number and was refused for another still sends the other to the browser, and keeps the count", async () => {
+      const q = quoteWith([part({ partNumber: "ACT866A" }), part({ partNumber: "ACT999B", brand: "Akebono" })]);
+      const first = await checkRockAuto(q, { search: async (p) => (p === "ACT866A" ? parseRockAutoSearch(PAGE) : Promise.reject(new Error("RockAuto page not recognised"))) });
+      expect(first.rockauto).toMatchObject({ found: 1, pending: { parts: ["ACT999B"] } });
+      expect(first.options.filter((o) => o.source === "rockauto")).toHaveLength(1);
+      const done = mergeRockAutoFromBrowser(first, [{ part: "ACT999B", recognised: true, html: block("ACT999B") }]);
+      expect(done.rockauto).toMatchObject({ found: 2, via: "browser" });
+      expect(done.rockauto?.pending).toBeUndefined();
+      expect(done.options.filter((o) => o.source === "rockauto").map((o) => o.partNumber)).toEqual(["ACT866A", "ACT999B"]);
+      // Nothing more from the browser: the count the server found stays.
+      expect(mergeRockAutoFromBrowser(first, [{ part: "ACT999B", recognised: true, html: "" }]).rockauto).toMatchObject({ found: 1 });
+    });
+
+    it("takes the price only from the price cell, never from other text in the listing", () => {
+      const sneaky = block("ACT866A").replace("CAD$72.76", "$72.76").replace("Proact Pads", "Proact CAD$1.00 Pads");
+      const q = quoteWith([part({ partNumber: "ACT866A" })]);
+      const merged = mergeRockAutoFromBrowser(mergeRockAuto({ ...q }, new Map(), new Date(), ["ACT866A"]), [{ part: "ACT866A", recognised: true, html: sneaky }]);
+      expect(merged.options.some((o) => o.source === "rockauto")).toBe(false);
+      expect(merged.rockauto?.note).toMatch(/没查成/);
+    });
+
+    it("stays fast on a hostile category (many open brackets) in a staff-sent page", () => {
+      const hostile = block("PW594").replace("Brake Pad", `Water Pump ${"(".repeat(60_000)}`);
+      const q = quoteWith([part({ partNumber: "PW594", brand: "Premium" })]);
+      const started = Date.now();
+      mergeRockAutoFromBrowser(mergeRockAuto({ ...q }, new Map(), new Date(), ["PW594"]), [{ part: "PW594", recognised: true, html: hostile }]);
+      expect(Date.now() - started).toBeLessThan(300);
+    });
+
+    it("doesn't add RockAuto when local stock turned up while the browser was reading", async () => {
+      const q = await blocked();
+      const local = { ...q, options: [...q.options, { ...q.options[0], source: "westcan" as const, eta: undefined, outOfStock: undefined }] };
+      const merged = mergeRockAutoFromBrowser(local, [{ part: "ACT866A", recognised: true, html: block("ACT866A") }]);
+      expect(merged.options.some((o) => o.source === "rockauto")).toBe(false);
+      expect(merged.rockauto?.note).toMatch(/本地有货/);
+    });
   });
 
   it("searches at most four part numbers, once each", async () => {

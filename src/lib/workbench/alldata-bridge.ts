@@ -91,8 +91,18 @@ export interface BridgeOps {
   };
   openPdf: { args: { documentId: number; documentType: AlldataDocumentType }; result: { opened: true } };
   westcanSearch: { args: WestcanLookup; result: WestcanSearchResult };
+  /** RockAuto price pages read in this computer's own browser (RockAuto blocks the server): read-only, no login, one part number at a time. */
+  rockautoSearch: { args: { parts: string[] }; result: { pages: RockAutoPage[] } };
   /** Westcan or Lordco: one part into the seller's Nexpart cart (never an order). */
   cartAdd: { args: { supplier: CartSupplier; partNumber: string; qty: number }; result: CartAddResult };
+}
+
+/** What the extension read from RockAuto's search page for one part number: the listing blocks only (the server parses them again). */
+export interface RockAutoPage {
+  part: string;
+  /** The page was RockAuto's search page (not a script check or an error page). */
+  recognised: boolean;
+  html: string;
 }
 
 export type CartSupplier = "westcan" | "lordco";
@@ -106,7 +116,7 @@ export const CART_URLS: Record<CartSupplier, string> = {
   lordco: "https://1000027.nexpart.com/cart.php",
 };
 
-export type BridgeErrorCode = "network_error" | "alldata_changed" | "document_locked" | "document_changed" | "not_installed" | "not_signed_in" | "timeout" | "alldata_error" | "bad_request" | "westcan_not_signed_in" | "westcan_error" | "nexpart_error";
+export type BridgeErrorCode = "network_error" | "alldata_changed" | "document_locked" | "document_changed" | "not_installed" | "not_signed_in" | "timeout" | "alldata_error" | "bad_request" | "westcan_not_signed_in" | "westcan_error" | "nexpart_error" | "rockauto_error";
 
 export class BridgeError extends Error {
   constructor(readonly code: BridgeErrorCode, message: string = code) {
@@ -127,6 +137,7 @@ export const BRIDGE_ERRORS: Record<BridgeErrorCode, string> = {
   bad_request: "请求内容不完整。",
   westcan_not_signed_in: "这台电脑的 Chrome 没登录 Westcan（Nexpart），请先打开 3501660.nexpart.com 登录。",
   westcan_error: "Westcan（Nexpart）没有正常回应。",
+  rockauto_error: "RockAuto 页面没有正常打开，或这个扩展还没拿到 RockAuto 的权限（到 chrome://extensions 刷新扩展并同意权限，扩展要是 1.4.0 或更新）。",
   nexpart_error: "Nexpart（Westcan / Lordco）页面没有正常回应，或这个扩展还没拿到 Lordco 的新权限（到 chrome://extensions 刷新扩展并同意权限）。",
 };
 

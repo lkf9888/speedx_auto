@@ -339,6 +339,58 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
     }
   }
 
+  /** RockAuto checks the server couldn't do (it blocks data-centre IPs): read in this Chrome instead, by quote; staff can retry. */
+  const [rockautoErrors, setRockautoErrors] = useState<Record<string, string>>({});
+  const rockautoRunning = useRef(new Set<string>());
+  const rockautoForced = useRef(new Set<string>());
+  const rockautoChain = useRef<Promise<unknown>>(Promise.resolve());
+
+  useEffect(() => {
+    if (!currentId || activePending || active.updatedAt === 0) return;
+    const due = active.turns
+      .flatMap((t) => t.quotes)
+      .filter((q) => q.rockauto?.pending && !rockautoErrors[q.id] && !rockautoRunning.current.has(q.id));
+    const old = (q: StaffQuote) => Date.now() - Date.parse(q.createdAt) > WESTCAN_FRESH_MS && !rockautoForced.current.has(q.id);
+    const stale = due.filter(old);
+    if (stale.length) setRockautoErrors((all) => ({ ...all, ...Object.fromEntries(stale.map((q) => [q.id, "这张报价超过 1 小时，没有自动查。"])) }));
+    for (const quote of due.filter((q) => !old(q))) void runRockAuto(active.id, quote);
+    // runRockAuto only uses setters and refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentId, activePending, active, rockautoErrors]);
+
+  async function runRockAuto(conversationId: string, quote: StaffQuote) {
+    rockautoRunning.current.add(quote.id);
+    try {
+      // One read at a time: the extension reads one page after another, and each call's timeout starts when its own turn does.
+      const turn = rockautoChain.current.then(() => callAlldata("rockautoSearch", { parts: quote.rockauto!.pending!.parts }, 120_000));
+      rockautoChain.current = turn.catch(() => undefined);
+      const { pages } = await turn;
+      const response = await fetch(`/api/workbench/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ card: { kind: "rockauto", itemId: quote.id, pages } }),
+      });
+      if (!response.ok) throw new Error("save");
+      const { conversation } = (await response.json()) as { conversation?: Conversation };
+      if (!conversation?.turns.flatMap((t) => t.quotes).some((q) => q.id === quote.id)) throw new Error("save");
+      // The whole saved conversation, so messages that arrived while the browser was reading aren't hidden.
+      mergeLoaded(conversationId, conversation);
+    } catch (error) {
+      setRockautoErrors((all) => ({ ...all, [quote.id]: westcanErrorText(error).replace(/^Westcan 结果/, "RockAuto 结果") }));
+    } finally {
+      rockautoRunning.current.delete(quote.id);
+    }
+  }
+
+  function retryRockAuto(quoteId: string) {
+    rockautoForced.current.add(quoteId);
+    setRockautoErrors((all) => {
+      const rest = { ...all };
+      delete rest[quoteId];
+      return rest;
+    });
+  }
+
   function retryWestcan(quoteId: string) {
     westcanForced.current.add(quoteId);
     setWestcanErrors((all) => {
@@ -1154,7 +1206,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
                         <div className="mt-2 space-y-2">
                           {turn.quotes.map((quote) => (
                             <StaffQuoteCard
-                              key={`${quote.id}-${quote.westcan?.checked ? "w" : ""}`}
+                              key={`${quote.id}-${quote.westcan?.checked ? "w" : ""}${quote.rockauto && !quote.rockauto.pending ? "r" : ""}`}
                               quote={quote}
                               tier={active.priceTier ?? "retail"}
                               vehicleKey={active.vehicle?.key}
@@ -1162,6 +1214,8 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
                               onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
                               westcanError={westcanErrors[quote.id]}
                               onRetryWestcan={currentId ? () => retryWestcan(quote.id) : undefined}
+                              rockautoError={rockautoErrors[quote.id]}
+                              onRetryRockAuto={currentId ? () => retryRockAuto(quote.id) : undefined}
                             />
                           ))}
                         </div>
@@ -1170,7 +1224,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
                   ) : (
                     turn.quotes.map((quote) => (
                       <StaffQuoteCard
-                        key={`${quote.id}-${quote.westcan?.checked ? "w" : ""}`}
+                        key={`${quote.id}-${quote.westcan?.checked ? "w" : ""}${quote.rockauto && !quote.rockauto.pending ? "r" : ""}`}
                         quote={quote}
                         tier={active.priceTier ?? "retail"}
                         vehicleKey={active.vehicle?.key}
@@ -1178,6 +1232,8 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
                         onSaveFinal={currentId ? (totals) => saveFinalPrices(active.id, quote.id, totals) : undefined}
                         westcanError={westcanErrors[quote.id]}
                         onRetryWestcan={currentId ? () => retryWestcan(quote.id) : undefined}
+                        rockautoError={rockautoErrors[quote.id]}
+                        onRetryRockAuto={currentId ? () => retryRockAuto(quote.id) : undefined}
                       />
                     ))
                   )}

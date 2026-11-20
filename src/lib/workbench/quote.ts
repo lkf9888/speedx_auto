@@ -80,7 +80,15 @@ export interface StaffQuote {
    * Westcan → WorldPac ordered in → 待补价.
    */
   /** RockAuto price check (Kevin, 2026-11-20): asked when no supplier has the part locally; staff screens only. */
-  rockauto?: { at: string; found: number; note?: string };
+  rockauto?: {
+    at: string;
+    found: number;
+    note?: string;
+    /** Part numbers the server couldn't read (RockAuto blocks data-centre IPs): staff's own browser asks RockAuto for them. */
+    pending?: { parts: string[] };
+    /** The answer came from a staff browser, not the server. */
+    via?: "browser";
+  };
   westcan?: { lookup: WestcanLookup; checked?: { at: string; found: number; vehicle?: string; note?: string }; /** Why the server's own Nexpart session couldn't check (staff's extension then does). */ lordco?: { at: string; found: number; note?: string }; server?: "not_configured" | "login_failed" | "verification_required" | "error" };
 }
 
