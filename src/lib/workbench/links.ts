@@ -23,6 +23,7 @@ export const SPEEDDIAL_URL = "https://speeddial.worldpac.com/";
 /** The shop's own Nexpart sign-ins at Westcan and Lordco (the same origins the server logs in to). */
 export const WESTCAN_URL = "https://3501660.nexpart.com/";
 export const LORDCO_URL = "https://1000027.nexpart.com/";
+const ROCKAUTO_SEARCH = "https://www.rockauto.com/en/partsearch/?partnum=";
 const DT_SEARCH = "https://dttirehub.ca/touchettestorefront/touchette/en/tireSearch/tire-size/search";
 const WHEELMART_SEARCH = "https://wheelmartcanada.ca/product/tires";
 
@@ -40,7 +41,9 @@ export function optionLinks(quote: Pick<StaffQuote, "kind" | "supplier" | "servi
     const named = [option.brand, part].filter(Boolean).join(" ");
     // Order at the supplier that has it (Kevin, 2026-11-16): the part number is copied, the supplier's page opens, staff add it to the cart and order there.
     const order: ProductLink =
-      option.source === "westcan"
+      option.source === "rockauto"
+        ? { label: "RockAuto 订货", url: ROCKAUTO_SEARCH + q(part), copy: part }
+        : option.source === "westcan"
         ? { label: "Westcan 订货", url: WESTCAN_URL, copy: part }
         : option.source === "lordco"
           ? { label: "Lordco 订货", url: LORDCO_URL, copy: part }
@@ -49,7 +52,7 @@ export function optionLinks(quote: Pick<StaffQuote, "kind" | "supplier" | "servi
       order,
       { label: "eBay 搜索", url: `https://www.ebay.ca/sch/i.html?_nkw=${q(part)}` },
       { label: "Amazon 搜索", url: `https://www.amazon.ca/s?k=${q(named)}` },
-      { label: "RockAuto 搜索", url: `https://www.rockauto.com/en/partsearch/?partnum=${q(part)}` },
+      ...(option.source === "rockauto" ? [] : [{ label: "RockAuto 搜索", url: ROCKAUTO_SEARCH + q(part) }]),
     ];
   }
   if (quote.kind === "tires" && quote.supplier === "dt") {

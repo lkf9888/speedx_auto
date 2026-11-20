@@ -191,7 +191,8 @@ export function mergeWestcan(quote: StaffQuote, answer: WestcanAnswer, now = new
   const worldpac = quote.options.filter((o) => !laborOnly(o) && !o.source).map((o) => (o.outOfStock ? o : { ...o, outOfStock: true, eta: undefined }));
   const merged: StaffQuote = {
     ...quote,
-    options: [...westcanOptions, ...worldpac].map((o) => {
+    // RockAuto rows (shipped in) stay only when Westcan has nothing in stock locally.
+    options: [...westcanOptions, ...worldpac, ...(anyHere ? [] : quote.options.filter((o) => o.source === "rockauto"))].map((o) => {
       const { eta, ...rest } = o;
       return eta ? { ...rest, eta } : rest;
     }),
@@ -234,7 +235,10 @@ export function mergeLordco(quote: StaffQuote, answer: WestcanAnswer, now = new 
   const anyLocal = mine.some((o) => o._local);
   const sorted = all.sort((a, b) => Number(b._local) - Number(a._local) || a.customerTotal - b.customerTotal);
   const ranked = sorted.map(({ _local, ...o }) => (anyLocal && !_local ? { ...o, eta: undefined, outOfStock: true } : o));
-  const rest = quote.options.filter((o) => !(o.source === "westcan" && !o.outOfStock));
+  // Local stock at Lordco puts the shipped-in RockAuto rows away.
+  const rest = quote.options
+    .filter((o) => !(o.source === "westcan" && !o.outOfStock))
+    .map((o) => (anyLocal && o.source === "rockauto" && !o.outOfStock ? { ...o, eta: undefined, outOfStock: true } : o));
   const merged: StaffQuote = {
     ...quote,
     options: [...ranked, ...rest].map((o) => {

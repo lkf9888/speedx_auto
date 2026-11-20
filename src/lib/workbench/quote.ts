@@ -47,7 +47,7 @@ export interface StaffQuoteOption {
   /** Profit as a share of the customer total, 0–1. */
   margin: number | null;
   /** Where the part comes from when it isn't WorldPac. */
-  source?: "westcan" | "lordco" | "used";
+  source?: "westcan" | "lordco" | "used" | "rockauto";
   /** Every price field WorldPac sent, by field name. */
   prices: Record<string, number>;
   /** Other raw fields, for working out what WorldPac sends. */
@@ -79,6 +79,8 @@ export interface StaffQuote {
    * the server merges the answer (see westcan.ts). Order: WorldPac local →
    * Westcan → WorldPac ordered in → 待补价.
    */
+  /** RockAuto price check (Kevin, 2026-11-20): asked when no supplier has the part locally; staff screens only. */
+  rockauto?: { at: string; found: number; note?: string };
   westcan?: { lookup: WestcanLookup; checked?: { at: string; found: number; vehicle?: string; note?: string }; /** Why the server's own Nexpart session couldn't check (staff's extension then does). */ lordco?: { at: string; found: number; note?: string }; server?: "not_configured" | "login_failed" | "verification_required" | "error" };
 }
 
@@ -420,6 +422,7 @@ export function supplierLabel(quote: Pick<StaffQuote, "supplier">, option: Pick<
   if (option.source === "westcan") return option.eta ? "Westcan · 其他分店调货" : "Westcan · Richmond 有货";
   if (option.source === "lordco") return option.eta ? "Lordco · 其他分店调货" : "Lordco · 本店有货";
   if (option.source === "used") return "二手件";
+  if (option.source === "rockauto") return "RockAuto · 邮寄（运费另计）";
   // A labor-only line (no part to buy) has no supplier.
   if (quote.supplier === "worldpac") return !option.partNumber ? "" : option.eta ? "WorldPac · 调货" : option.outOfStock ? "WorldPac · 没货" : "WorldPac · 本地有货";
   if (quote.supplier === "dt") return "DT Tire Hub";

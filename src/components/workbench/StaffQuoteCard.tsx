@@ -513,7 +513,7 @@ export function StaffQuoteCard({
                     )}
                     {o.eta && (
                       <div data-testid="eta" className="mt-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
-                        {o.source === "used" ? "二手件到货" : o.source ? "其他分店调货" : "本地没货，调货"} · {o.eta}
+                        {o.source === "used" ? "二手件到货" : o.source === "rockauto" ? "RockAuto 邮寄" : o.source ? "其他分店调货" : "本地没货，调货"} · {o.eta}
                       </div>
                     )}
                     {supplierLabel(quote, o) && o.source !== "westcan" && o.source !== "lordco" && o.source !== "used" && (

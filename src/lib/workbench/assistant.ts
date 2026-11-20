@@ -25,6 +25,7 @@ import {
   type VehicleRef,
 } from "@/lib/worldpac/catalog";
 import { westcanLookup } from "@/lib/westcan/nexpart";
+import { checkRockAuto } from "./rockauto";
 import { checkWestcanOnServer } from "./westcan-server";
 import { buildUsedQuote } from "./used-part";
 import { FLAT_PRICES } from "@/lib/repair-chat/flat-price";
@@ -588,8 +589,21 @@ export function nexpartCategory(quote: Pick<StaffQuote, "options">, partCategory
   return aces ? `N${aces}` : partCategory;
 }
 
-/** Nothing WorldPac has locally: the quote gets a Westcan check (Kevin, 2026-11-15). */
+/** Nothing local at WorldPac, Westcan or Lordco: RockAuto is asked last, for the part numbers WorldPac listed (Kevin, 2026-11-20). */
 async function withWestcan(
+  quote: StaffQuote,
+  vehicle: VehicleRef,
+  partCategory: string | undefined,
+  position: string,
+  bothSides: boolean,
+  progress: (detail: string) => void = () => {},
+): Promise<StaffQuote> {
+  const checked = await withNexpart(quote, vehicle, partCategory, position, bothSides, progress);
+  return checkRockAuto(checked, { onProgress: progress }).catch(() => checked);
+}
+
+/** Nothing WorldPac has locally: the quote gets a Westcan check (Kevin, 2026-11-15). */
+async function withNexpart(
   quote: StaffQuote,
   vehicle: VehicleRef,
   partCategory: string | undefined,
