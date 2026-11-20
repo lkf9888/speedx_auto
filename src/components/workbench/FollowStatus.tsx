@@ -60,8 +60,13 @@ export function FollowStatusControl({ conversation, onSaved }: { conversation: C
   const unchanged = state === (current?.state ?? "new") && (state !== "won" || amount.trim() === (current?.amount !== undefined ? String(current.amount) : "")) && (state !== "lost" || reason === (current?.reason ?? ""));
 
   async function save() {
-    setBusy(true);
     setError("");
+    // A typo like 12..3 is caught here instead of being saved as "no amount".
+    if (state === "won" && amount.trim() && !/^\d{1,7}(\.\d{1,2})?$/.test(amount.trim())) {
+      setError("金额格式不对，例如 480 或 480.50");
+      return;
+    }
+    setBusy(true);
     try {
       const body = { follow: { state, ...(state === "won" && amount.trim() ? { amount: Number(amount) } : {}), ...(state === "lost" && reason ? { reason } : {}) } };
       const response = await fetch(`/api/workbench/conversations/${conversation.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

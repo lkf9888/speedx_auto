@@ -47,13 +47,15 @@ export interface WebsiteExchange {
   failed?: boolean;
 }
 
-function visitor(contact: WebsiteContact, previous?: WebsiteVisitor, now = Date.now()): WebsiteVisitor {
+function visitor(contact: WebsiteContact, previous?: WebsiteVisitor, now = Date.now(), createdAt = now): WebsiteVisitor {
   const booking = contact.booking ?? previous?.booking;
   const wechat = contact.wechat || previous?.wechat;
   const email = contact.email || previous?.email;
   const callbackAt = contact.callback ? now : previous?.callbackAt;
   const phone = contact.phone || previous?.phone || "";
-  const leftAt = previous?.leftContactAt ?? (phone || email || wechat ? now : undefined);
+  // A chat from before this was recorded keeps the best time we have for when they left their details, not now.
+  const hadContact = Boolean(previous && (previous.phone || previous.email || previous.wechat));
+  const leftAt = previous?.leftContactAt ?? (hadContact ? (previous?.consentAt ?? previous?.callbackAt ?? createdAt) : phone || email || wechat ? now : undefined);
   return {
     name: contact.name || previous?.name || "",
     phone,
@@ -118,7 +120,7 @@ export class WebsiteInbox {
         WEBSITE_CUSTOMER,
         (c) => {
           c.turns.push(question, answer, ...notes);
-          c.website = visitor(entry.contact, c.website, this.now());
+          c.website = visitor(entry.contact, c.website, this.now(), c.createdAt);
           if (entry.vehicle) c.vehicle = entry.vehicle;
           if (!c.title) c.title = entry.question.replace(/\s+/g, " ").trim().slice(0, TITLE_LENGTH);
           delete c.archived;
@@ -135,7 +137,7 @@ export class WebsiteInbox {
   async contact(thread: string, contact: WebsiteContact, released = true): Promise<void> {
     await this.store
       .change(websiteConversationId(thread), WEBSITE_CUSTOMER, (c) => {
-        c.website = visitor(contact, c.website, this.now());
+        c.website = visitor(contact, c.website, this.now(), c.createdAt);
         const hadHeld = c.turns.some((turn) => turn.held);
         const note = (text: string): Turn => ({ id: newTurnId(), role: "assistant", text, author: ASSISTANT, at: this.now(), quotes: [], source: "website", event: true, localOnly: true });
         if (released) {

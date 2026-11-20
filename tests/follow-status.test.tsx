@@ -34,6 +34,10 @@ describe("reading a status change", () => {
     expect(parseFollowInput({ state: "won", amount: -5 })).toBeNull();
     expect(parseFollowInput({ state: "won", amount: "abc" })).toBeNull();
     expect(parseFollowInput({ state: "won", amount: 5_000_000 })).toBeNull();
+    // What a typo turns into on the wire (NaN becomes null), and other odd types, are refused rather than read as "no amount".
+    expect(parseFollowInput({ state: "won", amount: null })).toBeNull();
+    expect(parseFollowInput({ state: "won", amount: true })).toBeNull();
+    expect(parseFollowInput({ state: "won", amount: [5] })).toBeNull();
   });
 });
 
@@ -111,11 +115,32 @@ describe("saving a status", () => {
     await expect(store.setFollowStatus("cstaff1234", "kevin@x.ca", { state: "contacted" })).rejects.toThrow(/website/);
   });
 
-  it("the history is capped, so a chat can't grow without end", async () => {
+  it("the history is capped, but the furthest stage reached is kept apart from it", async () => {
     const store = new ConversationStore(memoryKv());
     const id = await websiteChat(store);
+    await store.setFollowStatus(id, "kevin@x.ca", { state: "arrived" });
     for (let i = 0; i < 60; i += 1) await store.setFollowStatus(id, "kevin@x.ca", { state: i % 2 ? "contacted" : "new" });
-    expect((await store.get(id))!.followLog).toHaveLength(50);
+    const c = (await store.get(id))!;
+    expect(c.followLog).toHaveLength(50);
+    expect(summarize(c).stage).toBe(3);
+  });
+
+  it("a chat from before contact times were recorded keeps its overdue clock when the customer writes again", async () => {
+    let at = NOW;
+    const store = new ConversationStore(memoryKv(), () => at);
+    const inbox = new WebsiteInbox(store, () => at);
+    const thread = "5".repeat(32);
+    await inbox.exchange({ thread, contact: { name: "", phone: "", locale: "zh-CN" }, question: "q", photos: [], reply: "a", estimates: [], held: false });
+    const id = websiteConversationId(thread);
+    // An old chat: phone known, but no leftContactAt (only the consent time).
+    await store.change(id, "website", (c) => {
+      c.website = { name: "Amy", phone: "604-555-0182", locale: "zh-CN", consentAt: NOW - 3 * DAY };
+    });
+    at = NOW + 1000;
+    await inbox.exchange({ thread, contact: { name: "Amy", phone: "604-555-0182", locale: "zh-CN" }, question: "还有问题", photos: [], reply: "好的", estimates: [], held: false });
+    const c = (await store.get(id))!;
+    expect(c.website!.leftContactAt).toBe(NOW - 3 * DAY);
+    expect(isOverdue(summarize(c), at)).toBe(true);
   });
 
   it("notes when contact details were first left, and keeps that time", async () => {
@@ -229,6 +254,17 @@ describe("the status control", () => {
     expect(JSON.parse((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body as string)).toEqual({ follow: { state: "lost", reason: "价格太高" } });
   });
 
+  it("refuses a mistyped amount before sending anything", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ conversation: chat() }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<FollowStatusControl conversation={chat()} onSaved={() => {}} />);
+    await userEvent.selectOptions(screen.getByLabelText("跟进状态"), "won");
+    await userEvent.type(screen.getByLabelText("成交金额（税前，选填）"), "12..3");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("金额格式不对");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("says plainly when saving fails, and lists the history", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 500 })));
     const log = [{ state: "contacted" as const, by: "kevin@x.ca", at: NOW - 3_600_000 }, { state: "booked" as const, by: "lee@x.ca", at: NOW }];
@@ -302,5 +338,20 @@ describe("in the workbench", () => {
     await userEvent.click(screen.getByRole("button", { name: "已成交 1" }));
     expect(screen.getAllByTestId("conversation")).toHaveLength(1);
     expect(screen.getByTestId("conversation")).toHaveTextContent("Tom");
+  });
+
+  it("saving a status brings in a message that arrived at the same time", async () => {
+    const newer = { ...one, turns: [...one.turns, { id: "late", role: "user", text: "客人又问了一句", author: "website", at: NOW, quotes: [], source: "website" }], followStatus: { state: "contacted", by: "kevin@x.ca", at: NOW }, followLog: [{ state: "contacted", by: "kevin@x.ca", at: NOW }] };
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/workbench/conversations") return Response.json({ conversations: [summary(one)], pending: {} });
+      if (url.endsWith(one.id)) return Response.json({ conversation: init?.method === "PATCH" ? newer : one, pending: null });
+      return Response.json({});
+    }));
+    window.localStorage.clear();
+    render(<Workbench email="kevin@x.ca" />);
+    await screen.findByTestId("follow-control");
+    await userEvent.selectOptions(screen.getByLabelText("跟进状态"), "contacted");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    expect(await screen.findByText("客人又问了一句")).toBeInTheDocument();
   });
 });

@@ -69,7 +69,7 @@ export function summarize(c: Conversation): ConversationSummary {
                 ...(c.followStatus.amount !== undefined ? { followAmount: c.followStatus.amount } : {}),
               }
             : {}),
-          ...(stageOf(c.followLog ?? []) > 0 ? { stage: stageOf(c.followLog ?? []) } : {}),
+          ...(Math.max(c.followStage ?? 0, stageOf(c.followLog ?? [])) > 0 ? { stage: Math.max(c.followStage ?? 0, stageOf(c.followLog ?? [])) } : {}),
           ...(leftContactAt(c.website, c.createdAt) !== undefined ? { contactAt: leftContactAt(c.website, c.createdAt) } : {}),
         }
       : {}),
@@ -206,6 +206,7 @@ export class ConversationStore {
       const entry = { state: input.state, ...(input.reason ? { reason: input.reason } : {}), ...(input.amount !== undefined ? { amount: input.amount } : {}), by, at: this.now() };
       c.followStatus = entry;
       c.followLog = [...(c.followLog ?? []), entry].slice(-MAX_FOLLOW_LOG);
+      c.followStage = Math.max(c.followStage ?? 0, stageOf(c.followLog ?? []));
     });
   }
 

@@ -48,6 +48,7 @@ export function snapshot(conversation: Conversation): Conversation {
   // Where the customer stands with the shop is for staff only; a link goes to people outside the team.
   delete copy.followStatus;
   delete copy.followLog;
+  delete copy.followStage;
   copy.turns = copy.turns
     // Log lines about what the customer saw are kept; error turns aren't.
     .filter((t) => !t.localOnly || t.event)

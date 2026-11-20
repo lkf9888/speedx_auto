@@ -1038,7 +1038,8 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
               key={`follow-${currentId}`}
               conversation={active}
               onSaved={(saved) => {
-                patchLocal(saved.id, (c) => ({ ...c, followStatus: saved.followStatus, followLog: saved.followLog, updatedAt: saved.updatedAt }));
+                // The whole saved copy, not just the status: a message that arrived meanwhile comes with it.
+                mergeLoaded(saved.id, saved);
                 void refresh();
               }}
             />

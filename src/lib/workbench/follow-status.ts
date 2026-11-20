@@ -56,8 +56,10 @@ export function parseFollowInput(raw: unknown): FollowInput | null {
     const text = reason.replace(/\s+/g, " ").trim().slice(0, 40);
     if (text) out.reason = text;
   }
-  if (state === "won" && amount !== undefined && amount !== null && amount !== "") {
-    const value = typeof amount === "number" ? amount : Number(amount);
+  if (state === "won" && amount !== undefined && amount !== "") {
+    // A number or a numeric string only: null (what NaN turns into), true, an array and the like are refused, not read as "no amount".
+    if (typeof amount !== "number" && typeof amount !== "string") return null;
+    const value = typeof amount === "number" ? amount : Number(amount.trim());
     if (!Number.isFinite(value) || value < 0 || value > 1_000_000) return null;
     out.amount = Math.round(value * 100) / 100;
   }

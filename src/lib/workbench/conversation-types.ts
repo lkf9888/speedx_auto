@@ -106,8 +106,10 @@ export interface Conversation {
   gateReleases?: GateReleases;
   /** Where a website customer stands with the shop (called, booked, came in, bought). Staff only. */
   followStatus?: FollowStatus;
-  /** Every change of followStatus, oldest first. Staff only. */
+  /** Every change of followStatus, oldest first (the last 50). Staff only. */
   followLog?: FollowStatus[];
+  /** The furthest funnel stage ever reached, kept apart from the log so it survives the log's cap. */
+  followStage?: number;
 }
 
 /** A no-login link to a snapshot of a conversation; it stops working at expiresAt. */
