@@ -63,13 +63,13 @@ export function StaffPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <section data-testid="staff-panel" className="rounded-2xl bg-white p-4 text-sm text-[#111b21] shadow-xl sm:p-5">
+    <section data-testid="staff-panel" className="rounded-2xl bg-white p-4 text-sm text-ink-900 shadow-xl sm:p-5">
       <header className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold">员工账号</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-600">名单里的人用自己的邮箱登录就能用工作台。停用后马上不能用，对话记录还在。</p>
+          <p className="mt-1 text-xs leading-5 text-ink-600">名单里的人用自己的邮箱登录就能用工作台。停用后马上不能用，对话记录还在。</p>
         </div>
-        <button type="button" onClick={onClose} aria-label="关闭" className="shrink-0 whitespace-nowrap rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">
+        <button type="button" onClick={onClose} aria-label="关闭" className="shrink-0 whitespace-nowrap rounded-full border border-ink-300 px-3 py-1.5 text-xs font-semibold hover:bg-ink-100">
           关闭
         </button>
       </header>
@@ -86,7 +86,7 @@ export function StaffPanel({ onClose }: { onClose: () => void }) {
           aria-label="员工的邮箱"
           autoCapitalize="none"
           autoComplete="off"
-          className="min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-base focus:border-sky-600 focus:outline-none sm:text-sm"
+          className="min-w-0 rounded-lg border border-ink-300 px-3 py-2 text-base focus:border-sky-600 focus:outline-none sm:text-sm"
         />
         <input
           value={name}
@@ -94,15 +94,15 @@ export function StaffPanel({ onClose }: { onClose: () => void }) {
           onChange={(e) => setName(e.target.value)}
           placeholder="名字（选填）"
           aria-label="员工名字"
-          className="min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-base focus:border-sky-600 focus:outline-none sm:text-sm"
+          className="min-w-0 rounded-lg border border-ink-300 px-3 py-2 text-base focus:border-sky-600 focus:outline-none sm:text-sm"
         />
-        <button type="submit" disabled={busy || !email.trim()} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-50">
+        <button type="submit" disabled={busy || !email.trim()} className="rounded-lg bg-ink-900 px-4 py-2 text-sm font-semibold text-white hover:bg-[#008069] disabled:opacity-50">
           添加
         </button>
       </form>
-      <p className="mt-2 text-[11px] leading-4 text-slate-500">新员工第一次登录前，还要在 Cloudflare Access 里允许这个邮箱进入维修工作台（或把策略放宽成邮箱验证码，由这里的名单决定谁能用）。</p>
+      <p className="mt-2 text-[11px] leading-4 text-ink-500">新员工第一次登录前，还要在 Cloudflare Access 里允许这个邮箱进入维修工作台（或把策略放宽成邮箱验证码，由这里的名单决定谁能用）。</p>
 
-      <ul className="mt-4 divide-y divide-slate-200 rounded-xl border border-slate-200">
+      <ul className="mt-4 divide-y divide-ink-200 rounded-xl border border-ink-200">
         {(data?.owners ?? []).map((owner) => (
           <li key={owner} className="flex items-center justify-between gap-3 px-3 py-2.5">
             <span className="min-w-0 truncate font-medium">{owner}</span>
@@ -113,11 +113,11 @@ export function StaffPanel({ onClose }: { onClose: () => void }) {
           <li key={m.email} data-testid="staff-row" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2.5">
             <div className="min-w-0">
               <p className="truncate font-medium">{m.name || m.email.split("@")[0]}</p>
-              <p className="truncate text-xs text-slate-500">{m.email}</p>
+              <p className="truncate text-xs text-ink-500">{m.email}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${m.active ? "bg-emerald-100 text-emerald-900" : "bg-slate-200 text-slate-700"}`}>{m.active ? "可用" : "已停用"}</span>
-              <button type="button" disabled={busy} onClick={() => void call("PATCH", { email: m.email, active: !m.active })} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100 disabled:opacity-50">
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${m.active ? "bg-emerald-100 text-emerald-900" : "bg-ink-200 text-ink-700"}`}>{m.active ? "可用" : "已停用"}</span>
+              <button type="button" disabled={busy} onClick={() => void call("PATCH", { email: m.email, active: !m.active })} className="rounded-full border border-ink-300 px-3 py-1.5 text-xs font-semibold hover:bg-ink-100 disabled:opacity-50">
                 {m.active ? "停用" : "启用"}
               </button>
               {confirming === m.email ? (
@@ -132,8 +132,8 @@ export function StaffPanel({ onClose }: { onClose: () => void }) {
             </div>
           </li>
         ))}
-        {data && data.staff.length === 0 && <li className="px-3 py-3 text-xs text-slate-500">还没有员工账号。</li>}
-        {!data && !error && <li className="px-3 py-3 text-xs text-slate-500">正在读取…</li>}
+        {data && data.staff.length === 0 && <li className="px-3 py-3 text-xs text-ink-500">还没有员工账号。</li>}
+        {!data && !error && <li className="px-3 py-3 text-xs text-ink-500">正在读取…</li>}
       </ul>
     </section>
   );

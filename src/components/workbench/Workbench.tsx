@@ -34,6 +34,8 @@ import { bridgeErrorText, callAlldata, BridgeError } from "@/lib/workbench/allda
 import type { ChannelsReady } from "@/lib/messaging/plan";
 import { ChannelBadge, CustomerMessageBox } from "./CustomerMessageBox";
 import { HeldNotice, LogEvent, WebsiteEstimateCard, WebsiteVisitorBar } from "./WebsiteCards";
+import { FollowChip, FollowFilterBar, FollowStatusControl, FollowSummaryPanel, OverdueTag, type FollowFilter } from "./FollowStatus";
+import { isOverdue } from "@/lib/workbench/follow-status";
 
 type Turn = SharedTurn;
 
@@ -170,6 +172,8 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
   const [showStatus, setShowStatus] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showStaff, setShowStaff] = useState(false);
+  const [followFilter, setFollowFilter] = useState<FollowFilter>("all");
+  const [showFollowSummary, setShowFollowSummary] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showFollowUp, setShowFollowUp] = useState(false);
@@ -725,7 +729,11 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
   const archivedCount = summaries.filter((c) => c.archived).length;
   // With nothing left in the archive the list goes back to normal by itself.
   const inArchive = showArchived && archivedCount > 0;
-  const visible = listed.filter((c) => (inArchive ? c.archived : !c.archived));
+  const nowMs = Date.now();
+  const visible = listed
+    .filter((c) => (inArchive ? c.archived : !c.archived))
+    // The follow-up filter (website chats): 超期 = left contact details over a day ago and still 未跟进.
+    .filter((c) => followFilter === "all" || inArchive || (c.website !== undefined && (followFilter === "overdue" ? isOverdue(c, nowMs) : (c.follow ?? "new") === followFilter)));
   const menuTarget = menu ? summaries.find((c) => c.id === menu.id) : null;
   const preview = (c: ConversationSummary) => {
     if (!c.last) return "";
@@ -782,6 +790,7 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
           <p className="bg-[color:var(--wb-notice)] px-4 py-2 text-xs leading-5 text-[color:var(--wb-icon)]">内部使用 · 含进价和毛利，请勿截图发给客人</p>
           {cloud === "not_configured" && <p role="alert" className="bg-red-50 px-4 py-2 text-xs text-red-700">云端会话还没配置（服务器缺少 Cloudflare KV 设置），会话不会保存。</p>}
           {cloud === "error" && <p role="alert" className="bg-red-50 px-4 py-2 text-xs text-red-700">连不上云端会话，正在重试…</p>}
+          <FollowFilterBar list={summaries} filter={followFilter} onChange={setFollowFilter} now={nowMs} onSummary={() => setShowFollowSummary(true)} />
           <ul className="flex-1 overflow-y-auto">
             {cloud === "loading" && <li className="px-4 py-3 text-sm text-[color:var(--wb-muted)]">正在读取会话…</li>}
             {archivedCount > 0 && (
@@ -817,6 +826,8 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
                     <span className="flex items-baseline justify-between gap-2">
                       <span data-testid="conversation-title" className="truncate text-[0.95rem] text-[color:var(--wb-text)]">
                         {c.callback && <span className="mr-1 rounded bg-red-600 px-1 text-xs font-semibold text-white">要回电</span>}
+                        {c.website !== undefined && isOverdue(c, nowMs) && <OverdueTag />}
+                        {c.website !== undefined && ((c.follow ?? "new") !== "new" || c.contactAt !== undefined) && <FollowChip state={c.follow ?? "new"} className="mr-1" />}
                         {c.website !== undefined &&
                           (c.website ? (
                             <span className="mr-1 rounded bg-[#00a884]/15 px-1 text-xs font-semibold text-[#008069]">网站 · {c.website}</span>
@@ -1022,6 +1033,16 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
             )}
           </header>
           {active.website && <WebsiteVisitorBar visitor={active.website} onFollowUp={currentId ? () => setShowFollowUp(true) : undefined} />}
+          {active.website && currentId && (
+            <FollowStatusControl
+              key={`follow-${currentId}`}
+              conversation={active}
+              onSaved={(saved) => {
+                patchLocal(saved.id, (c) => ({ ...c, followStatus: saved.followStatus, followLog: saved.followLog, updatedAt: saved.updatedAt }));
+                void refresh();
+              }}
+            />
+          )}
 
           <main className="wa-chat-bg flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-6">
             {dragging && (
@@ -1323,6 +1344,11 @@ export function Workbench({ email, isOwner = false }: { email: string; isOwner?:
       {showRules && (
         <Modal label="调教对外助手" onClose={() => setShowRules(false)}>
           <HouseRulesPanel onClose={() => setShowRules(false)} />
+        </Modal>
+      )}
+      {showFollowSummary && (
+        <Modal label="跟进汇总" onClose={() => setShowFollowSummary(false)}>
+          <FollowSummaryPanel list={summaries} now={nowMs} onClose={() => setShowFollowSummary(false)} />
         </Modal>
       )}
       {showStaff && isOwner && (

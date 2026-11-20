@@ -45,6 +45,9 @@ export const isShareToken = (token: unknown): token is string => typeof token ==
 export function snapshot(conversation: Conversation): Conversation {
   const copy = structuredClone(conversation);
   delete copy.shares;
+  // Where the customer stands with the shop is for staff only; a link goes to people outside the team.
+  delete copy.followStatus;
+  delete copy.followLog;
   copy.turns = copy.turns
     // Log lines about what the customer saw are kept; error turns aren't.
     .filter((t) => !t.localOnly || t.event)

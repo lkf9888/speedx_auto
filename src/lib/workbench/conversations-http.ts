@@ -6,6 +6,7 @@ import type { StaffUser } from "./access";
 import { signedInStaff } from "./staff-roster";
 import { ConversationError, getConversationStore, type ConversationStore } from "./conversations";
 import { isGateId } from "./alldata-gates";
+import { parseFollowInput } from "./follow-status";
 import { echoToServerLog, getOpLogStore, type OpLogStore } from "./alldata-oplog";
 import { isPriceTier, snapPricing } from "./price-tier";
 import type { WestcanAnswer } from "./westcan";
@@ -96,6 +97,13 @@ export async function handleConversation(request: Request, id: string, deps: Con
         void (deps.opLog ?? getOpLogStore)()
           ?.append(entry, user.email, echoToServerLog, { conversationId: id })
           .catch(() => undefined);
+        return json({ conversation });
+      }
+      if (body.follow !== undefined) {
+        const input = parseFollowInput(body.follow);
+        if (!input) return json({ error: "invalid" }, 400);
+        const conversation = await store.setFollowStatus(id, user.email, input);
+        deps.log({ action: "follow_status", email: user.email, id, state: input.state, ...(input.amount !== undefined ? { amount: input.amount } : {}) });
         return json({ conversation });
       }
       if (isPriceTier(body.priceTier)) {

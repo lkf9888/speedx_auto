@@ -11,6 +11,7 @@ import type { GateId, GateReleases } from "./alldata-gates";
 import type { FollowUpRecord } from "./followup";
 import type { CustomPricing, PriceTier } from "./price-tier";
 import { getShareStore, shareKey } from "./shares";
+import { leftContactAt, MAX_FOLLOW_LOG, stageOf, type FollowInput } from "./follow-status";
 import { finalCustomerText, readFinalTotals } from "./final-price";
 import { mergeWestcan, type WestcanAnswer } from "./westcan";
 
@@ -56,6 +57,22 @@ export function summarize(c: Conversation): ConversationSummary {
     ...(c.archived ? { archived: true } : {}),
     ...(c.website ? { website: c.website.name } : {}),
     ...(c.website?.callbackAt ? { callback: true } : {}),
+    createdAt: c.createdAt,
+    ...(c.website
+      ? {
+          ...(c.followStatus
+            ? {
+                follow: c.followStatus.state,
+                followBy: c.followStatus.by,
+                followAt: c.followStatus.at,
+                ...(c.followStatus.reason ? { followReason: c.followStatus.reason } : {}),
+                ...(c.followStatus.amount !== undefined ? { followAmount: c.followStatus.amount } : {}),
+              }
+            : {}),
+          ...(stageOf(c.followLog ?? []) > 0 ? { stage: stageOf(c.followLog ?? []) } : {}),
+          ...(leftContactAt(c.website, c.createdAt) !== undefined ? { contactAt: leftContactAt(c.website, c.createdAt) } : {}),
+        }
+      : {}),
   };
 }
 
@@ -180,6 +197,16 @@ export class ConversationStore {
       },
       true,
     );
+  }
+
+  /** A website customer's follow-up status: the new state is recorded with who and when, and the history is kept. */
+  async setFollowStatus(id: string, by: string, input: FollowInput): Promise<Conversation> {
+    return this.change(id, by, (c) => {
+      if (!c.website) throw new ConversationError("Only a website customer's chat has a follow-up status.", "invalid");
+      const entry = { state: input.state, ...(input.reason ? { reason: input.reason } : {}), ...(input.amount !== undefined ? { amount: input.amount } : {}), by, at: this.now() };
+      c.followStatus = entry;
+      c.followLog = [...(c.followLog ?? []), entry].slice(-MAX_FOLLOW_LOG);
+    });
   }
 
   async rename(id: string, by: string, title: string): Promise<Conversation> {

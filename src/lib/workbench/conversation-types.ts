@@ -3,6 +3,7 @@
  * shows them: every staff member sees every conversation, and each message
  * says who sent it (like a WhatsApp group). Types only, safe for the browser.
  */
+import type { FollowState, FollowStatus } from "./follow-status";
 import type { EstimateCard } from "@/lib/repair-chat/pricing";
 import type { AlldataChangeRequest } from "./alldata-change";
 import type { GateReleases } from "./alldata-gates";
@@ -103,6 +104,10 @@ export interface Conversation {
   messaging?: Messaging;
   /** Kinds of ALLDATA change the owner let go ahead without his tick, for this conversation only. */
   gateReleases?: GateReleases;
+  /** Where a website customer stands with the shop (called, booked, came in, bought). Staff only. */
+  followStatus?: FollowStatus;
+  /** Every change of followStatus, oldest first. Staff only. */
+  followLog?: FollowStatus[];
 }
 
 /** A no-login link to a snapshot of a conversation; it stops working at expiresAt. */
@@ -125,6 +130,8 @@ export interface WebsiteVisitor {
   callbackAt?: number;
   /** When they left the number on the form that says staff may answer by WhatsApp or SMS. */
   consentAt?: number;
+  /** When they first left any contact details (phone, email or WeChat). */
+  leftContactAt?: number;
 }
 
 export interface ConversationSummary {
@@ -141,6 +148,18 @@ export interface ConversationSummary {
   website?: string;
   /** The website customer asked to be called back. */
   callback?: boolean;
+  /** When the chat was started. */
+  createdAt?: number;
+  /** Follow-up status (website chats; unset = 未跟进), who set it and when, and what came with it. */
+  follow?: FollowState;
+  followBy?: string;
+  followAt?: number;
+  followReason?: string;
+  followAmount?: number;
+  /** The furthest funnel stage reached: 1 contacted, 2 booked, 3 arrived, 4 won. */
+  stage?: number;
+  /** When the customer left contact details, when they did. */
+  contactAt?: number;
 }
 
 /** Someone's question still being answered, so others see "查询中". */

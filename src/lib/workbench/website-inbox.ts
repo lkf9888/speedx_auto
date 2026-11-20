@@ -52,14 +52,17 @@ function visitor(contact: WebsiteContact, previous?: WebsiteVisitor, now = Date.
   const wechat = contact.wechat || previous?.wechat;
   const email = contact.email || previous?.email;
   const callbackAt = contact.callback ? now : previous?.callbackAt;
+  const phone = contact.phone || previous?.phone || "";
+  const leftAt = previous?.leftContactAt ?? (phone || email || wechat ? now : undefined);
   return {
     name: contact.name || previous?.name || "",
-    phone: contact.phone || previous?.phone || "",
+    phone,
     ...(wechat ? { wechat } : {}),
     ...(email ? { email } : {}),
     locale: contact.locale,
     ...(booking ? { booking } : {}),
     ...(callbackAt ? { callbackAt } : {}),
+    ...(leftAt ? { leftContactAt: leftAt } : {}),
     // The form's consent line (WhatsApp / SMS replies) is shown with the number; remember when it was given.
     ...(previous?.consentAt ? { consentAt: previous.consentAt } : contact.phone ? { consentAt: now } : {}),
   };
