@@ -64,6 +64,17 @@ describe("searching RockAuto", () => {
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://www.rockauto.com/en/partsearch/?partnum=ACT866A");
     expect(String((init.headers as Record<string, string>)["User-Agent"])).toMatch(/^SpeedXRepairWorkbench/);
+    // A US data-centre IP would otherwise get US$ prices without the "CAD" prefix.
+    expect((init.headers as Record<string, string>).Cookie).toBe("viewcurrency=CAD");
+  });
+
+  it("a page with prices that are not in CAD is a failure, not 'no stock' (what a US server saw before the currency cookie)", async () => {
+    const usd = listing(1, "MOTORCRAFT", "PW594", "", "Water Pump", ["$68.79", "$0.00"]).replace("<tbody", '<form id="frm_partsearch"></form><tbody');
+    expect(parseRockAutoSearch(usd)).toEqual([]);
+    const fetchImpl = vi.fn(async () => new Response(usd, { status: 200 }));
+    await expect(searchRockAuto("PW-594", { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: async () => {} })).rejects.toThrow("not in CAD");
+    await expect(searchRockAuto("PW-594", { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: async () => {} })).rejects.toThrow("not in CAD");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it("treats a 200 block page as a failure and doesn't cache it, but caches a genuine 'no parts' page", async () => {

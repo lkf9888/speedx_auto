@@ -112,7 +112,8 @@ export async function searchRockAuto(partNumber: string, deps: RockAutoDeps = {}
   const run = queue.then(async () => {
     try {
       const response = await fetchImpl(`${SEARCH_URL}${encodeURIComponent(partNumber.trim())}`, {
-        headers: { "User-Agent": USER_AGENT, "Accept-Language": "en-CA,en;q=0.8" },
+        // RockAuto picks the currency from the visitor's IP (a US data-centre gets US$, no "CAD" prefix); this cookie is what its own currency menu sets.
+        headers: { "User-Agent": USER_AGENT, "Accept-Language": "en-CA,en;q=0.8", Cookie: "viewcurrency=CAD" },
         signal: AbortSignal.timeout(TIMEOUT_MS),
         redirect: "follow",
       });
@@ -121,6 +122,8 @@ export async function searchRockAuto(partNumber: string, deps: RockAutoDeps = {}
       const found = parseRockAutoSearch(html);
       // A 200 that is not RockAuto's search page (a block or captcha page) is a failure, not "no stock".
       if (found.length === 0 && !html.includes('id="frm_partsearch"')) throw new Error("RockAuto page not recognised");
+      // Prices on the page but none in CAD (the currency didn't take): a failure, never "no stock", and never a US$ price read as CAD.
+      if (found.length === 0 && /id="dprice\[\d+\]\[v\]"/.test(html)) throw new Error("RockAuto prices not in CAD");
       return found;
     } finally {
       await sleep(PAUSE_MS);
