@@ -422,7 +422,7 @@ export function supplierLabel(quote: Pick<StaffQuote, "supplier">, option: Pick<
   if (option.source === "westcan") return option.eta ? "Westcan · 其他分店调货" : "Westcan · Richmond 有货";
   if (option.source === "lordco") return option.eta ? "Lordco · 其他分店调货" : "Lordco · 本店有货";
   if (option.source === "used") return "二手件";
-  if (option.source === "rockauto") return "RockAuto · 邮寄（运费另计）";
+  if (option.source === "rockauto") return "RockAuto · 邮寄（含运费估算）";
   // A labor-only line (no part to buy) has no supplier.
   if (quote.supplier === "worldpac") return !option.partNumber ? "" : option.eta ? "WorldPac · 调货" : option.outOfStock ? "WorldPac · 没货" : "WorldPac · 本地有货";
   if (quote.supplier === "dt") return "DT Tire Hub";

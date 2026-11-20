@@ -5,16 +5,19 @@
  * priced match is added as an extra option. It is shipped in, so it is never
  * preferred over local stock, and it never replaces the WorldPac rows.
  *
- * Price rule (assumed, same as Westcan and Lordco, confirm with Kevin): the
- * customer pays RockAuto's price × 1.3. RockAuto's shipping isn't on its search
- * page, so it is NOT in the cost: staff add it by hand. Staff screens only: the
- * customer copy says "到货时间待确认" like any ordered-in part and never names RockAuto.
+ * Price rule (Kevin, 2026-11-20): the customer pays (RockAuto's price × quantity
+ * + shipping) × 1.3. RockAuto's real shipping isn't on its search page (it
+ * depends on the warehouse and the cart), so each part number counts a flat
+ * ROCKAUTO_SHIPPING estimate in the cost. Staff screens only: the customer copy
+ * says "到货时间待确认" like any ordered-in part and never names RockAuto.
  */
 import { partKey, searchRockAuto, type RockAutoRow } from "@/lib/rockauto/search";
 import { customerText } from "./customer-text";
 import { finish, FRIEND_OTHER_MARKUP, type StaffQuote, type StaffQuoteOption } from "./quote";
 
 export const ROCKAUTO_MARKUP = 1.3;
+/** Shipping estimate per RockAuto part number, CAD (parts usually ship from different warehouses). */
+export const ROCKAUTO_SHIPPING = 15;
 /** Part numbers searched per quote: RockAuto is asked politely, one at a time. */
 export const MAX_ROCKAUTO_PARTS = 4;
 const TOTAL_TIMEOUT_MS = 40_000;
@@ -54,8 +57,9 @@ function bestMatch(option: StaffQuoteOption, rows: RockAutoRow[]): RockAutoRow |
 
 function toOption(source: StaffQuoteOption, row: RockAutoRow, quote: StaffQuote): StaffQuoteOption {
   const quantity = source.quantity;
-  const unitPrice = money(row.price * ROCKAUTO_MARKUP);
-  const partsTotal = money(unitPrice * quantity);
+  const costTotal = money(row.price * quantity + ROCKAUTO_SHIPPING);
+  const partsTotal = money(costTotal * ROCKAUTO_MARKUP);
+  const unitPrice = money(partsTotal / quantity);
   const walkIn = quote.labor?.walkIn ?? 0;
   const referral = quote.labor?.referral ?? 0;
   return finish({
@@ -71,10 +75,10 @@ function toOption(source: StaffQuoteOption, row: RockAutoRow, quote: StaffQuote)
     source: "rockauto",
     customerTotal: money(partsTotal + walkIn),
     referralTotal: money(partsTotal + referral),
-    friendTotal: money(row.price * quantity * FRIEND_OTHER_MARKUP + referral),
-    costTotal: money(row.price * quantity),
+    friendTotal: money(costTotal * FRIEND_OTHER_MARKUP + referral),
+    costTotal,
     prices: { priceCost: row.price },
-    fields: { supplier: "RockAuto", currency: "CAD", ...(row.category ? { category: row.category } : {}) },
+    fields: { supplier: "RockAuto", currency: "CAD", shipping: ROCKAUTO_SHIPPING,...(row.category ? { category: row.category } : {}) },
   });
 }
 
@@ -106,7 +110,7 @@ export function mergeRockAuto(quote: StaffQuote, answers: RockAutoAnswers, now =
     }),
     notes: [
       ...quote.notes.filter((n) => !n.startsWith("RockAuto")),
-      "RockAuto 零件按它的价格（加元）× 1.3 报价，不含运费，也不含核心件押金：下单前请自己算上运费。RockAuto 是邮寄，不当本地现货。",
+      `RockAuto 零件按（它的价格（加元）+ 运费估算 $${ROCKAUTO_SHIPPING}/个零件号）× 1.3 报价，不含核心件押金。运费是估的，下单时核对真实运费。RockAuto 是邮寄，不当本地现货。`,
     ],
     rockauto: { at, found: added.length },
   };

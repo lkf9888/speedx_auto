@@ -115,18 +115,26 @@ describe("RockAuto on a staff quote", () => {
     const merged = mergeRockAuto(q, answers(), new Date("2026-11-20T10:00:00Z"));
     expect(merged.options).toHaveLength(q.options.length + 1);
     const rock = merged.options.at(-1)!;
-    expect(rock).toMatchObject({ source: "rockauto", brand: "AKEBONO", partNumber: "ACT866A", unitCost: 72.76, unitPrice: 94.59, quantity: 1, eta: "到货时间待确认" });
-    // 94.59 + 1 h × $120 walk-in labor.
-    expect(rock.customerTotal).toBe(214.59);
-    expect(rock.costTotal).toBe(72.76);
+    expect(rock).toMatchObject({ source: "rockauto", brand: "AKEBONO", partNumber: "ACT866A", unitCost: 72.76, unitPrice: 114.09, quantity: 1, eta: "到货时间待确认" });
+    // (72.76 + $15 shipping estimate) × 1.3 = 114.09, plus 1 h × $120 walk-in labor.
+    expect(rock.customerTotal).toBe(234.09);
+    expect(rock.costTotal).toBe(87.76);
+    expect(rock.fields).toMatchObject({ shipping: 15 });
     expect(merged.rockauto).toMatchObject({ found: 1 });
-    expect(merged.notes.join(" ")).toMatch(/RockAuto.*不含运费/);
-    expect(supplierLabel(merged, rock)).toBe("RockAuto · 邮寄（运费另计）");
-    expect(merged.customerText).toContain("214.59");
-    expect(merged.customerText).not.toMatch(/RockAuto|72\.76/);
+    expect(merged.notes.join(" ")).toMatch(/RockAuto.*运费估算 \$15/);
+    expect(supplierLabel(merged, rock)).toBe("RockAuto · 邮寄（含运费估算）");
+    expect(merged.customerText).toContain("234.09");
+    expect(merged.customerText).not.toMatch(/RockAuto|72\.76|87\.76/);
     // The WorldPac row is untouched.
     expect(merged.options[0]).toEqual(q.options[0]);
     expect(needsRockAuto(merged)).toBe(false);
+  });
+
+  it("counts shipping once per part number, not per piece", () => {
+    const rock = mergeRockAuto(quoteWith([part({ quantity: 2 })]), answers()).options.at(-1)!;
+    // (2 × 72.76 + 15) × 1.3 = 208.68 for the two parts.
+    expect(rock).toMatchObject({ quantity: 2, costTotal: 160.52, unitPrice: 104.34 });
+    expect(rock.customerTotal).toBe(328.68);
   });
 
   it("matches the exact part number and, when WorldPac names a maker, that maker only", () => {
