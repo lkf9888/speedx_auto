@@ -130,6 +130,72 @@ describe("RockAuto on a staff quote", () => {
     expect(needsRockAuto(merged)).toBe(false);
   });
 
+  describe("when WorldPac's brand is a description, not a maker (2003 Jaguar X-Type water pump)", () => {
+    const pump = parseRockAutoSearch(`${listing(1, "MOTORCRAFT", "PW594", "", "Water Pump", ["CAD$98.54", "CAD$0.00"])}`);
+    const jobOf = (parts: StaffPartOption[], service = "Water Pump R&R") =>
+      buildLaborQuote("2003 Jaguar X-Type", { serviceName: service, position: "", laborHours: 2, laborNote: "", primaryPartName: "Water Pump", otherPartNames: [], partsNote: "", partOptions: parts }, "R-9", env);
+
+    it("matches the exact number in a category the job is about, and prices it", () => {
+      const q = jobOf([part({ partNumber: "PW-594", brand: "100% New" }), part({ partNumber: "PW-594", brand: "OE Replacement - 100% New" }), part({ partNumber: "PW-594", brand: "Techno Polymer Impeller" })]);
+      const merged = mergeRockAuto(q, new Map([["PW594", pump]]));
+      const rock = merged.options.filter((o) => o.source === "rockauto");
+      expect(rock).toHaveLength(1);
+      expect(rock[0]).toMatchObject({ brand: "MOTORCRAFT", partNumber: "PW594", unitCost: 98.54 });
+      expect(merged.rockauto?.found).toBe(1);
+    });
+
+    it("rejects the same number in a category the job isn't about (a clutch kit is not the starter)", () => {
+      const rows = parseRockAutoSearch(`${listing(1, "LUK", "17080", "RepSet", "Clutch Kit", ["CAD$428.02", "CAD$0.00"])}${listing(2, "REMY", "17080", "Remanufactured", "Starter Motor", ["CAD$104.41", "CAD$55.87"])}`);
+      const starter = jobOf([part({ partNumber: "17080", brand: "100% New" })], "Starter R&R");
+      expect(mergeRockAuto(starter, new Map([["17080", rows]])).options.at(-1)).toMatchObject({ source: "rockauto", brand: "REMY", unitCost: 104.41 });
+      const brakes = jobOf([part({ partNumber: "17080", brand: "100% New" })], "Brake Pad R&R");
+      expect(mergeRockAuto(brakes, new Map([["17080", rows]])).options.some((o) => o.source === "rockauto")).toBe(false);
+    });
+
+    it("gives no match when two makers share the number in the right category (two different parts)", () => {
+      const rows = parseRockAutoSearch(`${listing(1, "REMY", "11150", "Remanufactured", "Alternator / Generator", ["CAD$426.58", "CAD$0.00"])}${listing(2, "TERREPOWER", "11150", "Remanufactured", "Alternator / Generator", ["CAD$164.44", "CAD$0.00"])}`);
+      const q = jobOf([part({ partNumber: "11150", brand: "100% New" })], "Alternator R&R");
+      expect(mergeRockAuto(q, new Map([["11150", rows]])).options.some((o) => o.source === "rockauto")).toBe(false);
+    });
+
+    it("needs every word of the category, not just 'Pump' (a fuel pump is not the water pump)", () => {
+      const fuel = parseRockAutoSearch(listing(1, "AIRTEX", "PW594", "", "Fuel Pump", ["CAD$60.00", "CAD$0.00"]));
+      const q = jobOf([part({ partNumber: "PW594", brand: "100% New", description: "Water Pump" })]);
+      expect(mergeRockAuto(q, new Map([["PW594", fuel]])).options.some((o) => o.source === "rockauto")).toBe(false);
+    });
+
+    it("reads 'Alternator / Generator', 'Oxygen (O2) Sensor' and 'Starter Motor' as the job names them", () => {
+      const cases: Array<[string, string, string]> = [
+        ["Alternator / Generator", "Alternator R&R", "xx1"],
+        ["Oxygen (O2) Sensor", "O2 Sensor R&R", "xx2"],
+        ["Oxygen (O2) Sensor", "Oxygen Sensor R&R", "xx3"],
+        ["Starter Motor", "Starter R&R", "xx4"],
+        ["Brake Pad", "Front Brake Pads R&R", "xx5"],
+      ];
+      for (const [category, service, number] of cases) {
+        const rows = parseRockAutoSearch(listing(1, "MAKER", number, "", category, ["CAD$50.00", "CAD$0.00"]));
+        const merged = mergeRockAuto(jobOf([part({ partNumber: number, brand: "Rebuilt" })], service), new Map([[number.toUpperCase(), rows]]));
+        expect(merged.options.some((o) => o.source === "rockauto"), `${category} / ${service}`).toBe(true);
+      }
+    });
+
+    it("doesn't treat a real maker as a description ('555', 'Standard Motor Products'), nor compare a description to a maker ('Premium' vs 'Premium Guard')", () => {
+      const arm = parseRockAutoSearch(listing(1, "MEVOTECH", "CK1234", "", "Control Arm", ["CAD$40.00", "CAD$0.00"]));
+      for (const brand of ["555", "Standard Motor Products"]) {
+        const q = jobOf([part({ partNumber: "CK1234", brand, description: "Control Arm" })], "Control Arm R&R");
+        expect(mergeRockAuto(q, new Map([["CK1234", arm]])).options.some((o) => o.source === "rockauto"), brand).toBe(false);
+      }
+      const oil = parseRockAutoSearch(`${listing(1, "PREMIUM GUARD", "OF1", "", "Oil Filter", ["CAD$8.00", "CAD$0.00"])}${listing(2, "WIX", "OF1", "", "Oil Filter", ["CAD$9.00", "CAD$0.00"])}`);
+      const q = jobOf([part({ partNumber: "OF1", brand: "Premium", description: "Oil Filter" })], "Oil Filter R&R");
+      expect(mergeRockAuto(q, new Map([["OF1", oil]])).options.some((o) => o.source === "rockauto")).toBe(false);
+    });
+
+    it("still needs the same maker when WorldPac names a real one", () => {
+      const q = jobOf([part({ partNumber: "PW594", brand: "Gates" })]);
+      expect(mergeRockAuto(q, new Map([["PW594", pump]])).options.some((o) => o.source === "rockauto")).toBe(false);
+    });
+  });
+
   it("counts shipping once per part number, not per piece", () => {
     const rock = mergeRockAuto(quoteWith([part({ quantity: 2 })]), answers()).options.at(-1)!;
     // (2 × 72.76 + 15) × 1.3 = 208.68 for the two parts.

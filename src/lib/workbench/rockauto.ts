@@ -49,10 +49,53 @@ const sameBrand = (a: string, b: string) => {
   return short.every((w, i) => long[i] === w);
 };
 
-/** RockAuto's cheapest listing of this exact part (same number, and same maker when WorldPac named one). */
-function bestMatch(option: StaffQuoteOption, rows: RockAutoRow[]): RockAutoRow | null {
-  const same = rows.filter((r) => partKey(r.partNumber) === partKey(option.partNumber) && (!option.brand || sameBrand(option.brand, r.brand)));
-  return same.sort((a, b) => a.price - b.price)[0] ?? null;
+/**
+ * WorldPac's brand field is sometimes a description, not a maker ("100% New",
+ * "OE Replacement - 100% New", "Techno Polymer Impeller"). Such a brand can't be
+ * matched against RockAuto's maker names.
+ */
+function descriptiveBrand(brand: string): boolean {
+  const b = brand.trim();
+  // Only clear description words: a real maker may contain digits ("555") or words like "Standard" ("Standard Motor Products").
+  return !b || /%/.test(b) || /^(premium|economy|standard|original|genuine|value|quality)$/i.test(b) || /\b(new|replacement|oe|oem|impeller|polymer|remanufactured|reman|rebuilt|refurbished|aftermarket)\b/i.test(b);
+}
+
+/** Words that don't say which part it is ("Starter Motor" is a starter, "Control Arm Kit" a control arm). */
+const CATEGORY_NOISE = new Set(["and", "for", "the", "with", "motor", "assembly", "assy", "unit", "kit", "set"]);
+
+/**
+ * Whether RockAuto's category ("Water Pump", "Alternator / Generator", "Oxygen
+ * (O2) Sensor") names what this job is about: every word of one of its
+ * alternatives must be in the job text ("Pump" alone would also fit a fuel pump).
+ */
+function categoryFits(category: string, job: string): boolean {
+  const text = job.toLowerCase();
+  const lower = category.toLowerCase();
+  // "Oxygen (O2) Sensor" is also "O2 Sensor"; "A / B" is either.
+  const variants = [lower.replace(/\s*\([^)]*\)/g, ""), lower.replace(/[a-z0-9]+\s*\(([^)]*)\)/g, "$1")];
+  return variants
+    .flatMap((v) => v.split("/"))
+    .some((alt) => {
+      const words = alt.split(/[^a-z0-9]+/).filter((w) => w.length >= 2 && !CATEGORY_NOISE.has(w));
+      return words.length > 0 && words.every((w) => text.includes(w.replace(/s$/, "")));
+    });
+}
+
+/**
+ * RockAuto's cheapest listing of this exact part number. With a real WorldPac
+ * maker it must be the same maker. When WorldPac's brand is only a description
+ * the maker can't be compared, so the number must also be in a category the job
+ * is about (a number shared by a clutch kit and a starter is not the part) and
+ * every listing that fits must come from one maker (two makers sharing a number
+ * are two different parts: no match).
+ */
+function bestMatch(option: StaffQuoteOption, rows: RockAutoRow[], job: string): RockAutoRow | null {
+  const exact = rows.filter((r) => partKey(r.partNumber) === partKey(option.partNumber));
+  const cheapest = (list: RockAutoRow[]) => [...list].sort((a, b) => a.price - b.price)[0] ?? null;
+  // A real maker must be the same maker; a description is never compared against maker names ("Premium" is not "Premium Guard").
+  if (!descriptiveBrand(option.brand)) return cheapest(exact.filter((r) => sameBrand(option.brand, r.brand)));
+  const fits = exact.filter((r) => categoryFits(r.category, job));
+  return new Set(fits.map((r) => brandKey(r.brand))).size === 1 ? cheapest(fits) : null;
 }
 
 function toOption(source: StaffQuoteOption, row: RockAutoRow, quote: StaffQuote): StaffQuoteOption {
@@ -90,7 +133,7 @@ export function mergeRockAuto(quote: StaffQuote, answers: RockAutoAnswers, now =
   const at = now.toISOString();
   const added: StaffQuoteOption[] = [];
   for (const option of candidates(quote)) {
-    const row = bestMatch(option, answers.get(partKey(option.partNumber)) ?? []);
+    const row = bestMatch(option, answers.get(partKey(option.partNumber)) ?? [], `${quote.service} ${quote.position} ${option.label}`);
     if (!row) continue;
     if (added.some((a) => partKey(a.partNumber) === partKey(row.partNumber) && brandKey(a.brand) === brandKey(row.brand))) continue;
     added.push(toOption(option, row, quote));
